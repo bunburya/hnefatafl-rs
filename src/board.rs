@@ -3,6 +3,7 @@ use std::ops::RangeBounds;
 use Side::{Attacker, Defender};
 
 use crate::board::BoardError::{BadChar, BadLineLen};
+use crate::tiles::Tile;
 
 #[derive(Debug)]
 pub(crate) enum BoardError {
@@ -16,44 +17,6 @@ pub(crate) enum Side {
     Attacker,
     Defender(bool)
 }
-
-
-/// The location of a single tile on the board, ie, row and column. This struct is only a reference
-/// to a location on the board, and does not contain any other information such as piece placement,
-/// etc.
-///
-/// It is implemented as a single byte, where the most significant four bits describe the row
-/// and the least significant four bits describe the column. It is therefore appropriate for use
-/// with square boards up to 16x16.
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
-pub(crate) struct Tile {
-    byte: u8
-}
-
-impl Tile {
-    pub(crate) fn new(row: u8, col: u8) -> Self {
-        Self { byte: (row << 4) + (col & 0x0F) }
-    }
-
-    pub(crate) fn from_byte(byte: u8) -> Self {
-        Self { byte }
-    }
-
-    pub(crate) fn row(&self) -> u8 {
-        self.byte >> 4
-    }
-
-    pub(crate) fn col(&self) -> u8 {
-        self.byte & 0x0F
-    }
-
-    fn to_mask(&self) -> u64 {
-        return 1 << ((self.row() * 8) + self.col())
-    }
-
-
-}
-
 /// Store information on the current board state (ie, pieces).
 ///
 /// Bitfields are used to minimise memory usage. A single u64 is used to record the positions of
@@ -91,19 +54,19 @@ impl BoardState {
     /// Store the given location as the position of the king. **NB**: Does not set the relevant bit
     /// (or unset the bit corresponding to the king's previous location), which must be handled
     /// separately.
-    pub(crate) fn set_king(&mut self, t: &Tile) {
+    pub(crate) fn set_king(&mut self, t: Tile) {
         let mut bytes = self.defenders.to_be_bytes();
         bytes[0] = t.byte;
         self.defenders = u64::from_be_bytes(bytes)
     }
 
     /// Check whether the given tile contains the king.
-    pub(crate) fn is_king(&self, t: &Tile) -> bool {
-        &self.get_king() == t
+    pub(crate) fn is_king(&self, t: Tile) -> bool {
+        self.get_king() == t
     }
 
     /// Place a piece representing the given side at the given position by setting the relevant bit.
-    pub(crate) fn place_piece(&mut self, t: &Tile, side: Side) {
+    pub(crate) fn place_piece(&mut self, t: Tile, side: Side) {
         let mask = t.to_mask();
         //println!("Setting {t:?} to {side:?}. Mask {mask}.");
         match side {
@@ -118,14 +81,14 @@ impl BoardState {
     }
 
     /// Clear a tile by unsetting the relevant bit.
-    pub(crate) fn clear_tile(&mut self, t: &Tile) {
+    pub(crate) fn clear_tile(&mut self, t: Tile) {
         let mask = !t.to_mask();
         self.attackers &= mask;
         self.defenders &= mask;
     }
 
     /// Return whether there is a piece (and which side the piece represents) at the given position.
-    pub(crate) fn get_piece(&self, t: &Tile) -> Option<Side> {
+    pub(crate) fn get_piece(&self, t: Tile) -> Option<Side> {
         let mask = t.to_mask();
         if (self.defenders & mask) > 0 {
             Some(Defender(self.is_king(t)))
@@ -137,7 +100,7 @@ impl BoardState {
     }
 
     /// Check if there is any piece occupying a tile.
-    pub(crate) fn tile_occupied(&self, t: &Tile) -> bool {
+    pub(crate) fn tile_occupied(&self, t: Tile) -> bool {
         let all_pieces = self.defenders | self.attackers;
         let mask = t.to_mask();
         return (all_pieces & mask) > 0;
@@ -145,7 +108,7 @@ impl BoardState {
 
     /// Move a piece from one position to another. This does not check whether a move is valid; it
     /// just unsets the bit at `from` and sets the bit at `to`.
-    pub(crate) fn move_piece(&mut self, from: &Tile, to: &Tile) {
+    pub(crate) fn move_piece(&mut self, from: Tile, to: Tile) {
         let maybe_side = self.get_piece(from);
         match maybe_side {
             Some(side) => {
@@ -189,12 +152,12 @@ impl Board {
         board
     }
 
-    pub(crate) fn tile_in_bounds(&self, tile: &Tile) -> bool {
+    pub(crate) fn tile_in_bounds(&self, tile: Tile) -> bool {
         let r = 0..self.side_len;
         r.contains(&tile.row()) && r.contains(&tile.col())
     }
 
-    fn neighbors(&self, tile: &Tile) -> Vec<Tile> {
+    fn neighbors(&self, tile: Tile) -> Vec<Tile> {
         let mut neighbors: Vec<Tile> = vec![];
         let board_range = 0..self.side_len as i8;
         for r in -1..2i8 {
@@ -216,7 +179,7 @@ impl Board {
         neighbors
     }
 
-    pub(crate) fn tiles_between(&self, t1: &Tile, t2: &Tile) -> Vec<Tile> {
+    pub(crate) fn tiles_between(&self, t1: Tile, t2: Tile) -> Vec<Tile> {
         let mut tiles: Vec<Tile> = vec![];
         let (r1, c1, r2, c2) = (t1.row(), t1.col(), t2.row(), t2.col());
         if r1 == r2 {
@@ -241,19 +204,19 @@ impl Board {
         tiles
     }
 
-    pub(crate) fn tile_occupied(&self, tile: &Tile) -> bool {
+    pub(crate) fn tile_occupied(&self, tile: Tile) -> bool {
         self.state.tile_occupied(tile)
     }
 
-    pub(crate) fn place_piece(&mut self, tile: &Tile, side: Side) {
+    pub(crate) fn place_piece(&mut self, tile: Tile, side: Side) {
         self.state.place_piece(tile, side);
     }
 
-    pub(crate) fn move_piece(&mut self, from: &Tile, to: &Tile) {
+    pub(crate) fn move_piece(&mut self, from: Tile, to: Tile) {
         self.state.move_piece(from, to)
     }
 
-    pub(crate) fn get_piece(&self, tile: &Tile) -> Option<Side> {
+    pub(crate) fn get_piece(&self, tile: Tile) -> Option<Side> {
         self.state.get_piece(tile)
     }
 
@@ -267,7 +230,7 @@ impl Display for Board {
         for r in 0..self.side_len {
             for c in 0..self.side_len {
                 let t = Tile::new(r, c);
-                let p = self.state.get_piece(&t);
+                let p = self.state.get_piece(t);
                 //println!("Checking {t:?}, piece is {p:?}");
                 match p {
                     Some(Attacker) => f.write_char('A')?,
@@ -297,9 +260,9 @@ impl TryFrom<&str> for Board {
             }
             for (c, chr) in line.chars().enumerate() {
                 match chr {
-                    'A' => state.place_piece(&Tile::new(r as u8, c as u8), Attacker),
-                    'D' => state.place_piece(&Tile::new(r as u8, c as u8), Defender(false)),
-                    'K' => state.place_piece(&Tile::new(r as u8, c as u8), Defender(true)),
+                    'A' => state.place_piece(Tile::new(r as u8, c as u8), Attacker),
+                    'D' => state.place_piece(Tile::new(r as u8, c as u8), Defender(false)),
+                    'K' => state.place_piece(Tile::new(r as u8, c as u8), Defender(true)),
                     '.' => {},
                     other => return Err(BadChar(other))
                 }
@@ -325,36 +288,25 @@ mod tests {
     }
 
     #[test]
-    fn test_tiles() {
-        for r in 0..16 {
-            for c in 0..16 {
-                let t = Tile::new(r, c);
-                assert_eq!(t.row(), r);
-                assert_eq!(t.col(), c);
-            }
-        }
-    }
-
-    #[test]
     fn test_board() {
         let start_str = "...A...\n...A...\n...D...\nAADKDAA\n...D...\n...A...\n...A...";
         let expected_str = "...AK..\n...A.A.\n...D...\nAAD.DAA\n.D.D...\n...A...\n...A...\n";
         let board_result = Board::try_from(start_str);
         assert!(board_result.is_ok());
         let mut board = board_result.unwrap();
-        board.place_piece(&Tile::new(1, 5), Attacker);
-        board.place_piece(&Tile::new(4, 1), Defender(false));
-        board.move_piece(&Tile::new(3, 3), &Tile::new(0, 4));
+        board.place_piece(Tile::new(1, 5), Attacker);
+        board.place_piece(Tile::new(4, 1), Defender(false));
+        board.move_piece(Tile::new(3, 3), Tile::new(0, 4));
         assert_eq!(format!("{board}"), expected_str);
 
-        let n = board.neighbors(&Tile::new(0, 0));
+        let n = board.neighbors(Tile::new(0, 0));
         check_tile_vec(n, vec![
             Tile::new(0, 1),
             Tile::new(1, 1),
             Tile::new(1, 0)
         ]);
 
-        let n = board.neighbors(&Tile::new(3, 2));
+        let n = board.neighbors(Tile::new(3, 2));
         check_tile_vec(n, vec![
             Tile::new(2, 1),
             Tile::new(2, 2),
@@ -366,25 +318,25 @@ mod tests {
             Tile::new(4, 3)
         ]);
 
-        let b = board.tiles_between(&Tile::new(2, 2), &Tile::new(2, 5));
+        let b = board.tiles_between(Tile::new(2, 2), Tile::new(2, 5));
         check_tile_vec(b, vec![
             Tile::new(2, 3),
             Tile::new(2, 4)
         ]);
 
-        let b = board.tiles_between(&Tile::new(1, 3), &Tile::new(4, 3));
+        let b = board.tiles_between(Tile::new(1, 3), Tile::new(4, 3));
         check_tile_vec(b, vec![
             Tile::new(2, 3),
             Tile::new(3, 3)
         ]);
 
-        let b = board.tiles_between(&Tile::new(1, 1), &Tile::new(3, 3));
+        let b = board.tiles_between(Tile::new(1, 1), Tile::new(3, 3));
         assert!(b.is_empty());
 
-        let b = board.tiles_between(&Tile::new(1, 1), &Tile::new(1, 1));
+        let b = board.tiles_between(Tile::new(1, 1), Tile::new(1, 1));
         assert!(b.is_empty());
 
-        let b = board.tiles_between(&Tile::new(1, 1), &Tile::new(1, 2));
+        let b = board.tiles_between(Tile::new(1, 1), Tile::new(1, 2));
         assert!(b.is_empty());
 
         let occupied = [
@@ -394,7 +346,7 @@ mod tests {
         ];
         for t in occupied {
             println!("{t:?}");
-            assert!(board.state.tile_occupied(&t));
+            assert!(board.state.tile_occupied(t));
         }
         let empty = [
             Tile::new(3, 3),
@@ -403,7 +355,7 @@ mod tests {
         ];
         for t in empty {
             println!("{t:?}");
-            assert!(!board.state.tile_occupied(&t));
+            assert!(!board.state.tile_occupied(t));
         }
     }
 
