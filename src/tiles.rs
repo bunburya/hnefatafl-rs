@@ -6,25 +6,23 @@
 /// and the least significant four bits describe the column. It is therefore appropriate for use
 /// with square boards up to 16x16.
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
-pub(crate) struct Tile {
-    pub(crate) byte: u8
-}
+pub(crate) struct Tile(pub(crate) u8);
 
 impl Tile {
     pub(crate) fn new(row: u8, col: u8) -> Self {
-        Self { byte: (row << 4) | (col & 0x0F) }
+        Self { 0: (row << 4) | (col & 0x0F) }
     }
 
     pub(crate) fn from_byte(byte: u8) -> Self {
-        Self { byte }
+        Self { 0: byte }
     }
 
     pub(crate) fn row(&self) -> u8 {
-        self.byte >> 4
+        self.0 >> 4
     }
 
     pub(crate) fn col(&self) -> u8 {
-        self.byte & 0x0F
+        self.0 & 0x0F
     }
 
     pub(crate) fn to_mask(&self) -> u64 {

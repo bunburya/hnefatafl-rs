@@ -12,7 +12,7 @@ pub(crate) enum BoardError {
     BadChar(char)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub(crate) enum Side {
     Attacker,
     Defender(bool)
@@ -56,7 +56,7 @@ impl BoardState {
     /// separately.
     pub(crate) fn set_king(&mut self, t: Tile) {
         let mut bytes = self.defenders.to_be_bytes();
-        bytes[0] = t.byte;
+        bytes[0] = t.0;
         self.defenders = u64::from_be_bytes(bytes)
     }
 
@@ -222,6 +222,10 @@ impl Board {
 
     pub(crate) fn get_king(&self) -> Tile {
         self.state.get_king()
+    }
+
+    pub(crate) fn is_king(&self, tile: Tile) -> bool {
+        self.state.is_king(tile)
     }
 }
 

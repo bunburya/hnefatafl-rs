@@ -5,6 +5,7 @@ use crate::tiles::Tile;
 mod board;
 mod rules;
 mod tiles;
+mod pieces;
 
 fn main()  {
     let test_board_str = "...A...\n...A...\n...D...\nAADKDAA\n...D...\n...A...\n...A...";
