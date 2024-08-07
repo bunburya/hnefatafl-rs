@@ -1,8 +1,8 @@
 use std::cmp::PartialEq;
-use crate::board::{Board, Side};
-use crate::rules::Hostility::HostileToNonKing;
+use crate::board::Board;
+use crate::pieces::{PieceSet, Side};
+use crate::pieces::PieceType::{King, Soldier};
 use crate::rules::KingStrength::Weak;
-use crate::rules::MovementRule::{SlowAll, SlowKing, Unrestricted};
 use crate::rules::ThroneRule::{KingEntry, KingPass, NoEntry, NoPass};
 use crate::tiles::Tile;
 
@@ -28,16 +28,6 @@ enum ThroneRule {
     KingEntry
 }
 
-#[derive(PartialEq)]
-enum MovementRule {
-    /// All pieces can move as many unblocked tiles as they want.
-    Unrestricted,
-    /// King may only move one tile at a time. Other pieces are unrestricted.
-    SlowKing,
-    /// Pieces may only move one tile at a time.
-    SlowAll
-}
-
 enum KingStrength {
     /// King must be surrounded by four hostile pieces or tiles to be captured.
     Strong,
@@ -48,16 +38,14 @@ enum KingStrength {
     Weak
 }
 
-struct MoveOutcome {
-    captures: Vec<Tile>,
-    winner: Option<Side>
+enum GameOutcome {
+    Winner(Side),
+    Draw
 }
 
-enum Hostility {
-    HostileToKing,
-    HostileToNonKing,
-    HostileToSide(Side),
-    HostileToAll
+struct MoveOutcome {
+    captures: Vec<Tile>,
+    outcome: GameOutcome
 }
 
 struct Ruleset {
@@ -73,47 +61,56 @@ struct Ruleset {
     armed_king: bool,
     /// Whether the throne blocks movement.
     throne_movement: ThroneRule,
-    /// Whether the throne is hostile.
-    throne_hostility: Hostility,
-    /// Whether pieces' movement is restricted.
-    movement_rule: MovementRule,
+    /// Types of piece to which the throne is hostile.
+    throne_hostile_to: PieceSet,
+    /// Types of piece whose movement is restricted to one tile per move.
+    slow_pieces: PieceSet,
     /// Whether attacker goes first (if `false`, defender goes first)
     attacker_starts: bool
 }
 
 impl Ruleset {
     fn is_valid_move(&self, from: Tile, to: Tile, board: &Board) -> bool {
-        let is_king = board.is_king(from);
-        if !(board.tile_in_bounds(from) && board.tile_in_bounds(to)) {
-            // Tile out of bounds
-            return false
+        let maybe_piece = board.get_piece(from);
+        match maybe_piece {
+            None => return false,
+            Some(piece) => {
+                if !(board.tile_in_bounds(from) && board.tile_in_bounds(to)) {
+                    // Tile out of bounds
+                    return false
+                }
+                if (from.row() != to.row()) && (from.col() != to.col()) {
+                    // Tiles not on same row or column
+                    return false
+                }
+                let between = board.tiles_between(from, to);
+                if between.iter().any(|t| board.tile_occupied(*t)) {
+                    // Move is blocked by a piece
+                    return false
+                }
+                if (
+                    (self.throne_movement == NoPass)
+                        || ((self.throne_movement == KingPass) && piece.piece_type != King)
+                ) && between.contains(&board.throne) {
+                    // Move is blocked by the throne
+                    return false
+                }
+                if (
+                    (self.throne_movement == NoEntry)
+                        || ((self.throne_movement == KingEntry) && piece.piece_type != King)
+                ) && (to == board.throne) {
+                    // Illegal move on to the throne
+                    return false
+                }
+                if self.slow_pieces.contains(piece.piece_type) && from.distance_to(to) > 1 {
+                    // Slow piece can't move more than one space at a time
+                    return false
+                }
+                true
+            }
         }
-        if (from.row() != to.row()) && (from.col() != to.col()) {
-            // Tiles not on same row or column
-            return false
-        }
-        let between = board.tiles_between(from, to);
-        if between.iter().any(|t| board.tile_occupied(*t)) {
-            // Move is blocked by a piece
-            return false
-        }
-        if ((self.throne_movement == NoPass) || ((self.throne_movement == KingPass) && !is_king))
-            && between.contains(&board.throne) {
-            // Move is blocked by the throne
-            return false
-        }
-        if ((self.throne_movement == NoEntry) || ((self.throne_movement == KingEntry) && !is_king))
-            && (to == board.throne) {
-            // Illegal move on to the throne
-            return false
-        }
-        if ((self.movement_rule == SlowAll) || ((self.movement_rule == SlowKing) && is_king))
-            && from.distance_to(to) > 1 {
-            // Slow piece can't move more than one space at a time
-            return false
-        }
-        true
     }
+
 }
 
 /// Rules for Federation Brandubh
@@ -123,8 +120,8 @@ const FED_BRAN: Ruleset = Ruleset {
     hostile_edge: false,
     armed_king: true,
     throne_movement: KingEntry,
-    throne_hostility: HostileToNonKing,
-    movement_rule: Unrestricted,
+    throne_hostile_to: PieceSet::from_piece_type(Soldier),
+    slow_pieces: PieceSet::none(),
     attacker_starts: true
 };
 
@@ -136,8 +133,9 @@ mod tests {
 
     #[test]
     fn test_fed_bran() {
-        let mut b = Board::try_from("...A...\n...A...\n...D...\nAADKDAA\n...D...\n...A...\n...A...")
-            .unwrap();
+        let mut b = Board::try_from(
+            "...t...\n...t...\n...T...\nttTKTtt\n...T...\n...t...\n...t..."
+        ).unwrap();
         assert!(FED_BRAN.is_valid_move(
             Tile::new(3, 2),
             Tile::new(4, 2),
