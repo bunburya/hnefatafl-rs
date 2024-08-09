@@ -1,3 +1,4 @@
+use std::fmt::{Debug, Formatter, write};
 use crate::error::MoveError;
 use crate::error::MoveError::DisjointTiles;
 use crate::tiles::Plane::{Horizontal, Vertical};
@@ -9,7 +10,7 @@ use crate::tiles::Plane::{Horizontal, Vertical};
 /// It is implemented as a single byte, where the most significant four bits describe the row
 /// and the least significant four bits describe the column. It is therefore appropriate for use
 /// with square boards up to 16x16.
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash)]
 pub(crate) struct Tile(pub(crate) u8);
 
 impl Tile {
@@ -42,6 +43,12 @@ impl Tile {
     }
 }
 
+impl Debug for Tile {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Tile(row={}, col={})", self.row(), self.col())
+    }
+}
+
 #[derive(Eq, PartialEq, Debug)]
 enum Plane {
     Vertical = 0,
@@ -54,28 +61,29 @@ enum Plane {
 /// and distance of movement. The most significant bit represents whether the move is vertical or
 /// horizontal and the remaining bits represent the distance to be moved (with a negative value
 /// representing a move "backwards" along the relevant plane, ie, to a lower-numbered row or
-/// column).
-struct Move {
-    pub(crate) src: Tile,
+/// column). This way, moves are guaranteed to be along a row or column.
+#[derive(Debug)]
+pub(crate) struct Move {
+    pub(crate) from: Tile,
     plane_disp: u8
 }
 
 impl Move {
 
-    pub(crate) fn new(src: Tile, dest: Tile) -> Result<Self, MoveError> {
+    pub(crate) fn new(src: Tile, dst: Tile) -> Result<Self, MoveError> {
         let plane_bit: u8;
         let len: i8;
-        if src.row() == dest.row() {
+        if src.row() == dst.row() {
             plane_bit = 0x80;
-            len = (dest.col() as i8) - (src.col() as i8);
-        } else if src.col() == src.col() {
+            len = (dst.col() as i8) - (src.col() as i8);
+        } else if src.col() == dst.col() {
             plane_bit = 0;
-            len = (dest.row() as i8) - (src.row() as i8);
+            len = (dst.row() as i8) - (src.row() as i8);
         } else {
             return Err(DisjointTiles)
         };
         Ok(Self {
-            src,
+            from: src,
             plane_disp: plane_bit | ((len & 0x7F) as u8)
         })
     }
@@ -97,11 +105,11 @@ impl Move {
     }
 
     /// The move's destination tile.
-    pub(crate) fn dest(&self) -> Tile {
+    pub(crate) fn to(&self) -> Tile {
         let d = self.displacement();
         match self.plane() {
-            Vertical => Tile::new(((self.src.row() as i8) + d) as u8, self.src.col()),
-            Horizontal => Tile::new(self.src.row(), ((self.src.col() as i8) + d) as u8)
+            Vertical => Tile::new(((self.from.row() as i8) + d) as u8, self.from.col()),
+            Horizontal => Tile::new(self.from.row(), ((self.from.col() as i8) + d) as u8)
         }
     }
 }
@@ -109,7 +117,7 @@ impl Move {
 #[cfg(test)]
 mod tests {
     use crate::tiles::{Move, Tile};
-    use crate::tiles::Plane::Horizontal;
+    use crate::tiles::Plane::{Horizontal, Vertical};
 
     #[test]
     fn test_tile_creation() {
@@ -135,9 +143,37 @@ mod tests {
         let m_res = Move::new(Tile::new(2, 4), Tile::new(2, 6));
         assert!(m_res.is_ok());
         let m = m_res.unwrap();
-        assert_eq!(m.src, Tile::new(2, 4));
+        assert_eq!(m.from, Tile::new(2, 4));
         assert_eq!(m.plane(), Horizontal);
         assert_eq!(m.displacement(), 2);
-        assert_eq!(m.dest(), Tile::new(2, 6));
+        assert_eq!(m.to(), Tile::new(2, 6));
+
+        let m_res = Move::new(Tile::new(2, 3), Tile::new(5, 3));
+        assert!(m_res.is_ok());
+        let m = m_res.unwrap();
+        assert_eq!(m.from, Tile::new(2, 3));
+        assert_eq!(m.plane(), Vertical);
+        assert_eq!(m.displacement(), 3);
+        assert_eq!(m.to(), Tile::new(5, 3));
+
+        let m_res = Move::new(Tile::new(1, 4), Tile::new(1, 1));
+        assert!(m_res.is_ok());
+        let m = m_res.unwrap();
+        assert_eq!(m.from, Tile::new(1, 4));
+        assert_eq!(m.plane(), Horizontal);
+        assert_eq!(m.displacement(), -3);
+        assert_eq!(m.to(), Tile::new(1, 1));
+
+        let m_res = Move::new(Tile::new(7, 5), Tile::new(0, 5));
+        assert!(m_res.is_ok());
+        let m = m_res.unwrap();
+        assert_eq!(m.from, Tile::new(7, 5));
+        assert_eq!(m.plane(), Vertical);
+        assert_eq!(m.displacement(), -7);
+        assert_eq!(m.to(), Tile::new(0, 5));
+
+        let m_res = Move::new(Tile::new(2, 3), Tile::new(3, 6));
+        println!("{m_res:?}");
+        assert!(m_res.is_err());
     }
 }

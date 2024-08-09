@@ -6,8 +6,6 @@ use crate::rules::KingStrength::Weak;
 use crate::rules::ThroneRule::{KingEntry, KingPass, NoEntry, NoPass};
 use crate::tiles::Tile;
 
-
-
 enum SpecialTileType {
     Throne,
     Corner,
@@ -111,6 +109,7 @@ impl Ruleset {
         }
     }
 
+
 }
 
 /// Rules for Federation Brandubh
@@ -129,7 +128,7 @@ const FED_BRAN: Ruleset = Ruleset {
 mod tests {
     use crate::board::Board;
     use crate::rules::FED_BRAN;
-    use crate::tiles::Tile;
+    use crate::tiles::{Move, Tile};
 
     #[test]
     fn test_fed_bran() {
@@ -154,8 +153,8 @@ mod tests {
             &b
         ));
 
-        b.move_piece(Tile::new(3, 2), Tile::new(4, 2));
-        b.move_piece(Tile::new(3, 3), Tile::new(3, 2));
+        b.do_move(Move::new(Tile::new(3, 2), Tile::new(4, 2)).unwrap());
+        b.do_move(Move::new(Tile::new(3, 3), Tile::new(3, 2)).unwrap());
 
         // Invalid because non-king move onto throne
         assert!(!FED_BRAN.is_valid_move(

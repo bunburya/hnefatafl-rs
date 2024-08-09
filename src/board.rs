@@ -7,7 +7,7 @@ use crate::error::ParseError;
 use crate::error::ParseError::BadLineLen;
 use crate::pieces::{Piece, Side};
 use crate::pieces::PieceType::{King, Soldier};
-use crate::tiles::Tile;
+use crate::tiles::{Move, Tile};
 
 /// Store information on the current board state (ie, pieces). This struct currently handles only a
 /// simple board, ie, a king and soldiers on a 7x7 board.
@@ -99,6 +99,11 @@ impl SimpleBoardState {
         let all_pieces = self.defenders | self.attackers;
         let mask = t.to_mask();
         return (all_pieces & mask) > 0;
+    }
+
+    /// Execute the given move.
+    pub(crate) fn do_move(&mut self, m: Move) {
+        self.move_piece(m.from, m.to())
     }
 
     /// Move a piece from one position to another. This does not check whether a move is valid; it
@@ -207,8 +212,8 @@ impl Board {
         self.state.place_piece(tile, piece);
     }
 
-    pub(crate) fn move_piece(&mut self, from: Tile, to: Tile) {
-        self.state.move_piece(from, to)
+    pub(crate) fn do_move(&mut self, m: Move) {
+        self.state.do_move(m)
     }
 
     pub(crate) fn get_piece(&self, tile: Tile) -> Option<Piece> {
@@ -291,7 +296,7 @@ mod tests {
         let mut board = board_result.unwrap();
         board.place_piece(Tile::new(1, 5), Piece::attacker(Soldier));
         board.place_piece(Tile::new(4, 1), Piece::defender(Soldier));
-        board.move_piece(Tile::new(3, 3), Tile::new(0, 4));
+        board.state.move_piece(Tile::new(3, 3), Tile::new(0, 4));
         assert_eq!(format!("{board}"), expected_str);
 
         let n = board.neighbors(Tile::new(0, 0));
