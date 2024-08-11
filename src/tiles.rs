@@ -1,7 +1,7 @@
-use std::fmt::{Debug, Formatter, write};
 use crate::error::MoveError;
 use crate::error::MoveError::DisjointTiles;
 use crate::tiles::Plane::{Horizontal, Vertical};
+use std::fmt::{Debug, Formatter};
 
 /// The location of a single tile on the board, ie, row and column. This struct is only a reference
 /// to a location on the board, and does not contain any other information such as piece placement,
@@ -31,7 +31,7 @@ impl Tile {
     }
 
     pub(crate) fn to_mask(&self) -> u64 {
-        return 1 << ((self.row() * 8) + self.col())
+        1 << ((self.row() * 8) + self.col())
     }
 
     pub(crate) fn distance_to(&self, other: Tile) -> u8 {
@@ -46,6 +46,12 @@ impl Tile {
 impl Debug for Tile {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "Tile(row={}, col={})", self.row(), self.col())
+    }
+}
+
+impl From<Tile> for (u8, u8) {
+    fn from(value: Tile) -> Self {
+        (value.row(), value.col())
     }
 }
 
@@ -116,8 +122,8 @@ impl Move {
 
 #[cfg(test)]
 mod tests {
-    use crate::tiles::{Move, Tile};
     use crate::tiles::Plane::{Horizontal, Vertical};
+    use crate::tiles::{Move, Tile};
 
     #[test]
     fn test_tile_creation() {

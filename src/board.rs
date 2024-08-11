@@ -98,7 +98,7 @@ impl SimpleBoardState {
     pub(crate) fn tile_occupied(&self, t: Tile) -> bool {
         let all_pieces = self.defenders | self.attackers;
         let mask = t.to_mask();
-        return (all_pieces & mask) > 0;
+        (all_pieces & mask) > 0
     }
 
     /// Execute the given move.
@@ -121,13 +121,20 @@ impl SimpleBoardState {
             None => { }
         }
     }
+    
+    pub(crate) fn count_pieces(&self, side: Side) -> u8 {
+        match side {
+            Attacker => self.attackers,
+            Defender => self.defenders
+        }.count_ones() as u8
+    }
 }
 
 pub(crate) struct Board {
-    state: SimpleBoardState,
+    pub(crate) state: SimpleBoardState,
     side_len: u8,
     pub(crate) throne: Tile,
-    corners: [Tile; 4]
+    pub(crate) corners: [Tile; 4]
 }
 
 impl Board {
@@ -157,7 +164,7 @@ impl Board {
         r.contains(&tile.row()) && r.contains(&tile.col())
     }
 
-    fn neighbors(&self, tile: Tile) -> Vec<Tile> {
+    pub(crate) fn neighbors(&self, tile: Tile) -> Vec<Tile> {
         let mut neighbors: Vec<Tile> = vec![];
         let board_range = 0..self.side_len as i8;
         for r in -1..2i8 {
@@ -204,8 +211,17 @@ impl Board {
         tiles
     }
 
+    /// Check whether the given tile is occupied by any piece.
     pub(crate) fn tile_occupied(&self, tile: Tile) -> bool {
         self.state.tile_occupied(tile)
+    }
+    
+    /// Check whether the given tile is at the edge of the board (including at a corner).
+    pub(crate) fn tile_at_edge(&self, tile: Tile) -> bool {
+        tile.row() == 0 
+            || tile.row() == self.side_len - 1 
+            || tile.col() == 0 
+            || tile.col() == self.side_len - 1
     }
 
     pub(crate) fn place_piece(&mut self, tile: Tile, piece: Piece) {
@@ -227,6 +243,7 @@ impl Board {
     pub(crate) fn is_king(&self, tile: Tile) -> bool {
         self.state.is_king(tile)
     }
+
 }
 
 impl Display for Board {

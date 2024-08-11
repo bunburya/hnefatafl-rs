@@ -4,10 +4,21 @@ use crate::error::ParseError::BadChar;
 use crate::pieces::PieceType::{Commander, Guard, King, Knight, Mercenary, Soldier};
 use crate::pieces::Side::{Attacker, Defender};
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub(crate) enum Side {
     Attacker = 0x40,
     Defender = 0x80
+}
+
+impl Side {
+
+    /// Return the other side.
+    pub(crate) fn other(&self) -> Self {
+        match self {
+            Attacker => Defender,
+            Defender => Attacker
+        }
+    }
 }
 
 /// The different types of pieces that can occupy a board.
@@ -36,6 +47,7 @@ impl BitOr<PieceType> for u8 {
     }
 }
 
+#[derive(Copy, Clone, Eq, PartialEq)]
 /// A piece belonging to a particular side.
 pub(crate) struct Piece {
     pub(crate) piece_type: PieceType,
@@ -116,6 +128,7 @@ impl TryFrom<char> for Piece {
     }
 }
 
+#[derive(Copy, Clone, Debug)]
 pub(crate) struct PieceSet(u8);
 
 impl PieceSet {
