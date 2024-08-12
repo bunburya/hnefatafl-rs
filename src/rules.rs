@@ -1,8 +1,7 @@
 use crate::pieces::PieceType::Soldier;
-use crate::pieces::{PieceSet, Side};
+use crate::pieces::PieceSet;
 use crate::rules::KingStrength::Weak;
 use crate::rules::ThroneRule::KingEntry;
-use crate::tiles::Tile;
 use std::cmp::PartialEq;
 
 enum SpecialTileType {
@@ -36,16 +35,6 @@ pub(crate) enum KingStrength {
     Weak
 }
 
-pub(crate) enum GameOutcome {
-    Winner(Side),
-    Draw
-}
-
-
-pub(crate) struct MoveOutcome {
-    pub(crate) captures: Vec<Tile>,
-    pub(crate) game_outcome: Option<GameOutcome>
-}
 
 /// A struct describing what pieces certain special tiles are considered hostile to.
 #[derive(Copy, Clone, Debug)]
@@ -64,7 +53,7 @@ pub(crate) struct Ruleset {
     /// captured).
     pub(crate) king_strength: KingStrength,
     /// Whether the edge counts as hostile to the king.
-    hostile_edge: bool,
+    pub(crate) hostile_edge: bool,
     /// Whether the king is armed (can participate in captures).
     pub(crate) armed_king: bool,
     /// Whether the throne blocks movement.
@@ -92,45 +81,3 @@ pub(crate) const FED_BRAN: Ruleset = Ruleset {
     slow_pieces: PieceSet::none(),
     attacker_starts: true
 };
-
-#[cfg(test)]
-mod tests {
-    use crate::game::Game;
-    use crate::rules::FED_BRAN;
-    use crate::tiles::{Move, Tile};
-
-    #[test]
-    fn test_fed_bran() {
-        let mut g = Game::new(
-            FED_BRAN, 
-            "...t...\n...t...\n...T...\nttTKTtt\n...T...\n...t...\n...t..."
-        ).unwrap();
-        assert!(g.is_valid_move(Move::new(
-            Tile::new(3, 2),
-            Tile::new(4, 2)
-        ).unwrap()));
-        assert!(g.is_valid_move(Move::new(
-            Tile::new(3, 3),
-            Tile::new(3, 2)).unwrap()));
-
-        // Invalid because blocked
-        assert!(!g.is_valid_move(Move::new(
-            Tile::new(0, 3), 
-            Tile::new(2, 3)
-        ).unwrap()));
-
-        g.board.do_move(Move::new(Tile::new(3, 2), Tile::new(4, 2)).unwrap());
-        g.board.do_move(Move::new(Tile::new(3, 3), Tile::new(3, 2)).unwrap());
-
-        // Invalid because non-king move onto throne
-        assert!(!g.is_valid_move(
-            Move::new(Tile::new(2, 3), Tile::new(3, 3)).unwrap(),
-        ));
-
-        // Valid because king move onto throne
-        assert!(g.is_valid_move(
-            Move::new(Tile::new(3, 2), Tile::new(3, 3)).unwrap(),
-        ))
-    }
-
-}

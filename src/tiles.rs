@@ -34,13 +34,6 @@ impl Tile {
         1 << ((self.row() * 8) + self.col())
     }
 
-    pub(crate) fn distance_to(&self, other: Tile) -> u8 {
-        if self.row() == other.row() {
-            self.col().abs_diff(other.col())
-        } else {
-            self.row().abs_diff(other.row())
-        }
-    }
 }
 
 impl Debug for Tile {
@@ -56,7 +49,7 @@ impl From<Tile> for (u8, u8) {
 }
 
 #[derive(Eq, PartialEq, Debug)]
-enum Plane {
+pub(crate) enum Plane {
     Vertical = 0,
     Horizontal = 1
 }
@@ -101,6 +94,8 @@ impl Move {
         }
     }
 
+    /// The signed distance in tiles covered by the move. A negative number means that the move is
+    /// going "backwards", ie, to a lower-numbered row or column.
     pub(crate) fn displacement(&self) -> i8 {
         let bits = (self.plane_disp & 0x7F) as i8;
         if (bits & 0x40) != 0 {
@@ -108,6 +103,12 @@ impl Move {
         } else {
             bits
         }
+    }
+    
+    /// The unsigned distance in tiles covered by the move. Basically the absolute value of
+    /// [Move::displacement].
+    pub(crate) fn distance(&self) -> u8 {
+        self.displacement().unsigned_abs()
     }
 
     /// The move's destination tile.
@@ -135,15 +136,7 @@ mod tests {
             }
         }
     }
-
-    #[test]
-    fn test_distance() {
-        assert_eq!(Tile::new(2, 1).distance_to(Tile::new(2, 4)), 3);
-        assert_eq!(Tile::new(2, 5).distance_to(Tile::new(2, 0)), 5);
-        assert_eq!(Tile::new(6, 1).distance_to(Tile::new(2, 1)), 4);
-        assert_eq!(Tile::new(2, 3).distance_to(Tile::new(3, 3)), 1);
-    }
-
+    
     #[test]
     fn test_moves() {
         let m_res = Move::new(Tile::new(2, 4), Tile::new(2, 6));
