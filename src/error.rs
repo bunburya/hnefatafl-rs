@@ -1,11 +1,25 @@
-#[derive(Debug)]
+use std::num::ParseIntError;
+use crate::error::ParseError::BadInt;
+
+#[derive(Debug, Eq, PartialEq)]
 pub(crate) enum ParseError {
     BadStringLen(usize),
     BadLineLen(usize),
-    BadChar(char)
+    BadChar(char),
+    EmptyString,
+    BadInt(ParseIntError),
+    BadMove(MoveError),
+    BadString(String)
+    
 }
 
-#[derive(Debug)]
+impl From<ParseIntError> for ParseError {
+    fn from(value: ParseIntError) -> Self {
+        BadInt(value)
+    }
+}
+
+#[derive(Debug, Eq, PartialEq)]
 pub(crate) enum MoveError {
     DisjointTiles
 }

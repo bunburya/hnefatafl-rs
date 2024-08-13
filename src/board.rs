@@ -1,6 +1,6 @@
 use std::fmt::{Display, Formatter, Write};
 use std::ops::RangeBounds;
-
+use std::str::FromStr;
 use Side::{Attacker, Defender};
 
 use crate::error::ParseError;
@@ -21,19 +21,10 @@ use crate::tiles::{Move, Tile};
 /// Currently only basic getting and setting is implemented at the bitfield level. More complex game
 /// logic (like checking move validity, etc) is implemented elsewhere and uses [Tile] structs. If
 /// performance was an issue we could look at moving some of that logic to the bitfield level.
-#[derive(Copy, Clone, Hash, Eq, PartialEq)]
+#[derive(Copy, Clone, Hash, Eq, PartialEq, Default)]
 pub(crate) struct SimpleBoardState {
     attackers: u64,
     defenders: u64
-}
-
-impl Default for SimpleBoardState {
-    fn default() -> Self {
-        Self {
-            attackers: 0,
-            defenders: 0
-        }
-    }
 }
 
 impl SimpleBoardState {
@@ -110,15 +101,12 @@ impl SimpleBoardState {
     /// just unsets the bit at `from` and sets the bit at `to`.
     pub(crate) fn move_piece(&mut self, from: Tile, to: Tile) {
         let maybe_piece = self.get_piece(from);
-        match maybe_piece {
-            Some(piece) => {
-                if piece.piece_type == King {
-                    self.set_king(to)
-                }
-                self.place_piece(to, piece);
-                self.clear_tile(from)
-            },
-            None => { }
+        if let Some(piece) = maybe_piece {
+            if piece.piece_type == King {
+                self.set_king(to)
+            }
+            self.place_piece(to, piece);
+            self.clear_tile(from)
         }
     }
     
@@ -165,23 +153,17 @@ impl Board {
     }
 
     pub(crate) fn neighbors(&self, tile: Tile) -> Vec<Tile> {
-        let mut neighbors: Vec<Tile> = vec![];
-        let board_range = 0..self.side_len as i8;
-        for r in -1..2i8 {
-            for c in -1..2i8 {
-                if r == 0 && c == 0 {
-                    continue
-                }
-                let new_row = (tile.row() as i8) + r;
-                if !board_range.contains(&new_row) {
-                    continue;
-                }
-                let new_col = (tile.col() as i8) + c;
-                if !board_range.contains(&new_col) {
-                    continue;
-                }
-                neighbors.push(Tile::new(new_row as u8, new_col as u8));
-            }
+        let row = tile.row();
+        let col = tile.col();
+        let mut neighbors: Vec<Tile> = vec![
+            Tile::new(row+1, col),
+            Tile::new(row, col+1)
+        ];
+        if row > 0 {
+            neighbors.push(Tile::new(row-1, col))
+        }
+        if col > 0 {
+            neighbors.push(Tile::new(row, col-1))
         }
         neighbors
     }
@@ -264,9 +246,9 @@ impl Display for Board {
     }
 }
 
-impl TryFrom<&str> for Board {
-    type Error = ParseError;
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
+impl FromStr for Board {
+    type Err = ParseError;
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
         let s = value.trim();
         let mut side_len = 0u8;
         let mut state = SimpleBoardState::default();
@@ -290,7 +272,7 @@ impl TryFrom<&str> for Board {
 #[cfg(test)]
 mod tests {
     use std::collections::HashSet;
-
+    use std::str::FromStr;
     use crate::board::{Board, Tile};
     use crate::pieces::Piece;
     use crate::pieces::PieceType::Soldier;
@@ -308,7 +290,7 @@ mod tests {
     fn test_board() {
         let start_str = "...t...\n...t...\n...T...\nttTKTtt\n...T...\n...t...\n...t...";
         let expected_str = "...tK..\n...t.t.\n...T...\nttT.Ttt\n.T.T...\n...t...\n...t...\n";
-        let board_result = Board::try_from(start_str);
+        let board_result = Board::from_str(start_str);
         assert!(board_result.is_ok());
         let mut board = board_result.unwrap();
         board.place_piece(Tile::new(1, 5), Piece::attacker(Soldier));
@@ -319,20 +301,15 @@ mod tests {
         let n = board.neighbors(Tile::new(0, 0));
         check_tile_vec(n, vec![
             Tile::new(0, 1),
-            Tile::new(1, 1),
             Tile::new(1, 0)
         ]);
 
         let n = board.neighbors(Tile::new(3, 2));
         check_tile_vec(n, vec![
-            Tile::new(2, 1),
             Tile::new(2, 2),
-            Tile::new(2, 3),
             Tile::new(3, 1),
             Tile::new(3, 3),
-            Tile::new(4, 1),
             Tile::new(4, 2),
-            Tile::new(4, 3)
         ]);
 
         let b = board.tiles_between(Tile::new(2, 2), Tile::new(2, 5));

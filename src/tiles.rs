@@ -1,7 +1,9 @@
-use crate::error::MoveError;
 use crate::error::MoveError::DisjointTiles;
+use crate::error::ParseError::{BadChar, BadMove, BadString, EmptyString};
+use crate::error::{MoveError, ParseError};
 use crate::tiles::Plane::{Horizontal, Vertical};
-use std::fmt::{Debug, Formatter};
+use std::fmt::{Debug, Display, Formatter};
+use std::str::FromStr;
 
 /// The location of a single tile on the board, ie, row and column. This struct is only a reference
 /// to a location on the board, and does not contain any other information such as piece placement,
@@ -15,7 +17,7 @@ pub(crate) struct Tile(pub(crate) u8);
 
 impl Tile {
     pub(crate) fn new(row: u8, col: u8) -> Self {
-        Self { 0: (row << 4) | (col & 0x0F) }
+        Self((row << 4) | (col & 0x0F))
     }
 
     pub(crate) fn from_byte(byte: u8) -> Self {
@@ -42,6 +44,28 @@ impl Debug for Tile {
     }
 }
 
+impl Display for Tile {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}{}", (self.col() + 97) as char, self.row() + 1)
+    }
+}
+
+impl FromStr for Tile {
+    type Err = ParseError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let col = if let Some(&byte) = s.as_bytes().first() {
+            if !(97..=122).contains(&byte) {
+                return Err(BadChar(byte as char))
+            }
+            byte - 97
+        } else {
+            return Err(EmptyString)
+        };
+        Ok(Tile::new(s[1..].parse::<u8>()? - 1, col))
+
+    }
+}
+
 impl From<Tile> for (u8, u8) {
     fn from(value: Tile) -> Self {
         (value.row(), value.col())
@@ -61,10 +85,34 @@ pub(crate) enum Plane {
 /// horizontal and the remaining bits represent the distance to be moved (with a negative value
 /// representing a move "backwards" along the relevant plane, ie, to a lower-numbered row or
 /// column). This way, moves are guaranteed to be along a row or column.
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub(crate) struct Move {
     pub(crate) from: Tile,
     plane_disp: u8
+}
+
+impl FromStr for Move {
+    type Err = ParseError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let tokens: Vec<&str> = s.split('-').collect();
+        if tokens.len() != 2 {
+            return Err(BadString(String::from(s)))
+        };
+        let m_res = Move::new(
+            Tile::from_str(tokens[0])?,
+            Tile::from_str(tokens[1])?
+        );
+        match m_res {
+            Ok(m) => Ok(m),
+            Err(e) => Err(BadMove(e))
+        }
+    }
+}
+
+impl Display for Move {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}-{}", self.from, self.to())
+    }
 }
 
 impl Move {
@@ -123,8 +171,11 @@ impl Move {
 
 #[cfg(test)]
 mod tests {
+    use crate::error::ParseError::{BadChar, BadInt, BadMove, BadString, EmptyString};
     use crate::tiles::Plane::{Horizontal, Vertical};
     use crate::tiles::{Move, Tile};
+    use std::str::FromStr;
+    use crate::error::MoveError;
 
     #[test]
     fn test_tile_creation() {
@@ -161,6 +212,7 @@ mod tests {
         assert_eq!(m.from, Tile::new(1, 4));
         assert_eq!(m.plane(), Horizontal);
         assert_eq!(m.displacement(), -3);
+        assert_eq!(m.distance(), 3);
         assert_eq!(m.to(), Tile::new(1, 1));
 
         let m_res = Move::new(Tile::new(7, 5), Tile::new(0, 5));
@@ -174,5 +226,57 @@ mod tests {
         let m_res = Move::new(Tile::new(2, 3), Tile::new(3, 6));
         println!("{m_res:?}");
         assert!(m_res.is_err());
+    }
+    
+    #[test]
+    fn test_parsing_tiles() {
+        let parsed_t = Tile::from_str("a8");
+        let t = Tile::new(7, 0);
+        assert!(parsed_t.is_ok());
+        assert_eq!(parsed_t.unwrap(), t);
+        assert_eq!(t.to_string(), "a8");
+
+        let parsed_t = Tile::from_str("f14");
+        let t = Tile::new(13, 5);
+        assert!(parsed_t.is_ok());
+        assert_eq!(parsed_t.unwrap(), t);
+        assert_eq!(t.to_string(), "f14");
+        
+        assert_eq!(Tile::from_str(""), Err(EmptyString));
+        assert_eq!(Tile::from_str("[53"), Err(BadChar('[')));
+        assert!(matches!(Tile::from_str("a!!"), Err(BadInt(_))));
+    }
+    
+    #[test]
+    fn test_parsing_moves() {
+        let parsed_m = Move::from_str("a8-a11");
+        let m = Move::new(
+            Tile::new(7, 0), 
+            Tile::new(10, 0)
+        ).unwrap();
+        assert!(parsed_m.is_ok());
+        assert_eq!(parsed_m.unwrap(), m);
+        assert_eq!(m.to_string(), "a8-a11");
+
+        let parsed_m = Move::from_str("f5-d5");
+        let m = Move::new(
+            Tile::new(4, 5),
+            Tile::new(4, 3)
+        ).unwrap();
+        assert!(parsed_m.is_ok());
+        assert_eq!(parsed_m.unwrap(), m);
+        assert_eq!(m.to_string(), "f5-d5");
+        
+        let parsed_m = Move::from_str("f5-d6");
+        assert_eq!(parsed_m, Err(BadMove(MoveError::DisjointTiles)));
+        
+        let parsed_m = Move::from_str("f5-d7-d6");
+        assert_eq!(parsed_m, Err(BadString(String::from("f5-d7-d6"))));
+        
+        let parsed_m = Move::from_str("f5-d]");
+        assert!(matches!(parsed_m, Err(BadInt(_))));
+        
+        let parsed_m = Move::from_str("!5-d5");
+        assert_eq!(parsed_m, Err(BadChar('!')));
     }
 }

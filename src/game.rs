@@ -8,6 +8,7 @@ use crate::rules::KingStrength::{Strong, StrongByThrone, Weak};
 use crate::rules::{Ruleset, ThroneRule};
 use crate::tiles::{Move, Tile};
 use std::collections::HashSet;
+use std::str::FromStr;
 use crate::game::GameOutcome::Winner;
 
 #[derive(Debug, Eq, PartialEq)]
@@ -56,7 +57,7 @@ impl Game {
 
     pub(crate) fn new(rules: Ruleset, starting_board: &str) -> Result<Self, ParseError> {
         Ok(Self {
-            board: Board::try_from(starting_board)?,
+            board: Board::from_str(starting_board)?,
             rules,
             turn: 0,
             side_to_play: if rules.attacker_starts { Attacker } else { Defender }
