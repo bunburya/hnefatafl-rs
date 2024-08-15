@@ -4,3 +4,4 @@ mod board;
 mod error;
 mod game;
 mod tiles;
+mod traits;

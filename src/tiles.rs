@@ -21,7 +21,7 @@ impl Tile {
     }
 
     pub(crate) fn from_byte(byte: u8) -> Self {
-        Self { 0: byte }
+        Self(byte)
     }
 
     pub(crate) fn row(&self) -> u8 {
@@ -29,7 +29,15 @@ impl Tile {
     }
 
     pub(crate) fn col(&self) -> u8 {
-        self.0 & 0x0F
+        self.0 & 0b0000_1111
+    }
+    
+    pub(crate) fn row_bits(&self) -> u8 {
+        self.0 & 0b1111_0000
+    }
+    
+    pub(crate) fn col_bits(&self) -> u8 {
+        self.0 & 0b0000_1111
     }
 
     pub(crate) fn to_mask(&self) -> u64 {
@@ -80,7 +88,7 @@ pub(crate) enum Plane {
 
 /// A single move from one tile to another.
 ///
-/// This is implemented a combination of source tile and another byte which encodes the direction
+/// This is implemented as a combination of source tile and another byte which encodes the direction
 /// and distance of movement. The most significant bit represents whether the move is vertical or
 /// horizontal and the remaining bits represent the distance to be moved (with a negative value
 /// representing a move "backwards" along the relevant plane, ie, to a lower-numbered row or
@@ -98,7 +106,7 @@ impl FromStr for Move {
         if tokens.len() != 2 {
             return Err(BadString(String::from(s)))
         };
-        let m_res = Move::new(
+        let m_res = Move::from_tiles(
             Tile::from_str(tokens[0])?,
             Tile::from_str(tokens[1])?
         );
@@ -117,7 +125,7 @@ impl Display for Move {
 
 impl Move {
 
-    pub(crate) fn new(src: Tile, dst: Tile) -> Result<Self, MoveError> {
+    pub(crate) fn from_tiles(src: Tile, dst: Tile) -> Result<Self, MoveError> {
         let plane_bit: u8;
         let len: i8;
         if src.row() == dst.row() {
@@ -190,7 +198,7 @@ mod tests {
     
     #[test]
     fn test_moves() {
-        let m_res = Move::new(Tile::new(2, 4), Tile::new(2, 6));
+        let m_res = Move::from_tiles(Tile::new(2, 4), Tile::new(2, 6));
         assert!(m_res.is_ok());
         let m = m_res.unwrap();
         assert_eq!(m.from, Tile::new(2, 4));
@@ -198,7 +206,7 @@ mod tests {
         assert_eq!(m.displacement(), 2);
         assert_eq!(m.to(), Tile::new(2, 6));
 
-        let m_res = Move::new(Tile::new(2, 3), Tile::new(5, 3));
+        let m_res = Move::from_tiles(Tile::new(2, 3), Tile::new(5, 3));
         assert!(m_res.is_ok());
         let m = m_res.unwrap();
         assert_eq!(m.from, Tile::new(2, 3));
@@ -206,7 +214,7 @@ mod tests {
         assert_eq!(m.displacement(), 3);
         assert_eq!(m.to(), Tile::new(5, 3));
 
-        let m_res = Move::new(Tile::new(1, 4), Tile::new(1, 1));
+        let m_res = Move::from_tiles(Tile::new(1, 4), Tile::new(1, 1));
         assert!(m_res.is_ok());
         let m = m_res.unwrap();
         assert_eq!(m.from, Tile::new(1, 4));
@@ -215,7 +223,7 @@ mod tests {
         assert_eq!(m.distance(), 3);
         assert_eq!(m.to(), Tile::new(1, 1));
 
-        let m_res = Move::new(Tile::new(7, 5), Tile::new(0, 5));
+        let m_res = Move::from_tiles(Tile::new(7, 5), Tile::new(0, 5));
         assert!(m_res.is_ok());
         let m = m_res.unwrap();
         assert_eq!(m.from, Tile::new(7, 5));
@@ -223,7 +231,7 @@ mod tests {
         assert_eq!(m.displacement(), -7);
         assert_eq!(m.to(), Tile::new(0, 5));
 
-        let m_res = Move::new(Tile::new(2, 3), Tile::new(3, 6));
+        let m_res = Move::from_tiles(Tile::new(2, 3), Tile::new(3, 6));
         println!("{m_res:?}");
         assert!(m_res.is_err());
     }
@@ -250,7 +258,7 @@ mod tests {
     #[test]
     fn test_parsing_moves() {
         let parsed_m = Move::from_str("a8-a11");
-        let m = Move::new(
+        let m = Move::from_tiles(
             Tile::new(7, 0), 
             Tile::new(10, 0)
         ).unwrap();
@@ -259,7 +267,7 @@ mod tests {
         assert_eq!(m.to_string(), "a8-a11");
 
         let parsed_m = Move::from_str("f5-d5");
-        let m = Move::new(
+        let m = Move::from_tiles(
             Tile::new(4, 5),
             Tile::new(4, 3)
         ).unwrap();

@@ -10,6 +10,7 @@ use crate::tiles::{Move, Tile};
 use std::collections::HashSet;
 use std::str::FromStr;
 use crate::game::GameOutcome::Winner;
+use crate::traits::BitField;
 
 #[derive(Debug, Eq, PartialEq)]
 pub(crate) enum MoveValidity {
@@ -46,14 +47,14 @@ pub(crate) struct MoveOutcome {
     pub(crate) game_outcome: Option<GameOutcome>
 }
 
-pub(crate) struct Game {
-    pub(crate) board: Board,
+pub(crate) struct Game<T: BitField> {
+    pub(crate) board: Board<T>,
     rules: Ruleset,
     turn: u32,
     side_to_play: Side
 }
 
-impl Game {
+impl<T: BitField> Game<T> {
 
     pub(crate) fn new(rules: Ruleset, starting_board: &str) -> Result<Self, ParseError> {
         Ok(Self {
@@ -241,20 +242,20 @@ mod tests {
     
     #[test]
     fn test_check_move_validity() {
-        let mut fb_game = Game::new(
+        let mut fb_game: Game<u64> = Game::new(
             FED_BRAN, 
             "...t...\n...t...\n...T...\nttTKTtt\n...T...\n...t...\n...t..."
         ).unwrap();
 
         assert_eq!(
-            fb_game.check_move_validity(Move::new(
+            fb_game.check_move_validity(Move::from_tiles(
                 Tile::new(3, 2),
                 Tile::new(4, 2)
             ).unwrap()),
             ValidMove
         );
         assert_eq!(
-            fb_game.check_move_validity(Move::new(
+            fb_game.check_move_validity(Move::from_tiles(
                 Tile::new(3, 3),
                 Tile::new(3, 2)
             ).unwrap()),
@@ -262,7 +263,7 @@ mod tests {
         );
         
         assert_eq!(
-            fb_game.check_move_validity(Move::new(
+            fb_game.check_move_validity(Move::from_tiles(
                 Tile::new(1, 1),
                 Tile::new(2, 1)
             ).unwrap()),
@@ -270,7 +271,7 @@ mod tests {
         );
         
         assert_eq!(
-            fb_game.check_move_validity(Move::new(
+            fb_game.check_move_validity(Move::from_tiles(
                 Tile::new(0, 3),
                 Tile::new(0, 7)
             ).unwrap()),
@@ -278,18 +279,18 @@ mod tests {
         );
 
         assert_eq!(
-            fb_game.check_move_validity(Move::new(
+            fb_game.check_move_validity(Move::from_tiles(
                 Tile::new(0, 3),
                 Tile::new(2, 3)
             ).unwrap()),
             BlockedByPiece
         );
 
-        fb_game.board.do_move(Move::new(Tile::new(3, 2), Tile::new(4, 2)).unwrap());
-        fb_game.board.do_move(Move::new(Tile::new(3, 3), Tile::new(3, 2)).unwrap());
+        fb_game.board.do_move(Move::from_tiles(Tile::new(3, 2), Tile::new(4, 2)).unwrap());
+        fb_game.board.do_move(Move::from_tiles(Tile::new(3, 3), Tile::new(3, 2)).unwrap());
 
         assert_eq!(
-            fb_game.check_move_validity(Move::new(
+            fb_game.check_move_validity(Move::from_tiles(
                 Tile::new(2, 3),
                 Tile::new(3, 3)
             ).unwrap()),
@@ -297,20 +298,20 @@ mod tests {
         );
 
         assert_eq!(
-            fb_game.check_move_validity(Move::new(
+            fb_game.check_move_validity(Move::from_tiles(
                 Tile::new(3, 2),
                 Tile::new(3, 3)
             ).unwrap()),
             ValidMove
         );
         
-        let test_game = Game::new(
+        let test_game: Game<u64> = Game::new(
             TEST_RULES,
             ".......\n.....Tt\n..T....\n..t..t.\nTt....T\n..t....\n..T..K."
         ).unwrap();
         
         assert_eq!(
-            test_game.check_move_validity(Move::new(
+            test_game.check_move_validity(Move::from_tiles(
                 Tile::new(6, 5),
                 Tile::new(6, 3)
             ).unwrap()),
@@ -318,7 +319,7 @@ mod tests {
         );
         
         assert_eq!(
-            test_game.check_move_validity(Move::new(
+            test_game.check_move_validity(Move::from_tiles(
                 Tile::new(6, 5),
                 Tile::new(6, 4)
             ).unwrap()),
@@ -326,7 +327,7 @@ mod tests {
         );
         
         assert_eq!(
-            test_game.check_move_validity(Move::new(
+            test_game.check_move_validity(Move::from_tiles(
                 Tile::new(3, 2),
                 Tile::new(3, 4)
             ).unwrap()),
@@ -336,13 +337,13 @@ mod tests {
     
     #[test]
     fn test_check_move_outcome() {
-        let mut test_game = Game::new(
+        let mut test_game: Game<u64> = Game::new(
             TEST_RULES,
             "....t..\n.....Tt\n..T....\n..t..t.\nTt....T\n..t....\n..T..K."
         ).unwrap();
         
         assert_eq!(
-            test_game.move_outcome(Move::new(
+            test_game.move_outcome(Move::from_tiles(
                 Tile::new(0, 4),
                 Tile::new(6, 4)
             ).unwrap()),
@@ -353,7 +354,7 @@ mod tests {
         );
         
         assert_eq!(
-            test_game.move_outcome(Move::new(
+            test_game.move_outcome(Move::from_tiles(
                 Tile::new(4, 6),
                 Tile::new(4, 2)
             ).unwrap()),
@@ -370,7 +371,7 @@ mod tests {
         test_game.side_to_play = test_game.side_to_play.other();
         
         assert_eq!(
-            test_game.move_outcome(Move::new(
+            test_game.move_outcome(Move::from_tiles(
                 Tile::new(6, 5),
                 Tile::new(6, 6)
             ).unwrap()),
@@ -381,7 +382,7 @@ mod tests {
         );
         
         assert_eq!(
-            test_game.move_outcome(Move::new(
+            test_game.move_outcome(Move::from_tiles(
                 Tile::new(6, 5),
                 Tile::new(5, 5)
             ).unwrap()),
