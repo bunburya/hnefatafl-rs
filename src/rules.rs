@@ -10,8 +10,9 @@ enum SpecialTileType {
     BaseCamp
 }
 
+/// Rules relating to who may occupy/pass through the throne.
 #[derive(PartialEq, Copy, Clone, Debug)]
-pub(crate) enum ThroneRule {
+pub enum ThroneRule {
     /// Board has no throne
     NoThrone,
     /// No piece may pass through the throne.
@@ -24,8 +25,10 @@ pub(crate) enum ThroneRule {
     KingEntry
 }
 
+/// Rules relating to whether and when the king is strong (must be surrounded by hostile tiles on
+/// all four sides to be captured).
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
-pub(crate) enum KingStrength {
+pub enum KingStrength {
     /// King must be surrounded by four hostile pieces or tiles to be captured.
     Strong,
     /// King can be captured by two hostile pieces or tiles, except on or near the throne when four
@@ -38,14 +41,15 @@ pub(crate) enum KingStrength {
 
 /// A struct describing what pieces certain special tiles are considered hostile to.
 #[derive(Copy, Clone, Debug)]
-pub(crate)struct HostilityRules {
+pub struct HostilityRules {
     pub(crate) throne: PieceSet,
     pub(crate) corners: PieceSet,
     pub(crate) edge: PieceSet
 }
 
+/// A set of rules for a tafl game.
 #[derive(Copy, Clone, Debug)]
-pub(crate) struct Ruleset {
+pub struct Ruleset {
     /// Whether defender wins by getting king to edge of board (otherwise, corner escape is
     /// assumed).
     pub(crate) edge_escape: bool,
@@ -66,8 +70,8 @@ pub(crate) struct Ruleset {
     pub(crate) attacker_starts: bool
 }
 
-/// Rules for Federation Brandubh
-pub(crate) const FED_BRAN: Ruleset = Ruleset {
+/// Rules for Federation Brandubh.
+pub const FED_BRAN: Ruleset = Ruleset {
     edge_escape: false,
     king_strength: Weak,
     hostile_edge: false,

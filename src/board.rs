@@ -23,7 +23,7 @@ use crate::traits::BitField;
 /// logic (like checking move validity, etc) is implemented elsewhere and uses [Tile] structs. If
 /// performance was an issue we could look at moving some of that logic to the bitfield level.
 #[derive(Copy, Clone, Hash, Eq, PartialEq, Default)]
-pub(crate) struct SimpleBoardState<T: BitField> {
+pub struct SimpleBoardState<T: BitField> {
     attackers: T,
     defenders: T
 }
@@ -31,7 +31,7 @@ pub(crate) struct SimpleBoardState<T: BitField> {
 impl<T: BitField> SimpleBoardState<T> {
 
     /// Get the tile on which the king is currently placed.
-    pub(crate) fn get_king(&self) -> Tile {
+    pub fn get_king(&self) -> Tile {
         let row_bits = self.defenders.to_be_bytes().as_ref()[0] & 0b1111_0000;
         let col_bits = self.attackers.to_be_bytes().as_ref()[0] >> 4;
         Tile::from_byte(row_bits | col_bits)
@@ -40,7 +40,7 @@ impl<T: BitField> SimpleBoardState<T> {
     /// Store the given location as the position of the king. **NB**: Does not set the relevant bit
     /// (or unset the bit corresponding to the king's previous location), which must be handled
     /// separately.
-    pub(crate) fn set_king(&mut self, t: Tile) {
+    pub fn set_king(&mut self, t: Tile) {
         let mut def_bytes = self.defenders.to_be_bytes();
         let def_bytes_slice = def_bytes.as_mut();
         def_bytes_slice[0] &= 0b0000_1111;  // Unset 4 most significant bits
@@ -54,12 +54,12 @@ impl<T: BitField> SimpleBoardState<T> {
     }
 
     /// Check whether the given tile contains the king.
-    pub(crate) fn is_king(&self, t: Tile) -> bool {
+    pub fn is_king(&self, t: Tile) -> bool {
         self.get_king() == t
     }
 
     /// Place a piece representing the given side at the given position by setting the relevant bit.
-    pub(crate) fn place_piece(&mut self, t: Tile, piece: Piece) {
+    pub fn place_piece(&mut self, t: Tile, piece: Piece) {
         let mask = T::tile_mask(t);
         //println!("Setting {t:?} to {side:?}. Mask {mask}.");
         match piece.side {
@@ -72,13 +72,13 @@ impl<T: BitField> SimpleBoardState<T> {
     }
 
     /// Clear a tile by unsetting the relevant bit.
-    pub(crate) fn clear_tile(&mut self, t: Tile) {
+    pub fn clear_tile(&mut self, t: Tile) {
         let mask = !T::tile_mask(t);
         self.attackers &= mask;
         self.defenders &= mask;
     }
 
-    pub(crate) fn get_piece(&self, t: Tile) -> Option<Piece> {
+    pub fn get_piece(&self, t: Tile) -> Option<Piece> {
         let mask = T::tile_mask(t);
         if (self.defenders & mask) > 0.into() {
             if self.is_king(t) {
@@ -95,20 +95,20 @@ impl<T: BitField> SimpleBoardState<T> {
     }
 
     /// Check if there is any piece occupying a tile.
-    pub(crate) fn tile_occupied(&self, t: Tile) -> bool {
+    pub fn tile_occupied(&self, t: Tile) -> bool {
         let all_pieces = self.defenders | self.attackers;
         let mask = T::tile_mask(t);
         (all_pieces & mask) > 0.into()
     }
 
     /// Execute the given move.
-    pub(crate) fn do_move(&mut self, m: Move) {
+    pub fn do_move(&mut self, m: Move) {
         self.move_piece(m.from, m.to())
     }
 
     /// Move a piece from one position to another. This does not check whether a move is valid; it
     /// just unsets the bit at `from` and sets the bit at `to`.
-    pub(crate) fn move_piece(&mut self, from: Tile, to: Tile) {
+    pub fn move_piece(&mut self, from: Tile, to: Tile) {
         let maybe_piece = self.get_piece(from);
         if let Some(piece) = maybe_piece {
             if piece.piece_type == King {
@@ -119,7 +119,7 @@ impl<T: BitField> SimpleBoardState<T> {
         }
     }
     
-    pub(crate) fn count_pieces(&self, side: Side) -> u8 {
+    pub fn count_pieces(&self, side: Side) -> u8 {
         match side {
             Attacker => self.attackers,
             Defender => self.defenders
@@ -127,16 +127,16 @@ impl<T: BitField> SimpleBoardState<T> {
     }
 }
 
-pub(crate) struct Board<T: BitField> {
-    pub(crate) state: SimpleBoardState<T>,
-    side_len: u8,
-    pub(crate) throne: Tile,
-    pub(crate) corners: [Tile; 4]
+pub struct Board<T: BitField> {
+    pub state: SimpleBoardState<T>,
+    pub side_len: u8,
+    pub throne: Tile,
+    pub corners: [Tile; 4]
 }
 
 impl<T: BitField> Board<T> {
     
-    fn new(side_len: u8) -> Self {
+    pub fn new(side_len: u8) -> Self {
         let corners = [
             Tile::new(0, 0),
             Tile::new(0, side_len - 1),
@@ -151,19 +151,19 @@ impl<T: BitField> Board<T> {
         }
     }
 
-    fn with_state(state: SimpleBoardState<T>, side_len: u8) -> Self {
+    pub fn with_state(state: SimpleBoardState<T>, side_len: u8) -> Self {
         let mut board = Board::new(side_len);
         board.state = state;
         board
     }
 
 
-    pub(crate) fn tile_in_bounds(&self, tile: Tile) -> bool {
+    pub fn tile_in_bounds(&self, tile: Tile) -> bool {
         let r = 0..self.side_len;
         r.contains(&tile.row()) && r.contains(&tile.col())
     }
 
-    pub(crate) fn neighbors(&self, tile: Tile) -> Vec<Tile> {
+    pub fn neighbors(&self, tile: Tile) -> Vec<Tile> {
         let row = tile.row();
         let col = tile.col();
         let mut neighbors: Vec<Tile> = vec![
@@ -179,7 +179,7 @@ impl<T: BitField> Board<T> {
         neighbors
     }
 
-    pub(crate) fn tiles_between(&self, t1: Tile, t2: Tile) -> Vec<Tile> {
+    pub fn tiles_between(&self, t1: Tile, t2: Tile) -> Vec<Tile> {
         let mut tiles: Vec<Tile> = vec![];
         let (r1, c1, r2, c2) = (t1.row(), t1.col(), t2.row(), t2.col());
         if r1 == r2 {
@@ -205,35 +205,35 @@ impl<T: BitField> Board<T> {
     }
 
     /// Check whether the given tile is occupied by any piece.
-    pub(crate) fn tile_occupied(&self, tile: Tile) -> bool {
+    pub fn tile_occupied(&self, tile: Tile) -> bool {
         self.state.tile_occupied(tile)
     }
     
     /// Check whether the given tile is at the edge of the board (including at a corner).
-    pub(crate) fn tile_at_edge(&self, tile: Tile) -> bool {
+    pub fn tile_at_edge(&self, tile: Tile) -> bool {
         tile.row() == 0 
             || tile.row() == self.side_len - 1 
             || tile.col() == 0 
             || tile.col() == self.side_len - 1
     }
 
-    pub(crate) fn place_piece(&mut self, tile: Tile, piece: Piece) {
+    pub fn place_piece(&mut self, tile: Tile, piece: Piece) {
         self.state.place_piece(tile, piece);
     }
 
-    pub(crate) fn do_move(&mut self, m: Move) {
+    pub fn do_move(&mut self, m: Move) {
         self.state.do_move(m)
     }
 
-    pub(crate) fn get_piece(&self, tile: Tile) -> Option<Piece> {
+    pub fn get_piece(&self, tile: Tile) -> Option<Piece> {
         self.state.get_piece(tile)
     }
 
-    pub(crate) fn get_king(&self) -> Tile {
+    pub fn get_king(&self) -> Tile {
         self.state.get_king()
     }
 
-    pub(crate) fn is_king(&self, tile: Tile) -> bool {
+    pub fn is_king(&self, tile: Tile) -> bool {
         self.state.is_king(tile)
     }
 

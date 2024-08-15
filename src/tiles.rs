@@ -13,37 +13,38 @@ use std::str::FromStr;
 /// and the least significant four bits describe the column. It is therefore appropriate for use
 /// with square boards up to 16x16.
 #[derive(Copy, Clone, Eq, PartialEq, Hash)]
-pub(crate) struct Tile(pub(crate) u8);
+pub struct Tile(pub(crate) u8);
 
 impl Tile {
-    pub(crate) fn new(row: u8, col: u8) -> Self {
+    
+    /// Create a new [`Tile`] with the given row and column.
+    pub fn new(row: u8, col: u8) -> Self {
         Self((row << 4) | (col & 0x0F))
+    }
+    
+    /// The row on which this tile is situated.
+    pub fn row(&self) -> u8 {
+        self.0 >> 4
+    }
+    
+    /// The column on which this tile is situated.
+    pub fn col(&self) -> u8 {
+        self.0 & 0b0000_1111
     }
 
     pub(crate) fn from_byte(byte: u8) -> Self {
         Self(byte)
     }
 
-    pub(crate) fn row(&self) -> u8 {
-        self.0 >> 4
-    }
-
-    pub(crate) fn col(&self) -> u8 {
-        self.0 & 0b0000_1111
-    }
-    
+    /// Get only the bits representing the row (with the other bits set to zero).
     pub(crate) fn row_bits(&self) -> u8 {
         self.0 & 0b1111_0000
     }
     
+    /// Get only the bits representing the column (with the other bits set to zero).
     pub(crate) fn col_bits(&self) -> u8 {
         self.0 & 0b0000_1111
     }
-
-    pub(crate) fn to_mask(&self) -> u64 {
-        1 << ((self.row() * 8) + self.col())
-    }
-
 }
 
 impl Debug for Tile {
@@ -81,7 +82,7 @@ impl From<Tile> for (u8, u8) {
 }
 
 #[derive(Eq, PartialEq, Debug)]
-pub(crate) enum Plane {
+pub enum Plane {
     Vertical = 0,
     Horizontal = 1
 }
@@ -94,8 +95,8 @@ pub(crate) enum Plane {
 /// representing a move "backwards" along the relevant plane, ie, to a lower-numbered row or
 /// column). This way, moves are guaranteed to be along a row or column.
 #[derive(Debug, Eq, PartialEq)]
-pub(crate) struct Move {
-    pub(crate) from: Tile,
+pub struct Move {
+    pub from: Tile,
     plane_disp: u8
 }
 
@@ -124,8 +125,9 @@ impl Display for Move {
 }
 
 impl Move {
-
-    pub(crate) fn from_tiles(src: Tile, dst: Tile) -> Result<Self, MoveError> {
+    
+    /// Create a new [`Move`] from source and destination tiles.
+    pub fn from_tiles(src: Tile, dst: Tile) -> Result<Self, MoveError> {
         let plane_bit: u8;
         let len: i8;
         if src.row() == dst.row() {
@@ -142,7 +144,9 @@ impl Move {
             plane_disp: plane_bit | ((len & 0x7F) as u8)
         })
     }
-    pub(crate) fn plane(&self) -> Plane {
+    
+    /// The plane along which the move occurs, ie, horizontal or vertical.
+    pub fn plane(&self) -> Plane {
         if (self.plane_disp & 0x80) == 0 {
             Vertical
         } else {
@@ -152,7 +156,7 @@ impl Move {
 
     /// The signed distance in tiles covered by the move. A negative number means that the move is
     /// going "backwards", ie, to a lower-numbered row or column.
-    pub(crate) fn displacement(&self) -> i8 {
+    pub fn displacement(&self) -> i8 {
         let bits = (self.plane_disp & 0x7F) as i8;
         if (bits & 0x40) != 0 {
             bits | !0b0111_1111
@@ -163,12 +167,12 @@ impl Move {
     
     /// The unsigned distance in tiles covered by the move. Basically the absolute value of
     /// [Move::displacement].
-    pub(crate) fn distance(&self) -> u8 {
+    pub fn distance(&self) -> u8 {
         self.displacement().unsigned_abs()
     }
 
     /// The move's destination tile.
-    pub(crate) fn to(&self) -> Tile {
+    pub fn to(&self) -> Tile {
         let d = self.displacement();
         match self.plane() {
             Vertical => Tile::new(((self.from.row() as i8) + d) as u8, self.from.col()),

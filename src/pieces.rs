@@ -5,7 +5,7 @@ use crate::pieces::PieceType::{Commander, Guard, King, Knight, Mercenary, Soldie
 use crate::pieces::Side::{Attacker, Defender};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub(crate) enum Side {
+pub enum Side {
     Attacker = 0x40,
     Defender = 0x80
 }
@@ -13,7 +13,7 @@ pub(crate) enum Side {
 impl Side {
 
     /// Return the other side.
-    pub(crate) fn other(&self) -> Self {
+    pub fn other(&self) -> Self {
         match self {
             Attacker => Defender,
             Defender => Attacker
@@ -23,7 +23,7 @@ impl Side {
 
 /// The different types of pieces that can occupy a board.
 #[derive(Copy, Clone, PartialEq, Eq)]
-pub(crate) enum PieceType {
+pub enum PieceType {
     King = 0x01,
     Soldier = 0x02,
     Knight = 0x04,
@@ -49,19 +49,19 @@ impl BitOr<PieceType> for u8 {
 
 #[derive(Copy, Clone, Eq, PartialEq)]
 /// A piece belonging to a particular side.
-pub(crate) struct Piece {
-    pub(crate) piece_type: PieceType,
-    pub(crate) side: Side
+pub struct Piece {
+    pub piece_type: PieceType,
+    pub side: Side
 }
 
 impl Piece {
     /// Create a new piece of the given type and side.
-    pub(crate) fn new(piece_type: PieceType, side: Side) -> Self {
+    pub fn new(piece_type: PieceType, side: Side) -> Self {
         Self { piece_type, side }
     }
 
     /// Create a new king piece.
-    pub(crate) fn king() -> Self {
+    pub fn king() -> Self {
         Self {
             piece_type: King,
             side: Defender
@@ -69,7 +69,7 @@ impl Piece {
     }
 
     /// Create a new attacking piece of the given type.
-    pub(crate) fn attacker(piece_type: PieceType) -> Self {
+    pub fn attacker(piece_type: PieceType) -> Self {
         Self {
             piece_type,
             side: Attacker
@@ -77,7 +77,7 @@ impl Piece {
     }
 
     /// Create a new defending piece of the given type.
-    pub(crate) fn defender(piece_type: PieceType) -> Self {
+    pub fn defender(piece_type: PieceType) -> Self {
         Self {
             piece_type,
             side: Defender
@@ -129,39 +129,39 @@ impl TryFrom<char> for Piece {
 }
 
 #[derive(Copy, Clone, Debug)]
-pub(crate) struct PieceSet(u8);
+pub struct PieceSet(u8);
 
 impl PieceSet {
 
-    pub(crate) const fn from_byte(byte: u8) -> Self {
-        Self { 0: byte }
+    pub const fn from_byte(byte: u8) -> Self {
+        Self(byte)
     }
 
-    pub(crate) const fn from_piece_type(piece_type: PieceType) -> Self {
-        Self { 0: piece_type as u8 }
+    pub const fn from_piece_type(piece_type: PieceType) -> Self {
+        Self(piece_type as u8)
     }
 
-    pub(crate) const fn none() -> Self {
-        Self { 0: 0 }
+    pub const fn none() -> Self {
+        Self(0)
     }
 
-    pub(crate) const fn all() -> Self {
-        Self { 0: 0xFF }
+    pub const fn all() -> Self {
+        Self(0b1111_1111)
     }
 
-    pub(crate) fn from_piece_types<T: IntoIterator<Item = PieceType>>(piece_types: T) -> Self {
-        PieceSet{ 0: piece_types.into_iter().fold(0, u8::bitor) }
+    pub fn from_piece_types<T: IntoIterator<Item = PieceType>>(piece_types: T) -> Self {
+        PieceSet(piece_types.into_iter().fold(0, u8::bitor))
     }
 
-    pub(crate) fn set(&mut self, piece: PieceType) {
+    pub fn set(&mut self, piece: PieceType) {
         self.0 |= piece as u8
     }
 
-    pub(crate) fn unset(&mut self, piece: PieceType) {
+    pub fn unset(&mut self, piece: PieceType) {
         self.0 &= !(piece as u8)
     }
 
-    pub(crate) fn contains(&self, piece: PieceType) -> bool {
+    pub fn contains(&self, piece: PieceType) -> bool {
         self.0 & (piece as u8) > 0
     }
     

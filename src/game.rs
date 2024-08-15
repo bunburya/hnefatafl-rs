@@ -13,7 +13,7 @@ use crate::game::GameOutcome::Winner;
 use crate::traits::BitField;
 
 #[derive(Debug, Eq, PartialEq)]
-pub(crate) enum MoveValidity {
+pub enum MoveValidity {
     /// Move is valid.
     ValidMove,
     /// There is no piece to move at the given tile.
@@ -36,7 +36,7 @@ pub(crate) enum MoveValidity {
 
 /// The outcome of a single game.
 #[derive(Eq, PartialEq, Debug)]
-pub(crate) enum GameOutcome {
+pub enum GameOutcome {
     /// Game has been won by the specified side.
     Winner(Side),
     /// Game has ended in a draw.
@@ -45,26 +45,26 @@ pub(crate) enum GameOutcome {
 
 /// A struct describing the outcome of a single move.
 #[derive(Eq, PartialEq, Debug, Default)]
-pub(crate) struct MoveOutcome {
+pub struct MoveOutcome {
     /// Tiles containing pieces that have been captured by the move.
-    pub(crate) captures: HashSet<Tile>,
+    pub captures: HashSet<Tile>,
     /// The outcome of the game, if the move has brought the game to an end.
-    pub(crate) game_outcome: Option<GameOutcome>
+    pub game_outcome: Option<GameOutcome>
 }
 
 /// A struct representing a single game, including all state and associated information (such as
 /// rules) needed to play.
-pub(crate) struct Game<T: BitField> {
-    pub(crate) board: Board<T>,
-    rules: Ruleset,
-    turn: u32,
-    side_to_play: Side
+pub struct Game<T: BitField> {
+    pub board: Board<T>,
+    pub rules: Ruleset,
+    pub turn: u32,
+    pub side_to_play: Side
 }
 
 impl<T: BitField> Game<T> {
 
     /// Create a new [`Game`] from the given rules and starting positions.
-    pub(crate) fn new(rules: Ruleset, starting_board: &str) -> Result<Self, ParseError> {
+    pub fn new(rules: Ruleset, starting_board: &str) -> Result<Self, ParseError> {
         Ok(Self {
             board: Board::from_str(starting_board)?,
             rules,
@@ -74,7 +74,7 @@ impl<T: BitField> Game<T> {
     }
 
     /// Determine whether the given tile is hostile to the given piece.
-    pub(crate) fn tile_is_hostile(&self, tile: Tile, piece: Piece) -> bool {
+    pub fn tile_is_hostile(&self, tile: Tile, piece: Piece) -> bool {
         if let Some(other_piece) = self.board.get_piece(tile) {
             // Tile contains a piece. If the piece is of a different side, tile is hostile, unless
             // that piece is an unarmed king.
@@ -93,7 +93,7 @@ impl<T: BitField> Game<T> {
 
     /// Check whether a move is valid. Any return value other than [`ValidMove`] means that the move
     /// is not valid (and should indicate why it is not valid).
-    pub(crate) fn check_move_validity(&self, m: Move) -> MoveValidity {
+    pub fn check_move_validity(&self, m: Move) -> MoveValidity {
         let from = m.from;
         let to = m.to();
         let maybe_piece = self.board.get_piece(from);
@@ -139,7 +139,7 @@ impl<T: BitField> Game<T> {
 
     /// Check whether the king is strong (must be surrounded on all four sides to be captured),
     /// considering the game rules and the king's current position. 
-    pub(crate) fn king_is_strong(&self) -> bool {
+    pub fn king_is_strong(&self) -> bool {
         match self.rules.king_strength {
             Strong => true,
             Weak => false,
@@ -151,7 +151,7 @@ impl<T: BitField> Game<T> {
     }
     
     /// Get the outcome of the game, if any. If None, the game is still ongoing.
-    pub(crate) fn get_game_outcome(&self, m: Move, caps: &HashSet<Tile>) -> Option<GameOutcome> {
+    pub fn get_game_outcome(&self, m: Move, caps: &HashSet<Tile>) -> Option<GameOutcome> {
         if caps.len() as u8 >= self.board.state.count_pieces(self.side_to_play.other()) {
             // All opposing pieces have been captured.
             return Some(Winner(self.side_to_play))
@@ -173,7 +173,7 @@ impl<T: BitField> Game<T> {
     }
 
     /// Get the outcome of a move (number of captures, whether it ends the game, etc).
-    pub(crate) fn move_outcome(&self, m: Move) -> MoveOutcome {
+    pub fn move_outcome(&self, m: Move) -> MoveOutcome {
         let mut captures: HashSet<Tile> = HashSet::new();
         let occupant = self.board.get_piece(m.from);
         if occupant.is_none() {

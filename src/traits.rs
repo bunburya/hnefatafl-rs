@@ -2,8 +2,9 @@ use crate::tiles::Tile;
 use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not, Shl};
 
 /// A trait for any integer type that can be used as a bitfield to store board state. See also the
-/// [`impl_bitfield!`] macro that can help to implement this trait for a particular integer type.
-pub(crate) trait BitField:
+/// [`crate::impl_bitfield!`] macro that can help to implement this trait for a particular integer
+/// type.
+pub trait BitField:
     Sized +
     Copy +
     From<u8> +
@@ -55,7 +56,7 @@ pub(crate) trait BitField:
 /// Implement the [BitField] trait for the given integer type. First argument should be the type
 /// to implement the trait for; the second should be the byte value to use for
 /// [BitField::ROW_WIDTH].
-macro_rules! impl_bitfield {
+#[macro_export] macro_rules! impl_bitfield {
     ($t:ty, $row_width:expr) => {
         impl BitField for $t {
             type Bytes = [u8; size_of::<$t>()];
