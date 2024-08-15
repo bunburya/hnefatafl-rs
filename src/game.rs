@@ -34,19 +34,26 @@ pub(crate) enum MoveValidity {
     TooFar
 }
 
+/// The outcome of a single game.
 #[derive(Eq, PartialEq, Debug)]
 pub(crate) enum GameOutcome {
+    /// Game has been won by the specified side.
     Winner(Side),
+    /// Game has ended in a draw.
     Draw
 }
 
-
+/// A struct describing the outcome of a single move.
 #[derive(Eq, PartialEq, Debug, Default)]
 pub(crate) struct MoveOutcome {
+    /// Tiles containing pieces that have been captured by the move.
     pub(crate) captures: HashSet<Tile>,
+    /// The outcome of the game, if the move has brought the game to an end.
     pub(crate) game_outcome: Option<GameOutcome>
 }
 
+/// A struct representing a single game, including all state and associated information (such as
+/// rules) needed to play.
 pub(crate) struct Game<T: BitField> {
     pub(crate) board: Board<T>,
     rules: Ruleset,
@@ -56,6 +63,7 @@ pub(crate) struct Game<T: BitField> {
 
 impl<T: BitField> Game<T> {
 
+    /// Create a new [`Game`] from the given rules and starting positions.
     pub(crate) fn new(rules: Ruleset, starting_board: &str) -> Result<Self, ParseError> {
         Ok(Self {
             board: Board::from_str(starting_board)?,
@@ -65,7 +73,7 @@ impl<T: BitField> Game<T> {
         })
     }
 
-    /// Determine whether a given tile is hostile to the given piece.
+    /// Determine whether the given tile is hostile to the given piece.
     pub(crate) fn tile_is_hostile(&self, tile: Tile, piece: Piece) -> bool {
         if let Some(other_piece) = self.board.get_piece(tile) {
             // Tile contains a piece. If the piece is of a different side, tile is hostile, unless
@@ -83,6 +91,8 @@ impl<T: BitField> Game<T> {
         }
     }
 
+    /// Check whether a move is valid. Any return value other than [`ValidMove`] means that the move
+    /// is not valid (and should indicate why it is not valid).
     pub(crate) fn check_move_validity(&self, m: Move) -> MoveValidity {
         let from = m.from;
         let to = m.to();
@@ -127,6 +137,8 @@ impl<T: BitField> Game<T> {
         }
     }
 
+    /// Check whether the king is strong (must be surrounded on all four sides to be captured),
+    /// considering the game rules and the king's current position. 
     pub(crate) fn king_is_strong(&self) -> bool {
         match self.rules.king_strength {
             Strong => true,
@@ -138,6 +150,7 @@ impl<T: BitField> Game<T> {
         }
     }
     
+    /// Get the outcome of the game, if any. If None, the game is still ongoing.
     pub(crate) fn get_game_outcome(&self, m: Move, caps: &HashSet<Tile>) -> Option<GameOutcome> {
         if caps.len() as u8 >= self.board.state.count_pieces(self.side_to_play.other()) {
             // All opposing pieces have been captured.
@@ -159,58 +172,58 @@ impl<T: BitField> Game<T> {
         None
     }
 
+    /// Get the outcome of a move (number of captures, whether it ends the game, etc).
     pub(crate) fn move_outcome(&self, m: Move) -> MoveOutcome {
         let mut captures: HashSet<Tile> = HashSet::new();
         let occupant = self.board.get_piece(m.from);
-        match occupant {
-            None => MoveOutcome { captures, game_outcome: None },
-            Some(mover) => {
-                let to = m.to();
-                for n in self.board.neighbors(to) {
-                    if let Some(other_piece) = self.board.get_piece(n) {
-                        if other_piece.side == mover.side {
-                            // Friendly neighbour so no possibility for capture
+        if occupant.is_none() {
+            return MoveOutcome { captures, game_outcome: None }
+        }
+        let mover = occupant.expect("Occupant must not be None");
+        let to = m.to();
+        for n in self.board.neighbors(to) {
+            if let Some(other_piece) = self.board.get_piece(n) {
+                if other_piece.side == mover.side {
+                    // Friendly neighbour so no possibility for capture
+                    continue
+                }
+                let signed_to_row = to.row() as i8;
+                let signed_to_col = to.col() as i8;
+                let signed_n_row = n.row() as i8;
+                let signed_n_col = n.col() as i8;
+                let far_tile = Tile::new(
+                    (signed_to_row + (signed_n_row - signed_to_row) * 2) as u8,
+                    (signed_to_col + (signed_n_col - signed_to_col) * 2) as u8
+                );
+                if self.tile_is_hostile(far_tile, other_piece) {
+                    // We know that the neighbouring opposing piece is surrounded by the
+                    // moving piece and another hostile tile. So it is captured, *unless* it
+                    // is a strong king.
+                    if (other_piece.piece_type == King) && self.king_is_strong() {
+                        // Get the tiles surrounding `n` on the perpendicular axis.
+                        let adj_tiles: [Tile; 2] = if to.row() == far_tile.row() {
+                            [
+                                Tile::new(n.row() + 1, n.col()),
+                                Tile::new(n.row() - 1, n.col())
+                            ]
+                        } else {
+                            [
+                                Tile::new(n.row(), n.col() + 1),
+                                Tile::new(n.row(), n.col() - 1)
+                            ]
+                        };
+                        // Check if these tiles are also hostile
+                        if !self.tile_is_hostile(adj_tiles[0], other_piece)
+                            || !self.tile_is_hostile(adj_tiles[1], other_piece) {
                             continue
                         }
-                        let signed_to_row = to.row() as i8;
-                        let signed_to_col = to.col() as i8;
-                        let signed_n_row = n.row() as i8;
-                        let signed_n_col = n.col() as i8;
-                        let far_tile = Tile::new(
-                            (signed_to_row + (signed_n_row - signed_to_row) * 2) as u8,
-                            (signed_to_col + (signed_n_col - signed_to_col) * 2) as u8
-                        );
-                        if self.tile_is_hostile(far_tile, other_piece) {
-                            // We know that the neighbouring opposing piece is surrounded by the
-                            // moving piece and another hostile tile. So it is captured, *unless* it
-                            // is a strong king.
-                            if (other_piece.piece_type == King) && self.king_is_strong() {
-                                // Get the tiles surrounding `n` on the perpendicular axis.
-                                let adj_tiles: [Tile; 2] = if to.row() == far_tile.row() {
-                                    [
-                                        Tile::new(n.row() + 1, n.col()),
-                                        Tile::new(n.row() - 1, n.col())
-                                    ]
-                                } else {
-                                    [
-                                        Tile::new(n.row(), n.col() + 1),
-                                        Tile::new(n.row(), n.col() - 1)
-                                    ]
-                                };
-                                // Check if these tiles are also hostile
-                                if !self.tile_is_hostile(adj_tiles[0], other_piece)
-                                    || !self.tile_is_hostile(adj_tiles[1], other_piece) {
-                                    continue
-                                }
-                            }
-                            captures.insert(n);
-                        }
                     }
+                    captures.insert(n);
                 }
-                let game_outcome = self.get_game_outcome(m, &captures);
-                MoveOutcome { captures, game_outcome }
-            } 
+            }
         }
+        let game_outcome = self.get_game_outcome(m, &captures);
+        MoveOutcome { captures, game_outcome }
     }
 }
 
