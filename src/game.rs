@@ -83,10 +83,10 @@ impl<T: BitField> Game<T> {
         } else {
             // Tile is empty. So it is only hostile if it is a special tile/edge and the rules state
             // that it is hostile to the given piece.
-            (self.rules.hostility.throne.contains(piece.piece_type) && tile == self.board.throne)
-                || (self.rules.hostility.corners.contains(piece.piece_type)
+            (self.rules.hostility.throne.contains(piece) && tile == self.board.throne)
+                || (self.rules.hostility.corners.contains(piece)
                     && self.board.corners.contains(&tile))
-                || (self.rules.hostility.edge.contains(piece.piece_type)
+                || (self.rules.hostility.edge.contains(piece)
                     && !self.board.tile_in_bounds(tile))
         }
     }
@@ -128,7 +128,7 @@ impl<T: BitField> Game<T> {
                     // Illegal move on to the throne
                     return IllegalThroneEntry
                 }
-                if self.rules.slow_pieces.contains(piece.piece_type) && m.distance() > 1 {
+                if self.rules.slow_pieces.contains(piece) && m.distance() > 1 {
                     // Slow piece can't move more than one space at a time
                     return TooFar
                 }

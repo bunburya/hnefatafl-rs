@@ -280,6 +280,12 @@ impl<T: BitField> FromStr for Board<T> {
     }
 }
 
+/// A [`Board`] suitable for board sizes up 7x7. 
+type SmallBoard = Board<u64>;
+
+/// A [`Board`] suitable for board sizes up to 11x11.
+type MediumBoard = Board<u128>;
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashSet;

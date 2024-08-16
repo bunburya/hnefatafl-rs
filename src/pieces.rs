@@ -1,4 +1,4 @@
-use std::ops::BitOr;
+use std::ops::{BitOr, Shl, Shr};
 use crate::error::ParseError;
 use crate::error::ParseError::BadChar;
 use crate::pieces::PieceType::{Commander, Guard, King, Knight, Mercenary, Soldier};
@@ -6,8 +6,8 @@ use crate::pieces::Side::{Attacker, Defender};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum Side {
-    Attacker = 0x40,
-    Defender = 0x80
+    Attacker = 0,
+    Defender = 8
 }
 
 impl Side {
@@ -18,6 +18,13 @@ impl Side {
             Attacker => Defender,
             Defender => Attacker
         }
+    }
+}
+
+impl Shl<Side> for PieceType {
+    type Output = u16;
+    fn shl(self, rhs: Side) -> Self::Output {
+        (self as u16) << (rhs as u16)
     }
 }
 
@@ -39,11 +46,11 @@ impl BitOr<PieceType> for PieceType {
     }
 }
 
-impl BitOr<PieceType> for u8 {
-    type Output = u8;
+impl BitOr<PieceType> for u16 {
+    type Output = u16;
 
     fn bitor(self, rhs: PieceType) -> Self::Output {
-        self | (rhs as u8)
+        self | (rhs as u16)
     }
 }
 
@@ -129,48 +136,81 @@ impl TryFrom<char> for Piece {
 }
 
 #[derive(Copy, Clone, Debug)]
-pub struct PieceSet(u8);
+pub struct PieceSet(u16);
+
+impl From<u16> for PieceSet {
+    fn from(value: u16) -> Self {
+        Self(value)
+    }
+}
 
 impl PieceSet {
 
-    pub const fn from_byte(byte: u8) -> Self {
-        Self(byte)
-    }
-
-    pub const fn from_piece_type(piece_type: PieceType) -> Self {
-        Self(piece_type as u8)
-    }
-
+    /// Create a new empty [`PieceSet`].
     pub const fn none() -> Self {
         Self(0)
     }
 
+    /// Create a new [`PieceSet`] which includes all pieces on both sides.
     pub const fn all() -> Self {
-        Self(0b1111_1111)
+        Self(0b1111_1111_1111_1111)
+    }
+    
+    /// Create a new [`PieceSet`] which includes only the given piece type (on each side).
+    pub const fn from_piece_type(piece_type: PieceType) -> Self {
+        Self((piece_type as u16) | ((piece_type as u16) << 8))
     }
 
+    /// Create a new [`PieceSet`] containing the given piece types (on both sides).
     pub fn from_piece_types<T: IntoIterator<Item = PieceType>>(piece_types: T) -> Self {
-        PieceSet(piece_types.into_iter().fold(0, u8::bitor))
+        Self(piece_types.into_iter().fold(0u16, |acc, piece_type| {
+            acc | (piece_type as u16) | ((piece_type as u16) << 8)
+        }))
     }
 
-    pub fn set(&mut self, piece: PieceType) {
-        self.0 |= piece as u8
+    /// Get the bitmask corresponding to the given piece type and side. If `side` is `None`, the
+    /// mask will represent the piece type of each side.
+    fn get_mask(&self, piece_type: PieceType, side: Option<Side>) -> u16 {
+        if let Some(s) = side {
+            piece_type << s
+        } else {
+            (piece_type as u16) | ((piece_type as u16) << 8) 
+        }
+    }
+    
+    /// Add the given piece to the set.
+    pub fn set_piece(&mut self, piece: Piece) {
+        self.0 |= self.get_mask(piece.piece_type, Some(piece.side));
+    }
+    
+    /// Add the given piece type (both sides) to the set.
+    pub fn set_piece_type(&mut self, piece_type: PieceType) {
+        self.0 |= self.get_mask(piece_type, None)
     }
 
-    pub fn unset(&mut self, piece: PieceType) {
-        self.0 &= !(piece as u8)
+    /// Remove the given piece from the set.
+    pub fn unset_piece(&mut self, piece: Piece) {
+        self.0 &= !self.get_mask(piece.piece_type, Some(piece.side));
+    }
+    
+    /// Remove the given piece type (both sides) from the set.
+    pub fn unset_piece_type(&mut self, piece_type: PieceType) {
+        self.0 &= !self.get_mask(piece_type, None)
     }
 
-    pub fn contains(&self, piece: PieceType) -> bool {
-        self.0 & (piece as u8) > 0
+    /// Check whether the set contains the given piece.
+    pub fn contains(&self, piece: Piece) -> bool {
+        self.0 & self.get_mask(piece.piece_type, Some(piece.side)) > 0
     }
     
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::Piece;
     use crate::pieces::PieceSet;
     use crate::pieces::PieceType::{Commander, Guard, King, Knight, Mercenary, Soldier};
+    use crate::Side::{Attacker, Defender};
 
     #[test]
     fn test_piece_set() {
@@ -179,28 +219,36 @@ mod tests {
             Soldier,
             Guard
         ]);
-        assert!(ps.contains(King));
-        assert!(ps.contains(Soldier));
-        assert!(ps.contains(Guard));
-        assert!(!ps.contains(Commander));
-        assert!(!ps.contains(Knight));
-        assert!(!ps.contains(Mercenary));
+        for s in [Attacker, Defender] {
+            assert!(ps.contains(Piece::new(King, s)));
+            assert!(ps.contains(Piece::new(Soldier, s)));
+            assert!(ps.contains(Piece::new(Guard, s)));
+            assert!(!ps.contains(Piece::new(Commander, s)));
+            assert!(!ps.contains(Piece::new(Knight, s)));
+            assert!(!ps.contains(Piece::new(Mercenary, s)));
+        }
 
-        ps.unset(King);
-        assert!(!ps.contains(King));
-        assert!(ps.contains(Soldier));
-        assert!(ps.contains(Guard));
-        assert!(!ps.contains(Commander));
-        assert!(!ps.contains(Knight));
-        assert!(!ps.contains(Mercenary));
+        ps.unset_piece(Piece::new(King, Attacker));
+        assert!(ps.contains(Piece::new(King, Defender)));
+        assert!(!ps.contains(Piece::new(King, Attacker)));
+        for s in [Attacker, Defender] {
+            assert!(ps.contains(Piece::new(Soldier, s)));
+            assert!(ps.contains(Piece::new(Guard, s)));
+            assert!(!ps.contains(Piece::new(Commander, s)));
+            assert!(!ps.contains(Piece::new(Knight, s)));
+            assert!(!ps.contains(Piece::new(Mercenary, s)));
+        }
 
-        ps.set(Commander);
-        assert!(ps.contains(Commander));
-        assert!(!ps.contains(King));
-        assert!(ps.contains(Soldier));
-        assert!(ps.contains(Guard));
-        assert!(!ps.contains(Knight));
-        assert!(!ps.contains(Mercenary));
+        ps.set_piece(Piece::new(Commander, Defender));
+        assert!(ps.contains(Piece::new(Commander, Defender)));
+        assert!(!ps.contains(Piece::new(Commander, Attacker)));
+        assert!(ps.contains(Piece::new(King, Defender)));
+        assert!(!ps.contains(Piece::new(King, Attacker)));
+        for s in [Attacker, Defender] {
+            assert!(ps.contains(Piece::new(Soldier, s)));
+            assert!(ps.contains(Piece::new(Guard, s)));
+            assert!(!ps.contains(Piece::new(Knight, s)));
+            assert!(!ps.contains(Piece::new(Mercenary, s)));
+        }
     }
-
 }
