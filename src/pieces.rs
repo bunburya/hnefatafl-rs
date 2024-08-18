@@ -31,12 +31,12 @@ impl Shl<Side> for PieceType {
 /// The different types of pieces that can occupy a board.
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub enum PieceType {
-    King = 0x01,
-    Soldier = 0x02,
-    Knight = 0x04,
-    Commander = 0x08,
-    Guard = 0x10,
-    Mercenary = 0x20
+    King =      0b0000_0001,
+    Soldier =   0b0000_0010,
+    Knight =    0b0000_0100,
+    Commander = 0b0000_1000,
+    Guard =     0b0001_0000,
+    Mercenary = 0b0010_0000
 }
 
 impl BitOr<PieceType> for PieceType {

@@ -3,6 +3,8 @@ use crate::pieces::PieceSet;
 use crate::rules::KingStrength::Weak;
 use crate::rules::ThroneRule::KingEntry;
 use std::cmp::PartialEq;
+use crate::KingStrength::Strong;
+use crate::PieceType::King;
 
 enum SpecialTileType {
     Throne,
@@ -47,39 +49,64 @@ pub struct HostilityRules {
     pub(crate) edge: PieceSet
 }
 
+
+struct ShieldwallRules {
+    corners_may_close: bool,
+    may_capture: PieceSet
+}
+
 /// A set of rules for a tafl game.
 #[derive(Copy, Clone, Debug)]
 pub struct Ruleset {
     /// Whether defender wins by getting king to edge of board (otherwise, corner escape is
     /// assumed).
-    pub(crate) edge_escape: bool,
+    pub edge_escape: bool,
     /// Whether the king is strong (must be surrounded by four opponents or hostile tiles to be
     /// captured).
-    pub(crate) king_strength: KingStrength,
+    pub king_strength: KingStrength,
     /// Whether the edge counts as hostile to the king.
-    pub(crate) hostile_edge: bool,
+    pub hostile_edge: bool,
     /// Whether the king is armed (can participate in captures).
-    pub(crate) armed_king: bool,
+    pub armed_king: bool,
     /// Whether the throne blocks movement.
-    pub(crate) throne_movement: ThroneRule,
+    pub throne_movement: ThroneRule,
+    /// What pieces may enter the corners.
+    pub may_enter_corners: PieceSet,
     /// What special tiles are hostile to what pieces.
-    pub(crate) hostility: HostilityRules,
+    pub hostility: HostilityRules,
     /// Types of piece whose movement is restricted to one tile per move.
-    pub(crate) slow_pieces: PieceSet,
+    pub slow_pieces: PieceSet,
     /// Whether attacker goes first (if `false`, defender goes first)
-    pub(crate) attacker_starts: bool
+    pub attacker_starts: bool,
 }
 
 /// Rules for Federation Brandubh.
-pub const FED_BRAN: Ruleset = Ruleset {
+pub const FEDERATION_BRANDUBH: Ruleset = Ruleset {
     edge_escape: false,
     king_strength: Weak,
     hostile_edge: false,
     armed_king: true,
     throne_movement: KingEntry,
+    may_enter_corners: PieceSet::from_piece_type(King),
     hostility: HostilityRules {
         throne: PieceSet::from_piece_type(Soldier),
         corners: PieceSet::all(),
+        edge: PieceSet::none()
+    },
+    slow_pieces: PieceSet::none(),
+    attacker_starts: true
+};
+
+pub const COPENHAGEN_HNEFATAFL: Ruleset = Ruleset {
+    edge_escape: false,
+    king_strength: Strong,
+    hostile_edge: false,
+    armed_king: true,
+    throne_movement: KingEntry,
+    may_enter_corners: PieceSet::from_piece_type(King),
+    hostility: HostilityRules {
+        throne: PieceSet::all(),
+        corners: PieceSet::from_piece_type(Soldier),
         edge: PieceSet::none()
     },
     slow_pieces: PieceSet::none(),

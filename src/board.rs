@@ -5,10 +5,12 @@ use Side::{Attacker, Defender};
 
 use crate::error::ParseError;
 use crate::error::ParseError::BadLineLen;
-use crate::pieces::{Piece, Side};
 use crate::pieces::PieceType::{King, Soldier};
-use crate::tiles::{Move, Tile};
+use crate::pieces::{Piece, Side};
+use crate::tiles::Tile;
 use crate::traits::BitField;
+
+const NEIGHBOR_OFFSETS: [[i8; 2]; 4] = [[-1, 0], [1, 0], [0, -1], [0, 1]];
 
 /// Store information on the current board state (ie, pieces). This struct currently handles only a
 /// simple board, ie, a king and soldiers on a 7x7 board.
@@ -61,7 +63,6 @@ impl<T: BitField> SimpleBoardState<T> {
     /// Place a piece representing the given side at the given position by setting the relevant bit.
     pub fn place_piece(&mut self, t: Tile, piece: Piece) {
         let mask = T::tile_mask(t);
-        //println!("Setting {t:?} to {side:?}. Mask {mask}.");
         match piece.side {
             Attacker => self.attackers |= mask,
             Defender => self.defenders |= mask
@@ -100,25 +101,9 @@ impl<T: BitField> SimpleBoardState<T> {
         let mask = T::tile_mask(t);
         (all_pieces & mask) > 0.into()
     }
-
-    /// Execute the given move.
-    pub fn do_move(&mut self, m: Move) {
-        self.move_piece(m.from, m.to())
-    }
-
-    /// Move a piece from one position to another. This does not check whether a move is valid; it
-    /// just unsets the bit at `from` and sets the bit at `to`.
-    pub fn move_piece(&mut self, from: Tile, to: Tile) {
-        let maybe_piece = self.get_piece(from);
-        if let Some(piece) = maybe_piece {
-            if piece.piece_type == King {
-                self.set_king(to)
-            }
-            self.place_piece(to, piece);
-            self.clear_tile(from)
-        }
-    }
     
+    /// Count the number of pieces of the given side left on the board. Includes the king for
+    /// defenders.
     pub fn count_pieces(&self, side: Side) -> u8 {
         match side {
             Attacker => self.attackers,
@@ -162,20 +147,26 @@ impl<T: BitField> Board<T> {
         let r = 0..self.side_len;
         r.contains(&tile.row()) && r.contains(&tile.col())
     }
+    
+    /// Check whether the given row and column refer to a tile on the board. `row` and `col` are
+    /// signed integers to allow for negative values (which will always be out of bounds).
+    pub fn row_col_in_bounds(&self, row: i8, col: i8) -> bool {
+        row >= 0 && col >= 0 && (row as u8) < self.side_len && (col as u8) < self.side_len
+    }
 
     pub fn neighbors(&self, tile: Tile) -> Vec<Tile> {
         let row = tile.row();
         let col = tile.col();
-        let mut neighbors: Vec<Tile> = vec![
-            Tile::new(row+1, col),
-            Tile::new(row, col+1)
-        ];
-        if row > 0 {
-            neighbors.push(Tile::new(row-1, col))
-        }
-        if col > 0 {
-            neighbors.push(Tile::new(row, col-1))
-        }
+        let signed_row = row as i8;
+        let signed_col = col as i8;
+        let mut neighbors: Vec<Tile> = vec![];
+        for [r_off, c_off] in NEIGHBOR_OFFSETS.iter() {
+            let r = signed_row + r_off;
+            let c = signed_col + c_off;
+            if self.row_col_in_bounds(r, c) {
+                neighbors.push(Tile::new(r as u8, c as u8));
+            }
+        } 
         neighbors
     }
 
@@ -217,12 +208,27 @@ impl<T: BitField> Board<T> {
             || tile.col() == self.side_len - 1
     }
 
+    /// Place the given piece on the given tile.
     pub fn place_piece(&mut self, tile: Tile, piece: Piece) {
         self.state.place_piece(tile, piece);
     }
+    
+    /// Remove the piece at the given tile.
+    pub fn remove_piece(&mut self, tile: Tile) {
+        self.state.clear_tile(tile)
+    }
 
-    pub fn do_move(&mut self, m: Move) {
-        self.state.do_move(m)
+    /// Move a piece from one position to another. This does not check whether a move is valid; it
+    /// just unsets the bit at `from` and sets the bit at `to`.
+    pub fn move_piece(&mut self, from: Tile, to: Tile) {
+        let maybe_piece = self.get_piece(from);
+        if let Some(piece) = maybe_piece {
+            if piece.piece_type == King {
+                self.state.set_king(to)
+            }
+            self.place_piece(to, piece);
+            self.state.clear_tile(from)
+        }
     }
 
     pub fn get_piece(&self, tile: Tile) -> Option<Piece> {
@@ -245,7 +251,6 @@ impl<T: BitField> Display for Board<T> {
             for c in 0..self.side_len {
                 let t = Tile::new(r, c);
                 let p = self.state.get_piece(t);
-                //println!("Checking {t:?}, piece is {p:?}");
                 match p {
                     Some(piece) => f.write_char(piece.into())?,
                     None => f.write_char('.')?,
@@ -281,18 +286,18 @@ impl<T: BitField> FromStr for Board<T> {
 }
 
 /// A [`Board`] suitable for board sizes up 7x7. 
-type SmallBoard = Board<u64>;
+pub type SmallBoard = Board<u64>;
 
 /// A [`Board`] suitable for board sizes up to 11x11.
-type MediumBoard = Board<u128>;
+pub type MediumBoard = Board<u128>;
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
-    use std::str::FromStr;
     use crate::board::{Board, Tile};
     use crate::pieces::Piece;
     use crate::pieces::PieceType::Soldier;
+    use std::collections::HashSet;
+    use std::str::FromStr;
 
     /// Assert that the given vector does not contain duplicates, and contains the same items as
     /// a comparison vector (ignoring order).
@@ -313,7 +318,7 @@ mod tests {
         assert_eq!(board.get_king(), Tile::new(3, 3));
         board.place_piece(Tile::new(1, 5), Piece::attacker(Soldier));
         board.place_piece(Tile::new(4, 1), Piece::defender(Soldier));
-        board.state.move_piece(Tile::new(3, 3), Tile::new(0, 4));
+        board.move_piece(Tile::new(3, 3), Tile::new(0, 4));
         assert_eq!(board.get_king(), Tile::new(0, 4));
         assert_eq!(format!("{board}"), expected_str);
 
@@ -358,7 +363,6 @@ mod tests {
             Tile::new(0, 4)
         ];
         for t in occupied {
-            println!("{t:?}");
             assert!(board.state.tile_occupied(t));
         }
         let empty = [
@@ -367,7 +371,6 @@ mod tests {
             Tile::new(1, 1)
         ];
         for t in empty {
-            println!("{t:?}");
             assert!(!board.state.tile_occupied(t));
         }
     }

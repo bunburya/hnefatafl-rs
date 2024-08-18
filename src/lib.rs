@@ -11,7 +11,7 @@ pub use crate::{
         Game,
         GameOutcome,
         MoveOutcome,
-        MoveValidity
+        InvalidMove
     },
     board::{
         Board,
@@ -32,7 +32,7 @@ pub use crate::{
         KingStrength,
         ThroneRule,
         HostilityRules,
-        FED_BRAN
+        FEDERATION_BRANDUBH
     },
     tiles::{
         Tile,

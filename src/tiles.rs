@@ -94,7 +94,7 @@ pub enum Plane {
 /// horizontal and the remaining bits represent the distance to be moved (with a negative value
 /// representing a move "backwards" along the relevant plane, ie, to a lower-numbered row or
 /// column). This way, moves are guaranteed to be along a row or column.
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy)]
 pub struct Move {
     pub from: Tile,
     plane_disp: u8
@@ -236,7 +236,6 @@ mod tests {
         assert_eq!(m.to(), Tile::new(0, 5));
 
         let m_res = Move::from_tiles(Tile::new(2, 3), Tile::new(3, 6));
-        println!("{m_res:?}");
         assert!(m_res.is_err());
     }
     

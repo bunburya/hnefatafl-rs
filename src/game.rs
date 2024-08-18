@@ -1,21 +1,24 @@
 use crate::board::Board;
 use crate::error::ParseError;
-use crate::game::MoveValidity::{BlockedByPiece, BlockedByThrone, IllegalThroneEntry, NoCommonAxis, NoPiece, OutOfBounds, TooFar, ValidMove};
+use crate::game::GameOutcome::Winner;
+use crate::game::GameStatus::{Ongoing, Over};
+use crate::game::InvalidMove::{BlockedByPiece, MoveOntoBlockedTile, MoveThroughBlockedTile, NoCommonAxis, NoPiece, OutOfBounds, TooFar};
+use crate::game::MoveValidity::{Invalid, Valid};
 use crate::pieces::PieceType::King;
 use crate::pieces::Side::{Attacker, Defender};
 use crate::pieces::{Piece, Side};
 use crate::rules::KingStrength::{Strong, StrongByThrone, Weak};
 use crate::rules::{Ruleset, ThroneRule};
 use crate::tiles::{Move, Tile};
+use crate::traits::BitField;
+use crate::InvalidMove::WrongPlayer;
 use std::collections::HashSet;
 use std::str::FromStr;
-use crate::game::GameOutcome::Winner;
-use crate::traits::BitField;
 
 #[derive(Debug, Eq, PartialEq)]
-pub enum MoveValidity {
-    /// Move is valid.
-    ValidMove,
+pub enum InvalidMove {
+    /// The piece being moved does not belong to the player whose turn it is.
+    WrongPlayer,
     /// There is no piece to move at the given tile.
     NoPiece,
     /// The destination tile would be outside the board.
@@ -24,12 +27,12 @@ pub enum MoveValidity {
     NoCommonAxis,
     /// Another piece is blocking the move.
     BlockedByPiece,
-    /// The throne is blocking the move (and the rules do not permit this piece to pass through the
-    /// throne).
-    BlockedByThrone,
-    /// This move would end on the throne (and the rules do not permit this piece to enter the
-    /// throne).
-    IllegalThroneEntry,
+    /// The move is blocked by a special tile which, according to the game rules, is not passable
+    /// by this piece.
+    MoveThroughBlockedTile,
+    /// This move would end on a special tile which, according to the game rules, this piece may not
+    /// occupy.
+    MoveOntoBlockedTile,
     /// The move is further than this piece is permitted to move in one go.
     TooFar
 }
@@ -50,6 +53,24 @@ pub struct MoveOutcome {
     pub captures: HashSet<Tile>,
     /// The outcome of the game, if the move has brought the game to an end.
     pub game_outcome: Option<GameOutcome>
+}
+
+/// The current status of the game.
+#[derive(Eq, PartialEq, Debug)]
+pub enum GameStatus {
+    /// Game is still ongoing.
+    Ongoing,
+    /// Game is over, with the given outcome.
+    Over(GameOutcome)
+}
+
+/// Whether a move is valid.
+#[derive(Eq, PartialEq, Debug)]
+pub enum MoveValidity {
+    /// Move is valid.
+    Valid,
+    /// Move is invalid, for the given reason.
+    Invalid(InvalidMove)
 }
 
 /// A struct representing a single game, including all state and associated information (such as
@@ -74,7 +95,7 @@ impl<T: BitField> Game<T> {
     }
 
     /// Determine whether the given tile is hostile to the given piece.
-    pub fn tile_is_hostile(&self, tile: Tile, piece: Piece) -> bool {
+    pub fn tile_hostile(&self, tile: Tile, piece: Piece) -> bool {
         if let Some(other_piece) = self.board.get_piece(tile) {
             // Tile contains a piece. If the piece is of a different side, tile is hostile, unless
             // that piece is an unarmed king.
@@ -90,49 +111,62 @@ impl<T: BitField> Game<T> {
                     && !self.board.tile_in_bounds(tile))
         }
     }
+    
+    /// Determine whether the position at the given row and tile is hostile to the given piece,
+    /// including whether the position is a hostile edge. `row` and `col` are `i8`s to allow for
+    /// negative values (which are out of bounds).
+    pub fn row_col_hostile(&self, row: i8, col: i8, piece: Piece) -> bool {
+        if self.board.row_col_in_bounds(row, col) {
+            self.tile_hostile(Tile::new(row as u8, col as u8), piece)
+        } else {
+            self.rules.hostility.edge.contains(piece)
+        }
+    }
 
-    /// Check whether a move is valid. Any return value other than [`ValidMove`] means that the move
-    /// is not valid (and should indicate why it is not valid).
+    /// Check whether a move is valid. If the move is valid, returns `None`; otherwise, the wrapped
+    /// [`InvalidMove`] variant indicates why the move is invalid..
     pub fn check_move_validity(&self, m: Move) -> MoveValidity {
         let from = m.from;
         let to = m.to();
         let maybe_piece = self.board.get_piece(from);
         match maybe_piece {
-            None => NoPiece,
+            None => Invalid(NoPiece),
             Some(piece) => {
+                if piece.side != self.side_to_play {
+                    return Invalid(WrongPlayer);
+                }
                 if !(self.board.tile_in_bounds(from) && self.board.tile_in_bounds(to)) {
-                    // Tile out of bounds
-                    return OutOfBounds
+                    return Invalid(OutOfBounds)
                 }
                 if (from.row() != to.row()) && (from.col() != to.col()) {
-                    // Tiles not on same row or column
-                    return NoCommonAxis
+                    return Invalid(NoCommonAxis)
                 }
                 let between = self.board.tiles_between(from, to);
                 if between.iter().any(|t| self.board.tile_occupied(*t)) {
-                    // Move is blocked by a piece
-                    return BlockedByPiece
+                    return Invalid(BlockedByPiece)
+                }
+                if !self.rules.may_enter_corners.contains(piece) &&
+                    self.board.corners.contains(&to) {
+                    return Invalid(MoveOntoBlockedTile)
                 }
                 if (
                     (self.rules.throne_movement == ThroneRule::NoPass)
                         || ((self.rules.throne_movement == ThroneRule::KingPass)
                             && piece.piece_type != King)
                 ) && between.contains(&self.board.throne) {
-                    // Move is blocked by the throne
-                    return BlockedByThrone
+                    return Invalid(MoveThroughBlockedTile)
                 }
                 if ((self.rules.throne_movement == ThroneRule::NoEntry)
                     || ((self.rules.throne_movement == ThroneRule::KingEntry)
                         && piece.piece_type != King)
                 ) && (to == self.board.throne) {
-                    // Illegal move on to the throne
-                    return IllegalThroneEntry
+                    return Invalid(MoveOntoBlockedTile)
                 }
                 if self.rules.slow_pieces.contains(piece) && m.distance() > 1 {
                     // Slow piece can't move more than one space at a time
-                    return TooFar
+                    return Invalid(TooFar)
                 }
-                ValidMove
+                Valid
             }
         }
     }
@@ -173,7 +207,7 @@ impl<T: BitField> Game<T> {
     }
 
     /// Get the outcome of a move (number of captures, whether it ends the game, etc).
-    pub fn move_outcome(&self, m: Move) -> MoveOutcome {
+    pub fn get_move_outcome(&self, m: Move) -> MoveOutcome {
         let mut captures: HashSet<Tile> = HashSet::new();
         let occupant = self.board.get_piece(m.from);
         if occupant.is_none() {
@@ -191,30 +225,25 @@ impl<T: BitField> Game<T> {
                 let signed_to_col = to.col() as i8;
                 let signed_n_row = n.row() as i8;
                 let signed_n_col = n.col() as i8;
-                let far_tile = Tile::new(
-                    (signed_to_row + (signed_n_row - signed_to_row) * 2) as u8,
-                    (signed_to_col + (signed_n_col - signed_to_col) * 2) as u8
-                );
-                if self.tile_is_hostile(far_tile, other_piece) {
+                let signed_far_row = signed_to_row + ((signed_n_row - signed_to_row) * 2);
+                let signed_far_col = signed_to_col + ((signed_n_col - signed_to_col) * 2);
+                // Check if the tile on the other side of the neighbour is a hostile tile, or if the
+                // neighbour is on the edge and the edge is treated as hostile to that piece
+                
+                if self.row_col_hostile(signed_far_row, signed_far_col, other_piece) {
                     // We know that the neighbouring opposing piece is surrounded by the
                     // moving piece and another hostile tile. So it is captured, *unless* it
                     // is a strong king.
                     if (other_piece.piece_type == King) && self.king_is_strong() {
                         // Get the tiles surrounding `n` on the perpendicular axis.
-                        let adj_tiles: [Tile; 2] = if to.row() == far_tile.row() {
-                            [
-                                Tile::new(n.row() + 1, n.col()),
-                                Tile::new(n.row() - 1, n.col())
-                            ]
+                        let perp_hostile= if to.row() == n.row() {
+                            self.row_col_hostile(signed_n_row + 1, signed_n_col, other_piece)
+                                && self.row_col_hostile(signed_n_row - 1, signed_n_col, other_piece)
                         } else {
-                            [
-                                Tile::new(n.row(), n.col() + 1),
-                                Tile::new(n.row(), n.col() - 1)
-                            ]
+                            self.row_col_hostile(signed_n_row, signed_n_col + 1, other_piece)
+                                && self.row_col_hostile(signed_n_row, signed_n_col - 1, other_piece)
                         };
-                        // Check if these tiles are also hostile
-                        if !self.tile_is_hostile(adj_tiles[0], other_piece)
-                            || !self.tile_is_hostile(adj_tiles[1], other_piece) {
+                        if !perp_hostile {
                             continue
                         }
                     }
@@ -225,38 +254,61 @@ impl<T: BitField> Game<T> {
         let game_outcome = self.get_game_outcome(m, &captures);
         MoveOutcome { captures, game_outcome }
     }
+    
+    /// Actually "do" a move, checking validity, 
+    pub fn do_move(&mut self, m: Move) -> Result<GameStatus, InvalidMove> {
+        if let Invalid(v) = self.check_move_validity(m) {
+            return Err(v)
+        };
+        let move_outcome = self.get_move_outcome(m);
+        self.board.move_piece(m.from, m.to());
+        for c in move_outcome.captures {
+            self.board.remove_piece(c)
+        }
+
+        self.turn += 1;
+        self.side_to_play = self.side_to_play.other();
+        Ok(match move_outcome.game_outcome {
+            Some(outcome) => Over(outcome),
+            None => Ongoing
+        })
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::game::{Game, MoveOutcome};
     use crate::game::GameOutcome::Winner;
-    use crate::game::MoveValidity::{
+    use crate::game::InvalidMove::{
         BlockedByPiece,
-        BlockedByThrone,
-        IllegalThroneEntry,
+        MoveOntoBlockedTile,
+        MoveThroughBlockedTile,
         NoPiece,
         OutOfBounds,
-        TooFar,
-        ValidMove
+        TooFar
     };
+    use crate::game::MoveValidity::{Invalid, Valid};
+    use crate::game::{Game, MoveOutcome};
     use crate::pieces::PieceSet;
     use crate::pieces::PieceType::King;
     use crate::pieces::Side::{Attacker, Defender};
     use crate::rules::ThroneRule::NoPass;
-    use crate::rules::{Ruleset, FED_BRAN};
+    use crate::rules::{Ruleset, COPENHAGEN_HNEFATAFL, FEDERATION_BRANDUBH};
     use crate::tiles::{Move, Tile};
+    use std::collections::HashSet;
+    use std::fs;
+    use std::path::PathBuf;
+    use std::str::FromStr;
 
     const TEST_RULES: Ruleset = Ruleset {
         slow_pieces: PieceSet::from_piece_type(King),
         throne_movement: NoPass,
-        ..FED_BRAN
+        ..FEDERATION_BRANDUBH
     };
     
     #[test]
     fn test_check_move_validity() {
         let mut fb_game: Game<u64> = Game::new(
-            FED_BRAN, 
+            FEDERATION_BRANDUBH,
             "...t...\n...t...\n...T...\nttTKTtt\n...T...\n...t...\n...t..."
         ).unwrap();
 
@@ -265,14 +317,21 @@ mod tests {
                 Tile::new(3, 2),
                 Tile::new(4, 2)
             ).unwrap()),
-            ValidMove
+            Valid
+        );
+        assert_eq!(
+            fb_game.check_move_validity(Move::from_tiles(
+                Tile::new(0, 3),
+                Tile::new(0, 0)
+            ).unwrap()),
+            Invalid(MoveOntoBlockedTile)
         );
         assert_eq!(
             fb_game.check_move_validity(Move::from_tiles(
                 Tile::new(3, 3),
                 Tile::new(3, 2)
             ).unwrap()),
-            ValidMove
+            Valid
         );
         
         assert_eq!(
@@ -280,7 +339,7 @@ mod tests {
                 Tile::new(1, 1),
                 Tile::new(2, 1)
             ).unwrap()),
-            NoPiece
+            Invalid(NoPiece)
         );
         
         assert_eq!(
@@ -288,7 +347,7 @@ mod tests {
                 Tile::new(0, 3),
                 Tile::new(0, 7)
             ).unwrap()),
-            OutOfBounds
+            Invalid(OutOfBounds)
         );
 
         assert_eq!(
@@ -296,18 +355,18 @@ mod tests {
                 Tile::new(0, 3),
                 Tile::new(2, 3)
             ).unwrap()),
-            BlockedByPiece
+            Invalid(BlockedByPiece)
         );
 
-        fb_game.board.do_move(Move::from_tiles(Tile::new(3, 2), Tile::new(4, 2)).unwrap());
-        fb_game.board.do_move(Move::from_tiles(Tile::new(3, 3), Tile::new(3, 2)).unwrap());
+        fb_game.board.move_piece(Tile::new(3, 2), Tile::new(4, 2));
+        fb_game.board.move_piece(Tile::new(3, 3), Tile::new(3, 2));
 
         assert_eq!(
             fb_game.check_move_validity(Move::from_tiles(
                 Tile::new(2, 3),
                 Tile::new(3, 3)
             ).unwrap()),
-            IllegalThroneEntry
+            Invalid(MoveOntoBlockedTile)
         );
 
         assert_eq!(
@@ -315,7 +374,7 @@ mod tests {
                 Tile::new(3, 2),
                 Tile::new(3, 3)
             ).unwrap()),
-            ValidMove
+            Valid
         );
         
         let test_game: Game<u64> = Game::new(
@@ -328,7 +387,7 @@ mod tests {
                 Tile::new(6, 5),
                 Tile::new(6, 3)
             ).unwrap()),
-            TooFar
+            Invalid(TooFar)
         );
         
         assert_eq!(
@@ -336,7 +395,7 @@ mod tests {
                 Tile::new(6, 5),
                 Tile::new(6, 4)
             ).unwrap()),
-            ValidMove
+            Valid
         );
         
         assert_eq!(
@@ -344,7 +403,7 @@ mod tests {
                 Tile::new(3, 2),
                 Tile::new(3, 4)
             ).unwrap()),
-            BlockedByThrone
+            Invalid(MoveThroughBlockedTile)
         );
     }
     
@@ -356,7 +415,7 @@ mod tests {
         ).unwrap();
         
         assert_eq!(
-            test_game.move_outcome(Move::from_tiles(
+            test_game.get_move_outcome(Move::from_tiles(
                 Tile::new(0, 4),
                 Tile::new(6, 4)
             ).unwrap()),
@@ -367,7 +426,7 @@ mod tests {
         );
         
         assert_eq!(
-            test_game.move_outcome(Move::from_tiles(
+            test_game.get_move_outcome(Move::from_tiles(
                 Tile::new(4, 6),
                 Tile::new(4, 2)
             ).unwrap()),
@@ -384,7 +443,7 @@ mod tests {
         test_game.side_to_play = test_game.side_to_play.other();
         
         assert_eq!(
-            test_game.move_outcome(Move::from_tiles(
+            test_game.get_move_outcome(Move::from_tiles(
                 Tile::new(6, 5),
                 Tile::new(6, 6)
             ).unwrap()),
@@ -395,12 +454,69 @@ mod tests {
         );
         
         assert_eq!(
-            test_game.move_outcome(Move::from_tiles(
+            test_game.get_move_outcome(Move::from_tiles(
                 Tile::new(6, 5),
                 Tile::new(5, 5)
             ).unwrap()),
             MoveOutcome::default()
         )
+    }
+    
+    fn get_move_and_captures(s: &str) -> Option<(Move, HashSet<Tile>)> {
+        let tiles = s.split('-').collect::<Vec<&str>>();
+        if tiles.len() < 2 {
+            return None
+        } 
+        let m = Move::from_tiles(
+            Tile::from_str(tiles[0]).unwrap(),
+            Tile::from_str(tiles[1]).unwrap()
+        ).unwrap();
+        let mut c: HashSet<Tile> = HashSet::new();
+        for t in tiles[2..].iter() {
+            c.insert(Tile::from_str(t).unwrap());
+        }
+        Some((m, c))
+        
+    }
+    #[test]
+    fn test_opening_moves() {
+        let f: PathBuf = [
+            env!("CARGO_MANIFEST_DIR"),
+            "resources",
+            "test",
+            "first_moves",
+            "copenhagen_hnefatafl.csv"
+        ].iter().collect();
+        let s = fs::read_to_string(f).unwrap();
+        let lines = s.split('\n');
+        for line in lines {
+            if line.starts_with('#') {
+                continue
+            }
+            let mut g: Game<u128> = Game::new(
+                COPENHAGEN_HNEFATAFL,
+                "...ttttt...\n.....t.....\n...........\nt....T....t\nt...TTT...t\ntt.TTKTT.tt\nt...TTT...t\nt....T....t\n...........\n.....t.....\n...ttttt..."
+            ).unwrap();
+            let cols = line.split(',').collect::<Vec<&str>>();
+            let moves = cols[0].split('/').collect::<Vec<&str>>();
+            for m_str in moves {
+                let mc_opt = get_move_and_captures(m_str);
+                if let Some((m, c)) = mc_opt {
+                    let move_validity = g.check_move_validity(m);
+                    assert_eq!(g.check_move_validity(m), Valid);
+                    let m_outcome = g.get_move_outcome(m);
+                    if !c.is_empty() {
+                        assert_eq!(m_outcome.captures, c);
+                    }
+                    
+                    let game_status = g.do_move(m);
+                    assert!(game_status.is_ok());
+                    
+
+                }
+            }
+            
+        }
     }
 
 }

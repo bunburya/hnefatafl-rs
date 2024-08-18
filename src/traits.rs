@@ -48,6 +48,8 @@ pub trait BitField:
     /// Create a bitmask for the given tile. Only the bit corresponding to the tile's position on
     /// the board will be set.
     fn tile_mask(t: Tile) -> Self {
+        //println!("Getting mask for {t:?} ({t})");
+        //println!("Shifting by {}", (t.row() * Self::ROW_WIDTH) + t.col());
         Self::from(1) << ((t.row() * Self::ROW_WIDTH) + t.col()).into()
     }
 
