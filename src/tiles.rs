@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use crate::error::MoveError::DisjointTiles;
 use crate::error::ParseError::{BadChar, BadMove, BadString, EmptyString};
 use crate::error::{MoveError, ParseError};
@@ -178,6 +179,19 @@ impl Move {
             Vertical => Tile::new(((self.from.row() as i8) + d) as u8, self.from.col()),
             Horizontal => Tile::new(self.from.row(), ((self.from.col() as i8) + d) as u8)
         }
+    }
+    
+    pub fn from_str_with_captures(s: &str) -> Result<(Self, HashSet<Tile>), ParseError> {
+        if s.is_empty() {
+            return Err(EmptyString);
+        }
+        let tokens = s.split('x').collect::<Vec<&str>>();
+        let m = Self::from_str(tokens[0])?;
+        let mut captures: HashSet<Tile> = HashSet::new();
+        for c in tokens[1..].iter() {
+            captures.insert(Tile::from_str(c)?);
+        }
+        Ok((m, captures))
     }
 }
 

@@ -294,10 +294,8 @@ mod tests {
     use crate::rules::ThroneRule::NoPass;
     use crate::rules::{Ruleset, COPENHAGEN_HNEFATAFL, FEDERATION_BRANDUBH};
     use crate::tiles::{Move, Tile};
-    use std::collections::HashSet;
     use std::fs;
     use std::path::PathBuf;
-    use std::str::FromStr;
 
     const TEST_RULES: Ruleset = Ruleset {
         slow_pieces: PieceSet::from_piece_type(King),
@@ -462,29 +460,13 @@ mod tests {
         )
     }
     
-    fn get_move_and_captures(s: &str) -> Option<(Move, HashSet<Tile>)> {
-        let tiles = s.split('-').collect::<Vec<&str>>();
-        if tiles.len() < 2 {
-            return None
-        } 
-        let m = Move::from_tiles(
-            Tile::from_str(tiles[0]).unwrap(),
-            Tile::from_str(tiles[1]).unwrap()
-        ).unwrap();
-        let mut c: HashSet<Tile> = HashSet::new();
-        for t in tiles[2..].iter() {
-            c.insert(Tile::from_str(t).unwrap());
-        }
-        Some((m, c))
-        
-    }
     #[test]
-    fn test_opening_moves() {
+    fn test_real_games() {
         let f: PathBuf = [
             env!("CARGO_MANIFEST_DIR"),
             "resources",
             "test",
-            "first_moves",
+            "games",
             "copenhagen_hnefatafl.csv"
         ].iter().collect();
         let s = fs::read_to_string(f).unwrap();
@@ -493,16 +475,16 @@ mod tests {
             if line.starts_with('#') {
                 continue
             }
+            println!("{line}");
             let mut g: Game<u128> = Game::new(
                 COPENHAGEN_HNEFATAFL,
                 "...ttttt...\n.....t.....\n...........\nt....T....t\nt...TTT...t\ntt.TTKTT.tt\nt...TTT...t\nt....T....t\n...........\n.....t.....\n...ttttt..."
             ).unwrap();
             let cols = line.split(',').collect::<Vec<&str>>();
-            let moves = cols[0].split('/').collect::<Vec<&str>>();
+            let moves = cols[0].split(' ').collect::<Vec<&str>>();
             for m_str in moves {
-                let mc_opt = get_move_and_captures(m_str);
-                if let Some((m, c)) = mc_opt {
-                    let move_validity = g.check_move_validity(m);
+                let mc_opt = Move::from_str_with_captures(m_str);
+                if let Ok((m, c)) = mc_opt {
                     assert_eq!(g.check_move_validity(m), Valid);
                     let m_outcome = g.get_move_outcome(m);
                     if !c.is_empty() {
@@ -513,6 +495,8 @@ mod tests {
                     assert!(game_status.is_ok());
                     
 
+                } else {
+                    assert_eq!(m_str, "timeout")
                 }
             }
             
