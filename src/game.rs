@@ -391,6 +391,7 @@ impl<T: BitField> Game<T> {
 #[cfg(test)]
 mod tests {
     use crate::game::GameOutcome::Winner;
+    use crate::game::GameStatus::Over;
     use crate::game::InvalidMove::{
         BlockedByPiece,
         MoveOntoBlockedTile,
@@ -400,7 +401,7 @@ mod tests {
         TooFar
     };
     use crate::game::MoveValidity::{Invalid, Valid};
-    use crate::game::{Game, MoveOutcome};
+    use crate::game::{Game, GameStatus, MoveOutcome};
     use crate::hashset;
     use crate::pieces::PieceSet;
     use crate::pieces::PieceType::King;
@@ -728,6 +729,7 @@ mod tests {
         ].iter().collect();
         let s = fs::read_to_string(f).unwrap();
         let lines = s.split('\n');
+        let mut last_game_status: GameStatus = GameStatus::Ongoing;
         for line in lines {
             if line.starts_with('#') {
                 continue
@@ -756,15 +758,21 @@ mod tests {
                         assert_eq!(without_king, c);
                     }
                     
-                    let game_status = g.do_move(m);
-                    assert!(game_status.is_ok());
-                    
-
+                    let game_status_res = g.do_move(m);
+                    assert!(game_status_res.is_ok());
+                    last_game_status = game_status_res.unwrap();
                 } else {
                     assert_eq!(m_str, "timeout")
                 }
             }
-            
+
+            if let Over(Winner(side)) = last_game_status {
+                let expected = match side {
+                    Attacker => "Black",
+                    Defender => "White"
+                };
+                assert_eq!(&expected, outcome);
+            }
         }
     }
     
