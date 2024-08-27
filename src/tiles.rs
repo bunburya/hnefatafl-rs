@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use crate::error::MoveError::DisjointTiles;
 use crate::error::ParseError::{BadChar, BadMove, BadString, EmptyString};
 use crate::error::{MoveError, ParseError};
-use crate::tiles::Plane::{Horizontal, Vertical};
+use crate::tiles::Axis::{Horizontal, Vertical};
 use std::fmt::{Debug, Display, Formatter};
 use std::str::FromStr;
 
@@ -14,49 +14,38 @@ use std::str::FromStr;
 /// and the least significant four bits describe the column. It is therefore appropriate for use
 /// with square boards up to 16x16.
 #[derive(Copy, Clone, Eq, PartialEq, Hash)]
-pub struct Tile(pub(crate) u8);
+pub struct Tile {
+    pub row: u8,
+    pub col: u8
+}
 
 impl Tile {
     
     /// Create a new [`Tile`] with the given row and column.
     pub fn new(row: u8, col: u8) -> Self {
-        Self((row << 4) | (col & 0x0F))
+        Self { row, col }
     }
     
-    /// The row on which this tile is situated.
-    pub fn row(&self) -> u8 {
-        self.0 >> 4
+    /// The tile's position on the given axis, ie, the tile's row is `axis` is [`Vertical`] and its
+    /// column if `axis` is [`Horizontal`]. 
+    pub fn posn_on_axis(&self, axis: Axis) -> u8 {
+        match axis {
+            Vertical => self.row,
+            Horizontal => self.col
+        }
     }
     
-    /// The column on which this tile is situated.
-    pub fn col(&self) -> u8 {
-        self.0 & 0b0000_1111
-    }
-
-    pub(crate) fn from_byte(byte: u8) -> Self {
-        Self(byte)
-    }
-
-    /// Get only the bits representing the row (with the other bits set to zero).
-    pub(crate) fn row_bits(&self) -> u8 {
-        self.0 & 0b1111_0000
-    }
-    
-    /// Get only the bits representing the column (with the other bits set to zero).
-    pub(crate) fn col_bits(&self) -> u8 {
-        self.0 & 0b0000_1111
-    }
 }
 
 impl Debug for Tile {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Tile(row={}, col={})", self.row(), self.col())
+        write!(f, "Tile(row={}, col={})", self.row, self.col)
     }
 }
 
 impl Display for Tile {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}{}", (self.col() + 97) as char, self.row() + 1)
+        write!(f, "{}{}", (self.col + 97) as char, self.row + 1)
     }
 }
 
@@ -78,14 +67,23 @@ impl FromStr for Tile {
 
 impl From<Tile> for (u8, u8) {
     fn from(value: Tile) -> Self {
-        (value.row(), value.col())
+        (value.row, value.col)
     }
 }
 
-#[derive(Eq, PartialEq, Debug)]
-pub enum Plane {
+#[derive(Eq, PartialEq, Debug, Clone, Copy)]
+pub enum Axis {
     Vertical = 0,
-    Horizontal = 1
+    Horizontal = 0x80
+}
+
+impl Axis {
+    pub fn other(&self) -> Axis {
+        match self {
+            Vertical => Horizontal,
+            Horizontal => Vertical
+        }
+    }
 }
 
 /// A single move from one tile to another.
@@ -93,12 +91,12 @@ pub enum Plane {
 /// This is implemented as a combination of source tile and another byte which encodes the direction
 /// and distance of movement. The most significant bit represents whether the move is vertical or
 /// horizontal and the remaining bits represent the distance to be moved (with a negative value
-/// representing a move "backwards" along the relevant plane, ie, to a lower-numbered row or
+/// representing a move "backwards" along the relevant axis, ie, to a lower-numbered row or
 /// column). This way, moves are guaranteed to be along a row or column.
 #[derive(Debug, Eq, PartialEq, Clone, Copy)]
 pub struct Move {
     pub from: Tile,
-    plane_disp: u8
+    axis_disp: u8
 }
 
 impl FromStr for Move {
@@ -127,28 +125,46 @@ impl Display for Move {
 
 impl Move {
     
+    pub fn new(from: Tile, axis: Axis, displacement: i8) -> Self {
+        let axis_bit = axis as u8;
+        Self {
+            from,
+            axis_disp: axis_bit | ((displacement & 0x7F) as u8)
+        }
+    }
+    
     /// Create a new [`Move`] from source and destination tiles.
     pub fn from_tiles(src: Tile, dst: Tile) -> Result<Self, MoveError> {
-        let plane_bit: u8;
-        let len: i8;
-        if src.row() == dst.row() {
-            plane_bit = 0x80;
-            len = (dst.col() as i8) - (src.col() as i8);
-        } else if src.col() == dst.col() {
-            plane_bit = 0;
-            len = (dst.row() as i8) - (src.row() as i8);
+        let axis: Axis;
+        let displacement: i8;
+        if src.row == dst.row {
+            axis = Horizontal;
+            displacement = (dst.col as i8) - (src.col as i8);
+        } else if src.col == dst.col {
+            axis = Vertical;
+            displacement = (dst.row as i8) - (src.row as i8);
         } else {
             return Err(DisjointTiles)
         };
-        Ok(Self {
-            from: src,
-            plane_disp: plane_bit | ((len & 0x7F) as u8)
-        })
+        Ok(Self::new(src, axis, displacement))
+    }
+
+    pub fn from_str_with_captures(s: &str) -> Result<(Self, HashSet<Tile>), ParseError> {
+        if s.is_empty() {
+            return Err(EmptyString);
+        }
+        let tokens = s.split('x').collect::<Vec<&str>>();
+        let m = Self::from_str(tokens[0])?;
+        let mut captures: HashSet<Tile> = HashSet::new();
+        for c in tokens[1..].iter() {
+            captures.insert(Tile::from_str(c)?);
+        }
+        Ok((m, captures))
     }
     
-    /// The plane along which the move occurs, ie, horizontal or vertical.
-    pub fn plane(&self) -> Plane {
-        if (self.plane_disp & 0x80) == 0 {
+    /// The axis along which the move occurs, ie, horizontal or vertical.
+    pub fn axis(&self) -> Axis {
+        if (self.axis_disp & 0x80) == 0 {
             Vertical
         } else {
             Horizontal
@@ -158,7 +174,7 @@ impl Move {
     /// The signed distance in tiles covered by the move. A negative number means that the move is
     /// going "backwards", ie, to a lower-numbered row or column.
     pub fn displacement(&self) -> i8 {
-        let bits = (self.plane_disp & 0x7F) as i8;
+        let bits = (self.axis_disp & 0x7F) as i8;
         if (bits & 0x40) != 0 {
             bits | !0b0111_1111
         } else {
@@ -175,30 +191,17 @@ impl Move {
     /// The move's destination tile.
     pub fn to(&self) -> Tile {
         let d = self.displacement();
-        match self.plane() {
-            Vertical => Tile::new(((self.from.row() as i8) + d) as u8, self.from.col()),
-            Horizontal => Tile::new(self.from.row(), ((self.from.col() as i8) + d) as u8)
+        match self.axis() {
+            Vertical => Tile::new(((self.from.row as i8) + d) as u8, self.from.col),
+            Horizontal => Tile::new(self.from.row, ((self.from.col as i8) + d) as u8)
         }
-    }
-    
-    pub fn from_str_with_captures(s: &str) -> Result<(Self, HashSet<Tile>), ParseError> {
-        if s.is_empty() {
-            return Err(EmptyString);
-        }
-        let tokens = s.split('x').collect::<Vec<&str>>();
-        let m = Self::from_str(tokens[0])?;
-        let mut captures: HashSet<Tile> = HashSet::new();
-        for c in tokens[1..].iter() {
-            captures.insert(Tile::from_str(c)?);
-        }
-        Ok((m, captures))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::error::ParseError::{BadChar, BadInt, BadMove, BadString, EmptyString};
-    use crate::tiles::Plane::{Horizontal, Vertical};
+    use crate::tiles::Axis::{Horizontal, Vertical};
     use crate::tiles::{Move, Tile};
     use std::str::FromStr;
     use crate::error::MoveError;
@@ -208,8 +211,8 @@ mod tests {
         for r in 0..16 {
             for c in 0..16 {
                 let t = Tile::new(r, c);
-                assert_eq!(t.row(), r);
-                assert_eq!(t.col(), c);
+                assert_eq!(t.row, r);
+                assert_eq!(t.col, c);
             }
         }
     }
@@ -220,7 +223,7 @@ mod tests {
         assert!(m_res.is_ok());
         let m = m_res.unwrap();
         assert_eq!(m.from, Tile::new(2, 4));
-        assert_eq!(m.plane(), Horizontal);
+        assert_eq!(m.axis(), Horizontal);
         assert_eq!(m.displacement(), 2);
         assert_eq!(m.to(), Tile::new(2, 6));
 
@@ -228,7 +231,7 @@ mod tests {
         assert!(m_res.is_ok());
         let m = m_res.unwrap();
         assert_eq!(m.from, Tile::new(2, 3));
-        assert_eq!(m.plane(), Vertical);
+        assert_eq!(m.axis(), Vertical);
         assert_eq!(m.displacement(), 3);
         assert_eq!(m.to(), Tile::new(5, 3));
 
@@ -236,7 +239,7 @@ mod tests {
         assert!(m_res.is_ok());
         let m = m_res.unwrap();
         assert_eq!(m.from, Tile::new(1, 4));
-        assert_eq!(m.plane(), Horizontal);
+        assert_eq!(m.axis(), Horizontal);
         assert_eq!(m.displacement(), -3);
         assert_eq!(m.distance(), 3);
         assert_eq!(m.to(), Tile::new(1, 1));
@@ -245,7 +248,7 @@ mod tests {
         assert!(m_res.is_ok());
         let m = m_res.unwrap();
         assert_eq!(m.from, Tile::new(7, 5));
-        assert_eq!(m.plane(), Vertical);
+        assert_eq!(m.axis(), Vertical);
         assert_eq!(m.displacement(), -7);
         assert_eq!(m.to(), Tile::new(0, 5));
 

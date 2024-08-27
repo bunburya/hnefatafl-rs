@@ -5,6 +5,7 @@ mod error;
 mod game;
 mod tiles;
 mod traits;
+mod utils;
 
 pub use crate::{
     game::{
@@ -37,7 +38,7 @@ pub use crate::{
     tiles::{
         Tile,
         Move,
-        Plane
+        Axis
     },
     traits::BitField
 };

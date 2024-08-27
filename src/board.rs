@@ -34,9 +34,9 @@ impl<T: BitField> SimpleBoardState<T> {
 
     /// Get the tile on which the king is currently placed.
     pub fn get_king(&self) -> Tile {
-        let row_bits = self.defenders.to_be_bytes().as_ref()[0] & 0b1111_0000;
-        let col_bits = self.attackers.to_be_bytes().as_ref()[0] >> 4;
-        Tile::from_byte(row_bits | col_bits)
+        let row = (self.defenders.to_be_bytes().as_ref()[0] & 0b1111_0000) >> 4;
+        let col = (self.attackers.to_be_bytes().as_ref()[0] & 0b1111_0000) >> 4;
+        Tile::new(row, col)
     }
 
     /// Store the given location as the position of the king. **NB**: Does not set the relevant bit
@@ -46,12 +46,12 @@ impl<T: BitField> SimpleBoardState<T> {
         let mut def_bytes = self.defenders.to_be_bytes();
         let def_bytes_slice = def_bytes.as_mut();
         def_bytes_slice[0] &= 0b0000_1111;  // Unset 4 most significant bits
-        def_bytes_slice[0] |= t.row_bits();  // Set 4 most significant bits to row
+        def_bytes_slice[0] |= t.row << 4;  // Set 4 most significant bits to row
         self.defenders = T::from_be_bytes_slice(def_bytes_slice);
         let mut att_bytes = self.attackers.to_be_bytes();
         let att_bytes_slice = att_bytes.as_mut();
         att_bytes_slice[0] &= 0b0000_1111;
-        att_bytes_slice[0] |= t.col_bits() << 4;
+        att_bytes_slice[0] |= t.col << 4;
         self.attackers = T::from_be_bytes_slice(att_bytes_slice);
     }
 
@@ -145,7 +145,7 @@ impl<T: BitField> Board<T> {
 
     pub fn tile_in_bounds(&self, tile: Tile) -> bool {
         let r = 0..self.side_len;
-        r.contains(&tile.row()) && r.contains(&tile.col())
+        r.contains(&tile.row) && r.contains(&tile.col)
     }
     
     /// Check whether the given row and column refer to a tile on the board. `row` and `col` are
@@ -155,8 +155,8 @@ impl<T: BitField> Board<T> {
     }
 
     pub fn neighbors(&self, tile: Tile) -> Vec<Tile> {
-        let row = tile.row();
-        let col = tile.col();
+        let row = tile.row;
+        let col = tile.col;
         let signed_row = row as i8;
         let signed_col = col as i8;
         let mut neighbors: Vec<Tile> = vec![];
@@ -172,7 +172,7 @@ impl<T: BitField> Board<T> {
 
     pub fn tiles_between(&self, t1: Tile, t2: Tile) -> Vec<Tile> {
         let mut tiles: Vec<Tile> = vec![];
-        let (r1, c1, r2, c2) = (t1.row(), t1.col(), t2.row(), t2.col());
+        let (r1, c1, r2, c2) = (t1.row, t1.col, t2.row, t2.col);
         if r1 == r2 {
             let col_range = if c1 > c2 {
                 (c2+1)..c1
@@ -202,10 +202,10 @@ impl<T: BitField> Board<T> {
     
     /// Check whether the given tile is at the edge of the board (including at a corner).
     pub fn tile_at_edge(&self, tile: Tile) -> bool {
-        tile.row() == 0 
-            || tile.row() == self.side_len - 1 
-            || tile.col() == 0 
-            || tile.col() == self.side_len - 1
+        tile.row == 0
+            || tile.row == self.side_len - 1
+            || tile.col == 0
+            || tile.col == self.side_len - 1
     }
 
     /// Place the given piece on the given tile.

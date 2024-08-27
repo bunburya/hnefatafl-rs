@@ -1,10 +1,9 @@
-use crate::pieces::PieceType::Soldier;
 use crate::pieces::PieceSet;
-use crate::rules::KingStrength::Weak;
+use crate::pieces::PieceType::Soldier;
 use crate::rules::ThroneRule::KingEntry;
-use std::cmp::PartialEq;
-use crate::KingStrength::Strong;
+use crate::KingStrength::{Strong, StrongByThrone};
 use crate::PieceType::King;
+use std::cmp::PartialEq;
 
 enum SpecialTileType {
     Throne,
@@ -49,10 +48,13 @@ pub struct HostilityRules {
     pub(crate) edge: PieceSet
 }
 
-
-struct ShieldwallRules {
-    corners_may_close: bool,
-    may_capture: PieceSet
+/// Rules relating to shieldwall captures.
+#[derive(Clone, Copy, Debug)]
+pub struct ShieldwallRules {
+    /// Whether a shieldwall may be closed at one end by a corner.
+    pub corners_may_close: bool,
+    /// The pieces that may be captured by a shieldwall.
+    pub captures: PieceSet
 }
 
 /// A set of rules for a tafl game.
@@ -68,6 +70,8 @@ pub struct Ruleset {
     pub hostile_edge: bool,
     /// Whether the king is armed (can participate in captures).
     pub armed_king: bool,
+    /// Rules relating to shieldwall captures.
+    pub shieldwall: Option<ShieldwallRules>,
     /// Whether the throne blocks movement.
     pub throne_movement: ThroneRule,
     /// What pieces may enter the corners.
@@ -83,9 +87,10 @@ pub struct Ruleset {
 /// Rules for Federation Brandubh.
 pub const FEDERATION_BRANDUBH: Ruleset = Ruleset {
     edge_escape: false,
-    king_strength: Weak,
+    king_strength: StrongByThrone,
     hostile_edge: false,
     armed_king: true,
+    shieldwall: None,
     throne_movement: KingEntry,
     may_enter_corners: PieceSet::from_piece_type(King),
     hostility: HostilityRules {
@@ -102,6 +107,10 @@ pub const COPENHAGEN_HNEFATAFL: Ruleset = Ruleset {
     king_strength: Strong,
     hostile_edge: false,
     armed_king: true,
+    shieldwall: Some(ShieldwallRules {
+        corners_may_close: true,
+        captures: PieceSet::from_piece_type(Soldier)
+    }),
     throne_movement: KingEntry,
     may_enter_corners: PieceSet::from_piece_type(King),
     hostility: HostilityRules {

@@ -50,7 +50,7 @@ pub trait BitField:
     fn tile_mask(t: Tile) -> Self {
         //println!("Getting mask for {t:?} ({t})");
         //println!("Shifting by {}", (t.row() * Self::ROW_WIDTH) + t.col());
-        Self::from(1) << ((t.row() * Self::ROW_WIDTH) + t.col()).into()
+        Self::from(1) << ((t.row * Self::ROW_WIDTH) + t.col).into()
     }
 
 }
