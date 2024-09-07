@@ -209,8 +209,8 @@ impl<T: BitField> Game<T> {
     }
     
     /// A method used internally by [`Game::detect_shieldwall`]. This method searches in one
-    /// direction (ie, the moving piece's left or right) to find a valid shieldwall. Returns `None`
-    /// if no shieldwall found or, otherwise, a set of all tiles caught in the shieldwall (**not**
+    /// direction (along the relevant edge) to find a valid shieldwall. Returns `None` if no
+    /// shieldwall found or, otherwise, a set of all tiles caught in the shieldwall (**not** 
     /// necessarily all tiles *captured* by the shieldwall, as some tiles may be occupied by pieces
     /// that cannot be captured in a shieldwall).
     fn dir_sw_search(
@@ -234,8 +234,11 @@ impl<T: BitField> Game<T> {
                 // No shieldwall.
                 return None
             }
-            if !self.board.tile_occupied(t)
-                && !(sw_rule.corners_may_close && self.board.corners.contains(&t)) {
+            if !(
+                self.board.tile_occupied(t) 
+                    || sw_rule.corners_may_close 
+                    && self.board.corners.contains(&t)
+            ) {
                 // We have encountered a tile that is not occupied and is not a corner that may
                 // close. No shieldwall.
                 return None

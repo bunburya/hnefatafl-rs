@@ -88,15 +88,18 @@ impl Axis {
 
 /// A single move from one tile to another.
 ///
-/// This is implemented as a combination of source tile and another byte which encodes the direction
-/// and distance of movement. The most significant bit represents whether the move is vertical or
-/// horizontal and the remaining bits represent the distance to be moved (with a negative value
-/// representing a move "backwards" along the relevant axis, ie, to a lower-numbered row or
-/// column). This way, moves are guaranteed to be along a row or column.
+/// This is implemented as a combination of source tile, axis of movement and displacement (with a
+/// negative displacement representing a move "backwards" along the relevant axis, ie, to a
+/// lower-numbered row or column). This way, moves are guaranteed to be along a row or column (but
+/// are not guaranteed to be within the bounds of the board).
 #[derive(Debug, Eq, PartialEq, Clone, Copy)]
 pub struct Move {
     pub from: Tile,
-    axis_disp: u8
+    /// The axis along which the move occurs, ie, horizontal or vertical.
+    axis: Axis,
+    /// The signed distance in tiles covered by the move. A negative number means that the move is
+    /// going "backwards", ie, to a lower-numbered row or column.
+    displacement: i8
 }
 
 impl FromStr for Move {
@@ -126,11 +129,7 @@ impl Display for Move {
 impl Move {
     
     pub fn new(from: Tile, axis: Axis, displacement: i8) -> Self {
-        let axis_bit = axis as u8;
-        Self {
-            from,
-            axis_disp: axis_bit | ((displacement & 0x7F) as u8)
-        }
+        Self { from, axis, displacement }
     }
     
     /// Create a new [`Move`] from source and destination tiles.
@@ -162,36 +161,16 @@ impl Move {
         Ok((m, captures))
     }
     
-    /// The axis along which the move occurs, ie, horizontal or vertical.
-    pub fn axis(&self) -> Axis {
-        if (self.axis_disp & 0x80) == 0 {
-            Vertical
-        } else {
-            Horizontal
-        }
-    }
-
-    /// The signed distance in tiles covered by the move. A negative number means that the move is
-    /// going "backwards", ie, to a lower-numbered row or column.
-    pub fn displacement(&self) -> i8 {
-        let bits = (self.axis_disp & 0x7F) as i8;
-        if (bits & 0x40) != 0 {
-            bits | !0b0111_1111
-        } else {
-            bits
-        }
-    }
-    
     /// The unsigned distance in tiles covered by the move. Basically the absolute value of
     /// [Move::displacement].
     pub fn distance(&self) -> u8 {
-        self.displacement().unsigned_abs()
+        self.displacement.unsigned_abs()
     }
 
     /// The move's destination tile.
     pub fn to(&self) -> Tile {
-        let d = self.displacement();
-        match self.axis() {
+        let d = self.displacement;
+        match self.axis {
             Vertical => Tile::new(((self.from.row as i8) + d) as u8, self.from.col),
             Horizontal => Tile::new(self.from.row, ((self.from.col as i8) + d) as u8)
         }
@@ -223,24 +202,24 @@ mod tests {
         assert!(m_res.is_ok());
         let m = m_res.unwrap();
         assert_eq!(m.from, Tile::new(2, 4));
-        assert_eq!(m.axis(), Horizontal);
-        assert_eq!(m.displacement(), 2);
+        assert_eq!(m.axis, Horizontal);
+        assert_eq!(m.displacement, 2);
         assert_eq!(m.to(), Tile::new(2, 6));
 
         let m_res = Move::from_tiles(Tile::new(2, 3), Tile::new(5, 3));
         assert!(m_res.is_ok());
         let m = m_res.unwrap();
         assert_eq!(m.from, Tile::new(2, 3));
-        assert_eq!(m.axis(), Vertical);
-        assert_eq!(m.displacement(), 3);
+        assert_eq!(m.axis, Vertical);
+        assert_eq!(m.displacement, 3);
         assert_eq!(m.to(), Tile::new(5, 3));
 
         let m_res = Move::from_tiles(Tile::new(1, 4), Tile::new(1, 1));
         assert!(m_res.is_ok());
         let m = m_res.unwrap();
         assert_eq!(m.from, Tile::new(1, 4));
-        assert_eq!(m.axis(), Horizontal);
-        assert_eq!(m.displacement(), -3);
+        assert_eq!(m.axis, Horizontal);
+        assert_eq!(m.displacement, -3);
         assert_eq!(m.distance(), 3);
         assert_eq!(m.to(), Tile::new(1, 1));
 
@@ -248,8 +227,8 @@ mod tests {
         assert!(m_res.is_ok());
         let m = m_res.unwrap();
         assert_eq!(m.from, Tile::new(7, 5));
-        assert_eq!(m.axis(), Vertical);
-        assert_eq!(m.displacement(), -7);
+        assert_eq!(m.axis, Vertical);
+        assert_eq!(m.displacement, -7);
         assert_eq!(m.to(), Tile::new(0, 5));
 
         let m_res = Move::from_tiles(Tile::new(2, 3), Tile::new(3, 6));
