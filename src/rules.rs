@@ -4,6 +4,7 @@ use crate::rules::ThroneRule::KingEntry;
 use crate::KingStrength::{Strong, StrongByThrone};
 use crate::PieceType::King;
 use std::cmp::PartialEq;
+use crate::rules::KingAttack::Armed;
 
 enum SpecialTileType {
     Throne,
@@ -39,6 +40,18 @@ pub enum KingStrength {
     Weak
 }
 
+/// Whether king may participate in captures.
+#[derive(PartialEq, Eq, Copy, Clone, Debug)]
+pub enum KingAttack {
+    /// King can participate in captures in same way as normal pieces.
+    Armed,
+    /// King may be the passive capturing piece (ie, may be captured against) but cannot initiate
+    /// captures.
+    Anvil,
+    /// King may initiate captures but cannot be captured against.
+    Hammer
+}
+
 
 /// A struct describing what pieces certain special tiles are considered hostile to.
 #[derive(Copy, Clone, Debug)]
@@ -68,8 +81,8 @@ pub struct Ruleset {
     pub king_strength: KingStrength,
     /// Whether the edge counts as hostile to the king.
     pub hostile_edge: bool,
-    /// Whether the king is armed (can participate in captures).
-    pub armed_king: bool,
+    /// Rules relating to the king's ability to participate in captures.
+    pub king_attack: KingAttack,
     /// Rules relating to shieldwall captures.
     pub shieldwall: Option<ShieldwallRules>,
     /// Whether the throne blocks movement.
@@ -89,7 +102,7 @@ pub const FEDERATION_BRANDUBH: Ruleset = Ruleset {
     edge_escape: false,
     king_strength: StrongByThrone,
     hostile_edge: false,
-    armed_king: true,
+    king_attack: Armed,
     shieldwall: None,
     throne_movement: KingEntry,
     may_enter_corners: PieceSet::from_piece_type(King),
@@ -102,11 +115,12 @@ pub const FEDERATION_BRANDUBH: Ruleset = Ruleset {
     attacker_starts: true
 };
 
+/// Rules for Copenhagen Hnefatafl.
 pub const COPENHAGEN_HNEFATAFL: Ruleset = Ruleset {
     edge_escape: false,
     king_strength: Strong,
     hostile_edge: false,
-    armed_king: true,
+    king_attack: Armed,
     shieldwall: Some(ShieldwallRules {
         corners_may_close: true,
         captures: PieceSet::from_piece_type(Soldier)

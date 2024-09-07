@@ -1,3 +1,4 @@
+use std::cmp::PartialEq;
 use crate::board::Board;
 use crate::error::ParseError;
 use crate::game::GameOutcome::Winner;
@@ -16,6 +17,7 @@ use crate::Axis::{Horizontal, Vertical};
 use crate::InvalidMove::WrongPlayer;
 use std::collections::HashSet;
 use std::str::FromStr;
+use crate::rules::KingAttack::{Anvil, Armed, Hammer};
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum InvalidMove {
@@ -101,8 +103,11 @@ impl<T: BitField> Game<T> {
         if let Some(other_piece) = self.board.get_piece(tile) {
             // Tile contains a piece. If the piece is of a different side, tile is hostile, unless
             // that piece is an unarmed king.
-            (other_piece.side != piece.side)
-                && (self.rules.armed_king || !(other_piece.piece_type == King))
+            (other_piece.side != piece.side) && (
+                other_piece.piece_type != King 
+                    || self.rules.king_attack == Armed
+                    || self.rules.king_attack == Anvil
+            )
         } else {
             // Tile is empty. So it is only hostile if it is a special tile/edge and the rules state
             // that it is hostile to the given piece.
@@ -126,7 +131,7 @@ impl<T: BitField> Game<T> {
     }
 
     /// Check whether a move is valid. If the move is valid, returns `None`; otherwise, the wrapped
-    /// [`InvalidMove`] variant indicates why the move is invalid..
+    /// [`InvalidMove`] variant indicates why the move is invalid.
     pub fn check_move_validity(&self, m: Move) -> MoveValidity {
         let from = m.from;
         let to = m.to();
@@ -323,43 +328,56 @@ impl<T: BitField> Game<T> {
         if occupant.is_none() {
             return MoveOutcome { captures, game_outcome: None }
         }
-        let mover = occupant.expect("Occupant must not be None");
+        let mover = occupant.expect("Moving piece must not be None");
         let to = m.to();
-        for n in self.board.neighbors(to) {
-            if let Some(other_piece) = self.board.get_piece(n) {
-                if other_piece.side == mover.side {
-                    // Friendly neighbour so no possibility for capture
-                    continue
-                }
-                let signed_to_row = to.row as i8;
-                let signed_to_col = to.col as i8;
-                let signed_n_row = n.row as i8;
-                let signed_n_col = n.col as i8;
-                let signed_far_row = signed_to_row + ((signed_n_row - signed_to_row) * 2);
-                let signed_far_col = signed_to_col + ((signed_n_col - signed_to_col) * 2);
-                // Check if the tile on the other side of the neighbour is a hostile tile, or if the
-                // neighbour is on the edge and the edge is treated as hostile to that piece
-                
-                if self.row_col_hostile(signed_far_row, signed_far_col, other_piece) {
-                    // We know that the neighbouring opposing piece is surrounded by the
-                    // moving piece and another hostile tile. So it is captured, *unless* it
-                    // is a strong king.
-                    if (other_piece.piece_type == King) && self.king_is_strong() {
-                        // Get the tiles surrounding `n` on the perpendicular axis.
-                        let perp_hostile= if to.row == n.row {
-                            self.row_col_hostile(signed_n_row + 1, signed_n_col, other_piece)
-                                && self.row_col_hostile(signed_n_row - 1, signed_n_col, other_piece)
-                        } else {
-                            self.row_col_hostile(signed_n_row, signed_n_col + 1, other_piece)
-                                && self.row_col_hostile(signed_n_row, signed_n_col - 1, other_piece)
-                        };
-                        if !perp_hostile {
-                            continue
-                        }
+        if mover.piece_type != King 
+            || self.rules.king_attack == Armed 
+            || self.rules.king_attack == Hammer {
+            for n in self.board.neighbors(to) {
+                if let Some(other_piece) = self.board.get_piece(n) {
+                    if other_piece.side == mover.side {
+                        // Friendly neighbour so no possibility for capture
+                        continue
                     }
-                    captures.insert(n);
+                    let signed_to_row = to.row as i8;
+                    let signed_to_col = to.col as i8;
+                    let signed_n_row = n.row as i8;
+                    let signed_n_col = n.col as i8;
+                    let signed_far_row = signed_to_row + ((signed_n_row - signed_to_row) * 2);
+                    let signed_far_col = signed_to_col + ((signed_n_col - signed_to_col) * 2);
+
+                    // Check if the tile on the other side of the neighbour is a hostile tile, or if
+                    // the neighbour is on the edge and the edge is treated as hostile to that piece
+                    if self.row_col_hostile(signed_far_row, signed_far_col, other_piece) {
+                        // We know that the neighbouring opposing piece is surrounded by the
+                        // moving piece and another hostile tile. So it is captured, *unless* it
+                        // is a strong king.
+                        if (other_piece.piece_type == King) && self.king_is_strong() {
+                            // Get the tiles surrounding `n` on the perpendicular axis.
+                            let perp_hostile= if to.row == n.row {
+                                self.row_col_hostile(signed_n_row + 1, signed_n_col, other_piece)
+                                    && self.row_col_hostile(
+                                    signed_n_row - 1,
+                                    signed_n_col,
+                                    other_piece
+                                )
+                            } else {
+                                self.row_col_hostile(signed_n_row, signed_n_col + 1, other_piece)
+                                    && self.row_col_hostile(
+                                    signed_n_row, 
+                                    signed_n_col - 1,
+                                    other_piece
+                                )
+                            };
+                            if !perp_hostile {
+                                continue
+                            }
+                        }
+                        captures.insert(n);
+                    }
                 }
             }
+
         }
 
         if let Some(walled) = self.detect_shieldwall(m) {
