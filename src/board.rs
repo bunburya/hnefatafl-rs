@@ -289,10 +289,8 @@ impl<T: BitField> Board<T> {
         enclosing_piece_types: PieceSet,
         enclosure: &mut Enclosure,
     ) -> Option<bool> {
-        println!("checking ({row}, {col})");
         let tile = Tile::new(row, col);
         if !self.tile_in_bounds(tile) {
-            println!("found OOB tile");
             Some(false)
         } else if let Some(p) = self.get_piece(tile) {
             return if enclosed_piece_types.contains(p) {
