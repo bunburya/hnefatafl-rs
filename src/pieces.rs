@@ -1,4 +1,4 @@
-use std::ops::{BitOr, Shl, Shr};
+use std::ops::{BitOr, Shl};
 use crate::error::ParseError;
 use crate::error::ParseError::BadChar;
 use crate::pieces::PieceType::{Commander, Guard, King, Knight, Mercenary, Soldier};
@@ -144,6 +144,37 @@ impl From<u16> for PieceSet {
     }
 }
 
+impl From<PieceType> for PieceSet {
+
+    /// Create a new [`PieceSet`] which includes only the given piece type (on each side).
+    fn from(value: PieceType) -> Self {
+        Self::from_piece_type(value)
+    }
+}
+
+/// Create a new [`PieceSet`] containing the given piece types (on both sides).
+impl From<Vec<PieceType>> for PieceSet {
+    fn from(value: Vec<PieceType>) -> Self {
+        Self(value.into_iter().fold(0u16, |acc, piece_type| {
+            acc | (piece_type as u16) | ((piece_type as u16) << 8)
+        }))
+    }
+}
+
+impl From<Piece> for PieceSet {
+    fn from(value: Piece) -> Self {
+        Self::from_piece(value)
+    }
+}
+
+impl From<Vec<Piece>> for PieceSet {
+    fn from(value: Vec<Piece>) -> Self {
+        Self(value.into_iter().fold(0u16, |acc, piece| {
+            acc | (piece.piece_type << piece.side)
+        }))
+    }
+}
+
 impl PieceSet {
 
     /// Create a new empty [`PieceSet`].
@@ -156,16 +187,20 @@ impl PieceSet {
         Self(0b1111_1111_1111_1111)
     }
     
-    /// Create a new [`PieceSet`] which includes only the given piece type (on each side).
-    pub const fn from_piece_type(piece_type: PieceType) -> Self {
-        Self((piece_type as u16) | ((piece_type as u16) << 8))
+    /// Create a new [`PieceSet`] which includes the given piece type (on both sides).
+    /// 
+    /// **NOTE**: You can also use `PieceSet::from(piece_type)` for the same effect, but this
+    /// function is `const`.
+    pub const fn from_piece_type(value: PieceType) -> Self {
+        Self((value as u16) | ((value as u16) << 8))
     }
 
-    /// Create a new [`PieceSet`] containing the given piece types (on both sides).
-    pub fn from_piece_types<T: IntoIterator<Item = PieceType>>(piece_types: T) -> Self {
-        Self(piece_types.into_iter().fold(0u16, |acc, piece_type| {
-            acc | (piece_type as u16) | ((piece_type as u16) << 8)
-        }))
+    /// Create a new [`PieceSet`] which includes the given pieces.
+    ///
+    /// **NOTE**: You can also use `PieceSet::from(piece)` for the same effect, but this function
+    /// is `const`.
+    pub const fn from_piece(value: Piece) -> Self {
+        Self((value.piece_type as u16) << (value.side as u16))
     }
 
     /// Get the bitmask corresponding to the given piece type and side. If `side` is `None`, the
@@ -214,7 +249,7 @@ mod tests {
 
     #[test]
     fn test_piece_set() {
-        let mut ps = PieceSet::from_piece_types(vec![
+        let mut ps = PieceSet::from(vec![
             King,
             Soldier,
             Guard

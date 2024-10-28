@@ -1,25 +1,47 @@
-use std::fmt::{Display, Formatter, Write};
-use std::ops::RangeBounds;
-use std::str::FromStr;
-use Side::{Attacker, Defender};
-
 use crate::error::ParseError;
 use crate::error::ParseError::BadLineLen;
 use crate::pieces::PieceType::{King, Soldier};
 use crate::pieces::{Piece, Side};
 use crate::tiles::Tile;
 use crate::traits::BitField;
+use crate::PieceSet;
+use std::collections::HashSet;
+use std::fmt::{Display, Formatter, Write};
+use std::ops::RangeBounds;
+use std::str::FromStr;
+use Side::{Attacker, Defender};
 
 const NEIGHBOR_OFFSETS: [[i8; 2]; 4] = [[-1, 0], [1, 0], [0, -1], [0, 1]];
 
+/// A space on the board that is enclosed by pieces.
+pub struct Enclosure {
+    /// A set of all occupied enclosed tiles.
+    occupied: HashSet<Tile>,
+    /// A set of all unoccupied enclosed tiles.
+    unoccupied: HashSet<Tile>,
+    /// A set of tiles representing the boundary of the enclosure, ie, the enclosing pieces.
+    boundary: HashSet<Tile>
+}
+
+impl Default for Enclosure {
+    fn default() -> Self {
+        Enclosure {
+            occupied: HashSet::new(),
+            unoccupied: HashSet::new(),
+            boundary: HashSet::new()
+        }
+    }
+}
+
 /// Store information on the current board state (ie, pieces). This struct currently handles only a
-/// simple board, ie, a king and soldiers on a 7x7 board.
+/// simple board, ie, a king and soldiers (no knights, commanders, etc).
 ///
-/// Bitfields are used to minimise memory usage. A single u64 is used to record the positions of
-/// all attacker pieces, and another u64 is used to record the positions of the defender bits.
-/// On a 7x7 board, there are some unused bits: we use the first 7 bits of the least significant 7
-/// bytes to record the pieces. The most significant byte of the `defenders` bitfield is used to
-/// encode the position of the king.
+/// Bitfields are used to minimise memory usage. The parameter `T` is a type that implements the
+/// [`BitField`] trait (most of the integer types do this), ensuring that it supports the relevant
+/// bitwise operations.  A single integer of type `T` is used to record the positions of all
+/// attacker pieces, and another integer is used to record the positions of the defender bits. There
+/// should generally be some bits left over, which are used to encode the current position of the
+/// king.
 ///
 /// Currently only basic getting and setting is implemented at the bitfield level. More complex game
 /// logic (like checking move validity, etc) is implemented elsewhere and uses [Tile] structs. If
@@ -154,6 +176,7 @@ impl<T: BitField> Board<T> {
         row >= 0 && col >= 0 && (row as u8) < self.side_len && (col as u8) < self.side_len
     }
 
+    /// Find a tile's neighbours (ie, the directly above, below and to either side of it).
     pub fn neighbors(&self, tile: Tile) -> Vec<Tile> {
         let row = tile.row;
         let col = tile.col;
@@ -170,6 +193,8 @@ impl<T: BitField> Board<T> {
         neighbors
     }
 
+    /// Get all the tiles between the given two tiles. If given tiles do not share a row or column,
+    /// an empty vector is returned.
     pub fn tiles_between(&self, t1: Tile, t2: Tile) -> Vec<Tile> {
         let mut tiles: Vec<Tile> = vec![];
         let (r1, c1, r2, c2) = (t1.row, t1.col, t2.row, t2.col);
@@ -200,12 +225,22 @@ impl<T: BitField> Board<T> {
         self.state.tile_occupied(tile)
     }
     
+    /// Check whether the tile at the given row and column is occupied by any piece.
+    pub fn row_col_occupied(&self, row: u8, col: u8) -> bool {
+        self.tile_occupied(Tile::new(row, col))
+    }
+    
     /// Check whether the given tile is at the edge of the board (including at a corner).
     pub fn tile_at_edge(&self, tile: Tile) -> bool {
         tile.row == 0
             || tile.row == self.side_len - 1
             || tile.col == 0
             || tile.col == self.side_len - 1
+    }
+    
+    /// Check whether the given tile is surrounded on all sides by pieces (friend or foe).
+    pub fn tile_surrounded(&self, tile: Tile) -> bool {
+        self.neighbors(tile).iter().all(|t| self.tile_occupied(*t))
     }
 
     /// Place the given piece on the given tile.
@@ -231,18 +266,150 @@ impl<T: BitField> Board<T> {
         }
     }
 
+    /// Get the piece (if any) that occupies the given tile.
     pub fn get_piece(&self, tile: Tile) -> Option<Piece> {
         self.state.get_piece(tile)
     }
 
+    /// Get the current position of the king.
     pub fn get_king(&self) -> Tile {
         self.state.get_king()
     }
 
+    /// Check whether the given tile is occupied by the king.
     pub fn is_king(&self, tile: Tile) -> bool {
         self.state.is_king(tile)
     }
-
+    
+    fn row_col_enclosed(
+        &self,
+        row: u8,
+        col: u8,
+        enclosed_piece_types: PieceSet,
+        enclosing_piece_types: PieceSet,
+        enclosure: &mut Enclosure,
+    ) -> Option<bool> {
+        println!("checking ({row}, {col})");
+        let tile = Tile::new(row, col);
+        if !self.tile_in_bounds(tile) {
+            println!("found OOB tile");
+            Some(false)
+        } else if let Some(p) = self.get_piece(tile) {
+            return if enclosed_piece_types.contains(p) {
+                enclosure.occupied.insert(tile);
+                Some(true)
+            } else if enclosing_piece_types.contains(p) {
+                enclosure.boundary.insert(tile);
+                Some(false)
+            } else {
+                // Tile occupied by piece that can neither enclose nor be enclosed, so no enclosure
+                // is present.
+                None
+            }
+        } else {
+            // Empty tiles can be enclosed.
+            enclosure.unoccupied.insert(tile);
+            Some(true)
+        }
+    }
+    
+    /// Find an area surrounding the tile at `start`, containing only the pieces in
+    /// `enclosed_pieces` and which is fully surrounded by pieces other than those in
+    /// `enclosed_pieces`. If `abort_on_edge` or `abort_on_corner` is `true` and an edge or corner,
+    /// respectively, is encountered, no enclosure is found.
+    /// 
+    /// Uses a flood fill algorithm based on https://en.wikipedia.org/wiki/Flood_fill#Span_filling
+    pub fn find_enclosure(
+        &self,
+        row: u8,
+        col: u8,
+        enclosed_pieces: PieceSet,
+        enclosing_pieces: PieceSet,
+        abort_on_edge: bool,
+        abort_on_corner: bool
+    ) -> Option<Enclosure> {
+        let mut enclosure = Enclosure::default();
+        if !self.row_col_enclosed(row, col, enclosed_pieces, enclosing_pieces, &mut enclosure)? {
+            return None
+        }
+        let mut stack: Vec<(u8, u8, u8, i8)> = vec![];
+        stack.push((col, col, row, 1));
+        if row > 0 {
+            stack.push((col, col, row - 1, -1));
+        }
+        while let Some((mut c1, c2, r, dr)) = stack.pop() {
+            let mut c = c1;
+            if self.row_col_enclosed(r, c, enclosed_pieces, enclosing_pieces, &mut enclosure)? {
+                if c == 0 {
+                    break
+                }
+                while (c > 0) && self.row_col_enclosed(
+                    r, 
+                    c - 1,
+                    enclosed_pieces,
+                    enclosing_pieces,
+                    &mut enclosure
+                )? {
+                    let t= Tile::new(r, c - 1);
+                    if (abort_on_edge && self.tile_at_edge(t)) 
+                        || (abort_on_corner && self.corners.contains(&t)) {
+                        return None
+                    }
+                    c -= 1
+                }
+                
+                if (c < c1) && (c1 > 0) && ((r as i8) >= dr) 
+                    && ((r as i8) - dr < self.side_len as i8) {
+                    stack.push((c, c1 - 1, ((r as i8) - dr) as u8, -dr))
+                }
+            } 
+            while c1 <= c2 {
+                if c1 >= self.side_len {
+                    break
+                }
+                while self.row_col_enclosed(
+                    r,
+                    c1,
+                    enclosed_pieces,
+                    enclosing_pieces,
+                    &mut enclosure
+                )? {
+                    let t= Tile::new(r, c1);
+                    if abort_on_edge && self.tile_at_edge(t) {
+                        return None
+                    }
+                    if abort_on_corner && self.corners.contains(&t) {
+                        return None
+                    }
+                    c1 += 1
+                }
+                
+                if (c1 > c) && (c1 > 0) && ((r as i8) > -dr) {
+                    stack.push((c, c1 - 1, ((r as i8) + dr) as u8, dr));
+                }
+                if (c1 > 0) && (c2 + 1 < self.side_len) && (c1 - 1 > c2) {
+                    stack.push((c2 + 1, c1 - 1, ((r as i8) - dr) as u8, -dr))
+                }
+                
+                c1 += 1;
+                
+                while (c1 < c2) && !self.row_col_enclosed(
+                    r,
+                    c1,
+                    enclosed_pieces,
+                    enclosing_pieces,
+                    &mut enclosure
+                )? {
+                    c1 += 1
+                }
+                c = c1
+                
+            }
+            
+        }
+        Some(enclosure)
+    }
+    
 }
 
 impl<T: BitField> Display for Board<T> {
@@ -293,9 +460,12 @@ pub type MediumBoard = Board<u128>;
 
 #[cfg(test)]
 mod tests {
-    use crate::board::{Board, Tile};
+    use crate::board::{Board, SmallBoard, Tile};
     use crate::pieces::Piece;
     use crate::pieces::PieceType::Soldier;
+    use crate::PieceType::King;
+    use crate::Side::{Attacker, Defender};
+    use crate::PieceSet;
     use std::collections::HashSet;
     use std::str::FromStr;
 
@@ -304,8 +474,11 @@ mod tests {
     fn check_tile_vec(actual: Vec<Tile>, expected: Vec<Tile>) {
         let actual_set: HashSet<Tile> = actual.iter().copied().collect();
         assert_eq!(actual_set.len(), actual.len(), "Vec contains duplicates");
-        let expected_set: HashSet<Tile> = expected.iter().copied().collect();
-        assert_eq!(actual_set, expected_set);
+        let mut actual_sorted = actual.clone();
+        actual_sorted.sort();
+        let mut expected_sorted = expected.clone();
+        expected_sorted.sort();
+        assert_eq!(actual_sorted, expected_sorted);
     }
 
     #[test]
@@ -373,6 +546,173 @@ mod tests {
         for t in empty {
             assert!(!board.state.tile_occupied(t));
         }
+    }
+    
+    #[test]
+    fn test_enclosures() {
+        let full_enclosure = [
+            "..ttt..",
+            ".t.K.t.",
+            "..tttt.",
+            ".......",
+            ".......",
+            ".......",
+            ".......",
+        ].join("\n");
+        let encl_with_edge = [
+            "..t.t..",
+            ".t.K.t.",
+            "..tttt.",
+            ".......",
+            ".......",
+            ".......",
+            ".......",
+        ].join("\n");
+        let encl_with_corner = [
+            ".....t.",
+            "....tK.",
+            "....ttt",
+            ".......",
+            ".......",
+            ".......",
+            ".......",
+        ].join("\n");
+        let encl_with_soldier = [
+            "..ttt..",
+            ".t.KTt.",
+            "..tttt.",
+            ".......",
+            ".......",
+            ".......",
+            ".......",
+        ].join("\n");
+        let board: SmallBoard = Board::from_str(full_enclosure.as_str()).unwrap();
+        let encl_res = board.find_enclosure(
+            1, 
+            3,
+            PieceSet::from(King),
+            PieceSet::from(Soldier),
+            true, 
+            true
+        );
+        assert!(encl_res.is_some());
+        let encl = encl_res.unwrap();
+        check_tile_vec(encl.occupied.into_iter().collect(), vec![Tile::new(1, 3)]);
+        check_tile_vec(
+            encl.unoccupied.into_iter().collect(),
+            vec![Tile::new(1, 2), Tile::new(1, 4)]
+        );
+        check_tile_vec(
+            encl.boundary.into_iter().collect(),
+            vec![
+                Tile::new(0, 2), Tile::new(0, 3), Tile::new(0, 4),
+                Tile::new(1, 1), Tile::new(1, 5),
+                Tile::new(2, 2), Tile::new(2, 3), Tile::new(2, 4)
+            ]
+        );
+
+        let board: SmallBoard = Board::from_str(encl_with_edge.as_str()).unwrap();
+        let encl_res = board.find_enclosure(
+            1,
+            3,
+            PieceSet::from(King),
+            PieceSet::from(Soldier),
+            true,
+            true
+        );
+        assert!(encl_res.is_none());
+        let encl_res = board.find_enclosure(
+            1,
+            3,
+            PieceSet::from(King),
+            PieceSet::from(Soldier),
+            false,
+            true
+        );
+        assert!(encl_res.is_some());
+        let encl = encl_res.unwrap();
+        check_tile_vec(encl.occupied.into_iter().collect(), vec![Tile::new(1, 3)]);
+        check_tile_vec(
+            encl.unoccupied.into_iter().collect(),
+            vec![Tile::new(0, 3), Tile::new(1, 2), Tile::new(1, 4)]
+        );
+        check_tile_vec(
+            encl.boundary.into_iter().collect(),
+            vec![
+                Tile::new(0, 2), Tile::new(0, 4),
+                Tile::new(1, 1), Tile::new(1, 5),
+                Tile::new(2, 2), Tile::new(2, 3), Tile::new(2, 4)
+            ]
+        );
+        
+        let board: SmallBoard = Board::from_str(encl_with_corner.as_str()).unwrap();
+        let encl_res = board.find_enclosure(
+            1,
+            3,
+            PieceSet::from(King),
+            PieceSet::from(Soldier),
+            false,
+            true
+        );
+        assert!(encl_res.is_none());
+        let encl_res = board.find_enclosure(
+            1,
+            5,
+            PieceSet::from(King),
+            PieceSet::from(Soldier),
+            false,
+            false
+        );
+        assert!(encl_res.is_some());
+        let encl = encl_res.unwrap();
+        check_tile_vec(encl.occupied.into_iter().collect(), vec![Tile::new(1, 5)]);
+        check_tile_vec(
+            encl.unoccupied.into_iter().collect(),
+            vec![Tile::new(0, 6), Tile::new(1, 6)]
+        );
+        check_tile_vec(
+            encl.boundary.into_iter().collect(),
+            vec![
+                Tile::new(0, 5), Tile::new(1, 4),
+                Tile::new(2, 5), Tile::new(2, 6)
+            ]
+        );
+
+        let board: SmallBoard = Board::from_str(encl_with_soldier.as_str()).unwrap();
+        let encl_res = board.find_enclosure(
+            1,
+            3,
+            PieceSet::from(King),
+            PieceSet::from(Piece::new(Soldier, Attacker)),
+            true,
+            true
+        );
+        assert!(encl_res.is_none());
+        let encl_res = board.find_enclosure(
+            1,
+            3,
+            PieceSet::from(vec![Piece::new(King, Defender), Piece::new(Soldier, Defender)]),
+            PieceSet::from(Piece::new(Soldier, Attacker)),
+            true,
+            true
+        );
+        assert!(encl_res.is_some());
+        let encl = encl_res.unwrap();
+        check_tile_vec(
+            encl.occupied.into_iter().collect(),
+            vec![Tile::new(1, 3), Tile::new(1, 4)]);
+        check_tile_vec(
+            encl.unoccupied.into_iter().collect(),
+            vec![Tile::new(1, 2)]
+        );
+        check_tile_vec(
+            encl.boundary.into_iter().collect(),
+            vec![
+                Tile::new(0, 2), Tile::new(0, 3), Tile::new(0, 4),
+                Tile::new(1, 1), Tile::new(1, 5),
+                Tile::new(2, 2), Tile::new(2, 3), Tile::new(2, 4)
+            ]
+        );
     }
 
 }

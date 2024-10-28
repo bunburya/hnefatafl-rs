@@ -13,7 +13,7 @@ use std::str::FromStr;
 /// It is implemented as a single byte, where the most significant four bits describe the row
 /// and the least significant four bits describe the column. It is therefore appropriate for use
 /// with square boards up to 16x16.
-#[derive(Copy, Clone, Eq, PartialEq, Hash)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub struct Tile {
     pub row: u8,
     pub col: u8

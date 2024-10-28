@@ -79,8 +79,6 @@ pub struct Ruleset {
     /// Whether the king is strong (must be surrounded by four opponents or hostile tiles to be
     /// captured).
     pub king_strength: KingStrength,
-    /// Whether the edge counts as hostile to the king.
-    pub hostile_edge: bool,
     /// Rules relating to the king's ability to participate in captures.
     pub king_attack: KingAttack,
     /// Rules relating to shieldwall captures.
@@ -101,7 +99,6 @@ pub struct Ruleset {
 pub const FEDERATION_BRANDUBH: Ruleset = Ruleset {
     edge_escape: false,
     king_strength: StrongByThrone,
-    hostile_edge: false,
     king_attack: Armed,
     shieldwall: None,
     throne_movement: KingEntry,
@@ -119,7 +116,6 @@ pub const FEDERATION_BRANDUBH: Ruleset = Ruleset {
 pub const COPENHAGEN_HNEFATAFL: Ruleset = Ruleset {
     edge_escape: false,
     king_strength: Strong,
-    hostile_edge: false,
     king_attack: Armed,
     shieldwall: Some(ShieldwallRules {
         corners_may_close: true,

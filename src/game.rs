@@ -613,7 +613,7 @@ mod tests {
         let no_corner_rules = Ruleset{
             shieldwall: Some(ShieldwallRules{
                 corners_may_close: false,
-                captures: PieceSet::from_piece_type(Soldier)
+                captures: PieceSet::from(Soldier)
             }),
             ..COPENHAGEN_HNEFATAFL
         };
@@ -807,7 +807,7 @@ mod tests {
     }
     
     #[test]
-    fn test_brandubh() {
+    fn test_real_brandubh() {
         test_real_games(
             FEDERATION_BRANDUBH,
             "...t...\n...t...\n...T...\nttTKTtt\n...T...\n...t...\n...t...",
