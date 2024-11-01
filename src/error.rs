@@ -33,3 +33,7 @@ impl From<ParseIntError> for ParseError {
 pub enum MoveError {
     DisjointTiles
 }
+
+pub enum BoardError {
+    OutOfBounds
+}

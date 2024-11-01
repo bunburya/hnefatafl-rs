@@ -1,5 +1,4 @@
-use std::cmp::PartialEq;
-use crate::board::Board;
+use crate::board::{Board, Enclosure};
 use crate::error::ParseError;
 use crate::game::GameOutcome::Winner;
 use crate::game::GameStatus::{Ongoing, Over};
@@ -8,16 +7,18 @@ use crate::game::MoveValidity::{Invalid, Valid};
 use crate::pieces::PieceType::King;
 use crate::pieces::Side::{Attacker, Defender};
 use crate::pieces::{Piece, Side};
+use crate::rules::KingAttack::{Anvil, Armed, Hammer};
 use crate::rules::KingStrength::{Strong, StrongByThrone, Weak};
 use crate::rules::{Ruleset, ShieldwallRules, ThroneRule};
-use crate::tiles::{Move, Tile};
+use crate::tiles::{Coords, Move, Tile};
 use crate::traits::BitField;
-use crate::Axis;
 use crate::Axis::{Horizontal, Vertical};
 use crate::InvalidMove::WrongPlayer;
+use crate::PieceType::Soldier;
+use crate::{Axis, PieceSet};
+use std::cmp::PartialEq;
 use std::collections::HashSet;
 use std::str::FromStr;
-use crate::rules::KingAttack::{Anvil, Armed, Hammer};
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum InvalidMove {
@@ -119,12 +120,11 @@ impl<T: BitField> Game<T> {
         }
     }
     
-    /// Determine whether the position at the given row and tile is hostile to the given piece,
-    /// including whether the position is a hostile edge. `row` and `col` are `i8`s to allow for
-    /// negative values (which are out of bounds).
-    pub fn row_col_hostile(&self, row: i8, col: i8, piece: Piece) -> bool {
-        if self.board.row_col_in_bounds(row, col) {
-            self.tile_hostile(Tile::new(row as u8, col as u8), piece)
+    /// Determine whether the position at the given coordinates is hostile to the given piece,
+    /// including whether the position is a hostile edge. 
+    pub fn coords_hostile(&self, coords: Coords, piece: Piece) -> bool {
+        if self.board.coords_in_bounds(coords) {
+            self.tile_hostile(Tile::new(coords.row as u8, coords.col as u8), piece)
         } else {
             self.rules.hostility.edge.contains(piece)
         }
@@ -178,8 +178,9 @@ impl<T: BitField> Game<T> {
         }
     }
 
-    /// Check whether the king is strong (must be surrounded on all four sides to be captured),
-    /// considering the game rules and the king's current position. 
+    /// Check whether the king is *currently* strong (must be surrounded on all four sides to be
+    /// captured), considering the game rules and the king's current position (for example, the
+    /// rules may provide that the king is only strong on or beside the throne). 
     pub fn king_is_strong(&self) -> bool {
         match self.rules.king_strength {
             Strong => true,
@@ -212,6 +213,87 @@ impl<T: BitField> Game<T> {
         }
         None
     }
+    
+    /// Whether the tile (if any) at the given [`Coords`] can theoretically be occupied by the given
+    /// piece according to the rules of the game. Does not take account of whether the tile is
+    /// already occupied or actually accessible.
+    pub fn coords_occupiable(&self, coords: Coords, piece: Piece) -> bool {
+        if !self.board.coords_in_bounds(coords) {
+            return false
+        }
+        let t = Tile::new(coords.row as u8, coords.col as u8);
+        if self.board.throne == t && (
+            (self.rules.throne_movement == ThroneRule::NoEntry) 
+                || (self.rules.throne_movement == ThroneRule::KingEntry && piece.piece_type != King)
+        ) {
+            return false
+        }
+        if !self.rules.may_enter_corners.contains(piece) && self.board.corners.contains(&t) {
+            return false
+        }
+        true
+    }
+
+    /// Check whether the given [`Enclosure`] is "secure", ie, no piece on its boundary is
+    /// vulnerable to capture. If `inside_safe` is `true`, then any square inside the enclosure is
+    /// considered not to be threatening to a boundary piece. Similarly, if `outside_safe` is
+    /// `true`, then any square not inside the enclosure is considered not to be threatening to a
+    /// boundary piece.
+    pub fn enclosure_secure(&self, encl: &Enclosure, inside_safe: bool, outside_safe: bool) -> bool {
+        if inside_safe && outside_safe {
+            // If both inside and outside the enclosure are safe, then the enclosure must be secure.
+            return true
+        }
+        for t in &encl.boundary {
+            println!("testing whether tile {t:?} is safe");
+            let piece = self.board.get_piece(*t)
+                .expect("Boundary should not include empty tiles.");
+            // It would be more efficient to just find the hostile piece once, and would usually
+            // work the same. But technically a boundary could consist of pieces of different sides
+            // (though I'm not sure why that would ever be necessary).
+            let hostile_soldier = Piece::new(Soldier, piece.side.other());
+            
+            // Tile is unprotected along an axis if each neighbouring tile along that axis is not
+            // deemed safe and either (a) is hostile; or (b) can be occupied by a hostile soldier
+            // and is currently unoccupied.
+            'axisloop: for axis in [Vertical, Horizontal] {
+                println!("testing axis {axis:?}");
+                for d in [-1, 1] {
+                    let n_coords = Move::new(*t, axis, d).to_coords();
+                    println!("testing {n_coords:?}");
+                    if let Ok(n_tile) = self.board.coords_to_tile(n_coords) {
+                        println!("found a tile");
+                        let is_inside = encl.contains(&n_tile);
+                        if (inside_safe && is_inside) || (outside_safe && !is_inside) {
+                            // Tile is on a side of the boundary that is known to be safe
+                            println!("Tile is on a side of the boundary that is known to be safe");
+                            continue 'axisloop;
+                        }
+                        if (!self.tile_hostile(n_tile, piece)) && (
+                            self.board.tile_occupied(n_tile)
+                                || !self.coords_occupiable(n_coords, hostile_soldier)
+                        ) {
+                            // Tile is not hostile, AND is either occupied (by a friendly piece) or
+                            // is not occupiable by a hostile piece according to the game rules
+                            println!("Tile is not hostile, AND is either occupied (by a friendly piece) or is not occupiable by a hostile piece according to the game rules");
+                            continue 'axisloop;
+                        }
+                    } else {
+                        // Coords are out of bounds
+                        if !self.rules.hostility.edge.contains(piece) {
+                            // Piece is at edge and edge is not hostile
+                            println!("Piece is at edge and edge is not hostile");
+                            continue 'axisloop;
+                        }
+                    }
+                }
+                println!("not safe");
+                return false
+            }
+        }
+        true
+    }
+    
     
     /// A method used internally by [`Game::detect_shieldwall`]. This method searches in one
     /// direction (along the relevant edge) to find a valid shieldwall. Returns `None` if no
@@ -320,6 +402,37 @@ impl<T: BitField> Game<T> {
             None
         }
     }
+    
+    /// Detect whether the king is in an exit fort.
+    pub fn detect_exit_fort(&self) -> bool {
+        let king_tile = self.board.get_king();
+        
+        // Check king is enclosed by his own pieces
+        if let Some(encl) = self.board.find_enclosure(
+            king_tile,
+            PieceSet::from(King),
+            PieceSet::from(Defender),
+            false,
+            true
+        ) {
+            // Check enclosure has edge access
+            if !encl.unoccupied.iter().any(|t| self.board.tile_at_edge(*t)) {
+                return false
+            }
+            // King has space to move
+            if !self.board.neighbors(king_tile).iter().any(|t| !self.board.tile_occupied(*t)) {
+                return false
+            }
+            // Check enclosing pieces are all themselves safe
+            if !self.enclosure_secure(&encl, true, false) {
+                return false
+            }
+            true
+        } else {
+            false
+        }
+        
+    }
 
     /// Get the outcome of a move (number of captures, whether it ends the game, etc).
     pub fn get_move_outcome(&self, m: Move) -> MoveOutcome {
@@ -345,29 +458,22 @@ impl<T: BitField> Game<T> {
                     let signed_n_col = n.col as i8;
                     let signed_far_row = signed_to_row + ((signed_n_row - signed_to_row) * 2);
                     let signed_far_col = signed_to_col + ((signed_n_col - signed_to_col) * 2);
-
+                    let far_coords = Coords { row: signed_far_row, col: signed_far_col };
                     // Check if the tile on the other side of the neighbour is a hostile tile, or if
                     // the neighbour is on the edge and the edge is treated as hostile to that piece
-                    if self.row_col_hostile(signed_far_row, signed_far_col, other_piece) {
+                    if self.coords_hostile(far_coords, other_piece) {
                         // We know that the neighbouring opposing piece is surrounded by the
                         // moving piece and another hostile tile. So it is captured, *unless* it
                         // is a strong king.
                         if (other_piece.piece_type == King) && self.king_is_strong() {
                             // Get the tiles surrounding `n` on the perpendicular axis.
+                            let n_coords = Coords::from(n);
                             let perp_hostile= if to.row == n.row {
-                                self.row_col_hostile(signed_n_row + 1, signed_n_col, other_piece)
-                                    && self.row_col_hostile(
-                                    signed_n_row - 1,
-                                    signed_n_col,
-                                    other_piece
-                                )
+                                self.coords_hostile(n_coords + (1, 0), other_piece)
+                                    && self.coords_hostile(n_coords + (-1, 0), other_piece)
                             } else {
-                                self.row_col_hostile(signed_n_row, signed_n_col + 1, other_piece)
-                                    && self.row_col_hostile(
-                                    signed_n_row, 
-                                    signed_n_col - 1,
-                                    other_piece
-                                )
+                                self.coords_hostile(n_coords + (0, 1), other_piece)
+                                    && self.coords_hostile( n_coords + (0, -1), other_piece)
                             };
                             if !perp_hostile {
                                 continue
@@ -423,7 +529,6 @@ mod tests {
     };
     use crate::game::MoveValidity::{Invalid, Valid};
     use crate::game::{Game, GameStatus, MoveOutcome};
-    use crate::hashset;
     use crate::pieces::PieceSet;
     use crate::pieces::PieceType::King;
     use crate::pieces::Side::{Attacker, Defender};
@@ -431,6 +536,7 @@ mod tests {
     use crate::rules::{Ruleset, ShieldwallRules, COPENHAGEN_HNEFATAFL, FEDERATION_BRANDUBH};
     use crate::tiles::{Move, Tile};
     use crate::PieceType::Soldier;
+    use crate::{hashset, Piece};
     use std::collections::HashSet;
     use std::fs;
     use std::path::PathBuf;
@@ -738,6 +844,62 @@ mod tests {
 
         let g_small: Game<u128> = Game::new(no_corner_rules, &no_sw_small).unwrap();
         assert_eq!(g_gap.detect_shieldwall(m), None);
+    }
+    
+    #[test]
+    fn test_encl_secure() {
+        let setup_1 = [
+            ".......",
+            "..ttt..",
+            ".t.K.t.",
+            "..ttt..",
+            "......."
+        ].join("\n");
+        let setup_2 = [
+            ".......",
+            ".tttt..",
+            ".t.K.t.",
+            "..tttt.",
+            "......."
+        ].join("\n");
+        let setup_3 = [
+            "..t.t..",
+            ".t.t.t.",
+            ".t.K.t.",
+            "..ttt..",
+            "......."
+        ].join("\n");
+        let setup_4 = [
+            "..t..t.",
+            ".t...t.",
+            ".t.K.t.",
+            "..ttt..",
+            "......."
+        ].join("\n");
+        
+        let candidates = [
+            // string, inside_safe, outside_safe, is_secure, i
+            (&setup_1, false, true, true, 0),
+            (&setup_1, false, false, false, 1),
+            (&setup_2, false, true, true, 2),
+            (&setup_2, true, false, true, 3),
+            (&setup_3, false, true, false, 4),
+            (&setup_4, false, true, true, 5),
+            (&setup_4, true, false, true, 6),
+        ];
+        for (string, inside_safe, outside_safe, is_secure, i) in candidates {
+            let g: Game<u64> = Game::new(COPENHAGEN_HNEFATAFL, string).unwrap();
+            let encl_opt = g.board.find_enclosure(
+                Tile::new(2, 3),
+                PieceSet::from(King),
+                PieceSet::from(Piece::new(Soldier, Attacker)),
+                false, false
+            );
+            assert!(encl_opt.is_some());
+            let encl = encl_opt.unwrap();
+            assert_eq!(g.enclosure_secure(&encl, inside_safe, outside_safe), is_secure)
+        }
+
     }
     
     fn test_real_games(rules: Ruleset, starting_posn: &str, fname: &str) {

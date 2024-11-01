@@ -4,15 +4,47 @@ use crate::error::ParseError::{BadChar, BadMove, BadString, EmptyString};
 use crate::error::{MoveError, ParseError};
 use crate::tiles::Axis::{Horizontal, Vertical};
 use std::fmt::{Debug, Display, Formatter};
+use std::ops::Add;
 use std::str::FromStr;
+
+/// An unbounded row-column pair representing a hypothetical location, which may or may not be on
+/// the board. Can be used to represent out-of-bounds locations, including those with negative row
+/// or column values.
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub struct Coords {
+    pub(crate) row: i8,
+    pub(crate) col: i8
+}
+
+impl Coords {
+    pub(crate) fn new(row: i8, col: i8) -> Self {
+        Self { row, col }
+    }
+}
+
+impl From<Tile> for Coords {
+    fn from(t: Tile) -> Self {
+        Self {
+            row: t.row as i8,
+            col: t.col as i8
+        }
+    }
+}
+
+impl Add<(i8, i8)> for Coords {
+    type Output = Self;
+
+    fn add(self, rhs: (i8, i8)) -> Self {
+        Self {
+            row: self.row + rhs.0,
+            col: self.col + rhs.1
+        }
+    }
+}
 
 /// The location of a single tile on the board, ie, row and column. This struct is only a reference
 /// to a location on the board, and does not contain any other information such as piece placement,
 /// etc.
-///
-/// It is implemented as a single byte, where the most significant four bits describe the row
-/// and the least significant four bits describe the column. It is therefore appropriate for use
-/// with square boards up to 16x16.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub struct Tile {
     pub row: u8,
@@ -26,7 +58,7 @@ impl Tile {
         Self { row, col }
     }
     
-    /// The tile's position on the given axis, ie, the tile's row is `axis` is [`Vertical`] and its
+    /// The tile's position on the given axis, ie, the tile's row if `axis` is [`Vertical`] and its
     /// column if `axis` is [`Horizontal`]. 
     pub fn posn_on_axis(&self, axis: Axis) -> u8 {
         match axis {
@@ -173,6 +205,15 @@ impl Move {
         match self.axis {
             Vertical => Tile::new(((self.from.row as i8) + d) as u8, self.from.col),
             Horizontal => Tile::new(self.from.row, ((self.from.col as i8) + d) as u8)
+        }
+    }
+    
+    /// The row and column of the move's destination tile, as [`Coords`]. 
+    pub fn to_coords(&self) -> Coords {
+        let d = self.displacement;
+        match self.axis {
+            Vertical => Coords { row: (self.from.row as i8) + d, col: self.from.col as i8 },
+            Horizontal => Coords { row: self.from.row as i8, col: (self.from.col as i8) + d }
         }
     }
 }

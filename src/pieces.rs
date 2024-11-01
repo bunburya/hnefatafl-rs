@@ -175,6 +175,20 @@ impl From<Vec<Piece>> for PieceSet {
     }
 }
 
+impl Shl<Side> for u16 {
+    type Output = u16;
+
+    fn shl(self, rhs: Side) -> Self::Output {
+        self << (rhs as u16)
+    }
+}
+
+impl From<Side> for PieceSet {
+    fn from(value: Side) -> Self {
+        Self(0b1111_1111u16 << value)
+    }
+}
+
 impl PieceSet {
 
     /// Create a new empty [`PieceSet`].

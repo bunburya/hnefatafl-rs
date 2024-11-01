@@ -1,8 +1,8 @@
-use crate::error::ParseError;
 use crate::error::ParseError::BadLineLen;
+use crate::error::{BoardError, ParseError};
 use crate::pieces::PieceType::{King, Soldier};
 use crate::pieces::{Piece, Side};
-use crate::tiles::Tile;
+use crate::tiles::{Coords, Tile};
 use crate::traits::BitField;
 use crate::PieceSet;
 use std::collections::HashSet;
@@ -10,26 +10,24 @@ use std::fmt::{Display, Formatter, Write};
 use std::ops::RangeBounds;
 use std::str::FromStr;
 use Side::{Attacker, Defender};
+use crate::utils::UniqueStack;
 
 const NEIGHBOR_OFFSETS: [[i8; 2]; 4] = [[-1, 0], [1, 0], [0, -1], [0, 1]];
 
 /// A space on the board that is enclosed by pieces.
+#[derive(Debug, Default)]
 pub struct Enclosure {
     /// A set of all occupied enclosed tiles.
-    occupied: HashSet<Tile>,
+    pub occupied: HashSet<Tile>,
     /// A set of all unoccupied enclosed tiles.
-    unoccupied: HashSet<Tile>,
+    pub unoccupied: HashSet<Tile>,
     /// A set of tiles representing the boundary of the enclosure, ie, the enclosing pieces.
-    boundary: HashSet<Tile>
+    pub boundary: HashSet<Tile>
 }
 
-impl Default for Enclosure {
-    fn default() -> Self {
-        Enclosure {
-            occupied: HashSet::new(),
-            unoccupied: HashSet::new(),
-            boundary: HashSet::new()
-        }
+impl Enclosure {
+    pub fn contains(&self, tile: &Tile) -> bool {
+        self.occupied.contains(tile) || self.unoccupied.contains(tile)
     }
 }
 
@@ -163,17 +161,30 @@ impl<T: BitField> Board<T> {
         board.state = state;
         board
     }
-
-
+    
+    /// Check whether the given tile is on the board. Ideally should not be necessary as [`Tile`]s
+    /// should always represent a position on the board and out-of-bounds [`Tile`]s should not be
+    /// created.
     pub fn tile_in_bounds(&self, tile: Tile) -> bool {
         let r = 0..self.side_len;
         r.contains(&tile.row) && r.contains(&tile.col)
     }
     
-    /// Check whether the given row and column refer to a tile on the board. `row` and `col` are
-    /// signed integers to allow for negative values (which will always be out of bounds).
-    pub fn row_col_in_bounds(&self, row: i8, col: i8) -> bool {
-        row >= 0 && col >= 0 && (row as u8) < self.side_len && (col as u8) < self.side_len
+    /// Convert an unbounded [`Coords`] to a [`Tile`] representing a position on the board, if
+    /// possible. If the coords represents a position not on the board, return a
+    /// [`BoardError::OutOfBounds`] error.
+    pub fn coords_to_tile(&self, coords: Coords) -> Result<Tile, BoardError> {
+        if self.coords_in_bounds(coords) {
+            Ok(Tile::new(coords.row as u8, coords.col as u8))
+        } else {
+            Err(BoardError::OutOfBounds)
+        }
+    }
+    
+    /// Check whether the coords refer to a position on the board.
+    pub fn coords_in_bounds(&self, coords: Coords) -> bool {
+        let range = 0..(self.side_len as i8);
+        range.contains(&coords.row) && range.contains(&coords.col)
     }
 
     /// Find a tile's neighbours (ie, the directly above, below and to either side of it).
@@ -184,10 +195,9 @@ impl<T: BitField> Board<T> {
         let signed_col = col as i8;
         let mut neighbors: Vec<Tile> = vec![];
         for [r_off, c_off] in NEIGHBOR_OFFSETS.iter() {
-            let r = signed_row + r_off;
-            let c = signed_col + c_off;
-            if self.row_col_in_bounds(r, c) {
-                neighbors.push(Tile::new(r as u8, c as u8));
+            let coords = Coords { row: signed_row + r_off, col: signed_col + c_off };
+            if let Ok(t) = self.coords_to_tile(coords) {
+                neighbors.push(t);
             }
         } 
         neighbors
@@ -283,31 +293,33 @@ impl<T: BitField> Board<T> {
     
     fn row_col_enclosed(
         &self,
-        row: u8,
-        col: u8,
+        row: i8,
+        col: i8,
         enclosed_piece_types: PieceSet,
         enclosing_piece_types: PieceSet,
         enclosure: &mut Enclosure,
     ) -> Option<bool> {
-        let tile = Tile::new(row, col);
-        if !self.tile_in_bounds(tile) {
-            Some(false)
-        } else if let Some(p) = self.get_piece(tile) {
-            return if enclosed_piece_types.contains(p) {
-                enclosure.occupied.insert(tile);
-                Some(true)
-            } else if enclosing_piece_types.contains(p) {
-                enclosure.boundary.insert(tile);
-                Some(false)
+        let coords = Coords { row, col };
+        if let Ok(tile) = self.coords_to_tile(coords) {
+            if let Some(p) = self.get_piece(tile) {
+                if enclosed_piece_types.contains(p) {
+                    enclosure.occupied.insert(tile);
+                    Some(true)
+                } else if enclosing_piece_types.contains(p) {
+                    enclosure.boundary.insert(tile);
+                    Some(false)
+                } else {
+                    // Tile occupied by piece that can neither enclose nor be enclosed, so no enclosure
+                    // is present.
+                    None
+                }
             } else {
-                // Tile occupied by piece that can neither enclose nor be enclosed, so no enclosure
-                // is present.
-                None
+                // Empty tiles can be enclosed.
+                enclosure.unoccupied.insert(tile);
+                Some(true)
             }
         } else {
-            // Empty tiles can be enclosed.
-            enclosure.unoccupied.insert(tile);
-            Some(true)
+            Some(false)
         }
     }
     
@@ -319,36 +331,35 @@ impl<T: BitField> Board<T> {
     /// Uses a flood fill algorithm based on https://en.wikipedia.org/wiki/Flood_fill#Span_filling
     pub fn find_enclosure(
         &self,
-        row: u8,
-        col: u8,
+        tile: Tile,
         enclosed_pieces: PieceSet,
         enclosing_pieces: PieceSet,
         abort_on_edge: bool,
         abort_on_corner: bool
     ) -> Option<Enclosure> {
+        let Coords { row, col } = Coords::from(tile);
         let mut enclosure = Enclosure::default();
         if !self.row_col_enclosed(row, col, enclosed_pieces, enclosing_pieces, &mut enclosure)? {
             return None
         }
-        let mut stack: Vec<(u8, u8, u8, i8)> = vec![];
+        // In theory, I don't think we would need a UniqueStack if our flood fill logic worked
+        // perfectly, but we were getting infinite loops on certain grids as it seemed certain
+        // values were being pushed to the stack repeatedly. I couldn't debug it so this is an easy
+        // option to address it.
+        let mut stack: UniqueStack<(i8, i8, i8, i8)> = UniqueStack::default();
         stack.push((col, col, row, 1));
-        if row > 0 {
-            stack.push((col, col, row - 1, -1));
-        }
+        stack.push((col, col, row - 1, -1));
         while let Some((mut c1, c2, r, dr)) = stack.pop() {
             let mut c = c1;
             if self.row_col_enclosed(r, c, enclosed_pieces, enclosing_pieces, &mut enclosure)? {
-                if c == 0 {
-                    break
-                }
-                while (c > 0) && self.row_col_enclosed(
+                while self.row_col_enclosed(
                     r, 
                     c - 1,
                     enclosed_pieces,
                     enclosing_pieces,
                     &mut enclosure
                 )? {
-                    let t= Tile::new(r, c - 1);
+                    let t= Tile::new(r as u8, (c - 1) as u8);
                     if (abort_on_edge && self.tile_at_edge(t)) 
                         || (abort_on_corner && self.corners.contains(&t)) {
                         return None
@@ -356,15 +367,11 @@ impl<T: BitField> Board<T> {
                     c -= 1
                 }
                 
-                if (c < c1) && (c1 > 0) && ((r as i8) >= dr) 
-                    && ((r as i8) - dr < self.side_len as i8) {
-                    stack.push((c, c1 - 1, ((r as i8) - dr) as u8, -dr))
+                if c < c1 {
+                    stack.push((c, c1 - 1, r - dr, -dr))
                 }
             } 
             while c1 <= c2 {
-                if c1 >= self.side_len {
-                    break
-                }
                 while self.row_col_enclosed(
                     r,
                     c1,
@@ -372,7 +379,7 @@ impl<T: BitField> Board<T> {
                     enclosing_pieces,
                     &mut enclosure
                 )? {
-                    let t= Tile::new(r, c1);
+                    let t= Tile::new(r as u8, c1 as u8);
                     if abort_on_edge && self.tile_at_edge(t) {
                         return None
                     }
@@ -382,11 +389,11 @@ impl<T: BitField> Board<T> {
                     c1 += 1
                 }
                 
-                if (c1 > c) && (c1 > 0) && ((r as i8) > -dr) {
-                    stack.push((c, c1 - 1, ((r as i8) + dr) as u8, dr));
+                if c1 > c {
+                    stack.push((c, c1 - 1, r + dr, dr));
                 }
-                if (c1 > 0) && (c2 + 1 < self.side_len) && (c1 - 1 > c2) {
-                    stack.push((c2 + 1, c1 - 1, ((r as i8) - dr) as u8, -dr))
+                if c1 - 1 > c2 {
+                    stack.push((c2 + 1, c1 - 1, r - dr, -dr))
                 }
                 
                 c1 += 1;
@@ -401,7 +408,6 @@ impl<T: BitField> Board<T> {
                     c1 += 1
                 }
                 c = c1
-                
             }
             
         }
@@ -461,9 +467,9 @@ mod tests {
     use crate::board::{Board, SmallBoard, Tile};
     use crate::pieces::Piece;
     use crate::pieces::PieceType::Soldier;
+    use crate::PieceSet;
     use crate::PieceType::King;
     use crate::Side::{Attacker, Defender};
-    use crate::PieceSet;
     use std::collections::HashSet;
     use std::str::FromStr;
 
@@ -584,10 +590,18 @@ mod tests {
             ".......",
             ".......",
         ].join("\n");
+        let encl_loop = [
+            ".t..t..",
+            ".t.K.t.",
+            "..tttt.",
+            ".......",
+            ".......",
+            ".......",
+            ".......",
+        ].join("\n");
         let board: SmallBoard = Board::from_str(full_enclosure.as_str()).unwrap();
         let encl_res = board.find_enclosure(
-            1, 
-            3,
+            Tile::new(1, 3),
             PieceSet::from(King),
             PieceSet::from(Soldier),
             true, 
@@ -611,8 +625,7 @@ mod tests {
 
         let board: SmallBoard = Board::from_str(encl_with_edge.as_str()).unwrap();
         let encl_res = board.find_enclosure(
-            1,
-            3,
+            Tile::new(1, 3),
             PieceSet::from(King),
             PieceSet::from(Soldier),
             true,
@@ -620,8 +633,7 @@ mod tests {
         );
         assert!(encl_res.is_none());
         let encl_res = board.find_enclosure(
-            1,
-            3,
+            Tile::new(1, 3),
             PieceSet::from(King),
             PieceSet::from(Soldier),
             false,
@@ -645,8 +657,7 @@ mod tests {
         
         let board: SmallBoard = Board::from_str(encl_with_corner.as_str()).unwrap();
         let encl_res = board.find_enclosure(
-            1,
-            3,
+            Tile::new(1, 3),
             PieceSet::from(King),
             PieceSet::from(Soldier),
             false,
@@ -654,8 +665,7 @@ mod tests {
         );
         assert!(encl_res.is_none());
         let encl_res = board.find_enclosure(
-            1,
-            5,
+            Tile::new(1, 5),
             PieceSet::from(King),
             PieceSet::from(Soldier),
             false,
@@ -678,8 +688,7 @@ mod tests {
 
         let board: SmallBoard = Board::from_str(encl_with_soldier.as_str()).unwrap();
         let encl_res = board.find_enclosure(
-            1,
-            3,
+            Tile::new(1, 3),
             PieceSet::from(King),
             PieceSet::from(Piece::new(Soldier, Attacker)),
             true,
@@ -687,8 +696,7 @@ mod tests {
         );
         assert!(encl_res.is_none());
         let encl_res = board.find_enclosure(
-            1,
-            3,
+            Tile::new(1, 3),
             PieceSet::from(vec![Piece::new(King, Defender), Piece::new(Soldier, Defender)]),
             PieceSet::from(Piece::new(Soldier, Attacker)),
             true,
@@ -711,6 +719,16 @@ mod tests {
                 Tile::new(2, 2), Tile::new(2, 3), Tile::new(2, 4)
             ]
         );
+        
+        let board: SmallBoard = Board::from_str(encl_loop.as_str()).unwrap();
+        let encl_res = board.find_enclosure(
+            Tile::new(1, 3),
+            PieceSet::from(King),
+            PieceSet::from(Piece::new(Soldier, Attacker)),
+            false,
+            false
+        );
+        assert!(encl_res.is_some());
     }
 
 }
