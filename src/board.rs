@@ -360,7 +360,7 @@ impl<T: BitField> Board<T> {
                     &mut enclosure
                 )? {
                     let t= Tile::new(r as u8, (c - 1) as u8);
-                    if (abort_on_edge && self.tile_at_edge(t)) 
+                    if (abort_on_edge && self.tile_at_edge(t))
                         || (abort_on_corner && self.corners.contains(&t)) {
                         return None
                     }
@@ -590,7 +590,7 @@ mod tests {
             ".......",
             ".......",
         ].join("\n");
-        let encl_loop = [
+        let encl_edge_2 = [
             ".t..t..",
             ".t.K.t.",
             "..tttt.",
@@ -719,8 +719,8 @@ mod tests {
                 Tile::new(2, 2), Tile::new(2, 3), Tile::new(2, 4)
             ]
         );
-        
-        let board: SmallBoard = Board::from_str(encl_loop.as_str()).unwrap();
+
+        let board: SmallBoard = Board::from_str(encl_edge_2.as_str()).unwrap();
         let encl_res = board.find_enclosure(
             Tile::new(1, 3),
             PieceSet::from(King),

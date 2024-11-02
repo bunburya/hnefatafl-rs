@@ -98,6 +98,16 @@ impl<T: BitField> Game<T> {
             side_to_play: if rules.attacker_starts { Attacker } else { Defender }
         })
     }
+    
+    /// Determine whether the given tile is hostile specifically by reference to the rules regarding
+    /// hostility of special tiles.
+    pub fn special_tile_hostile(&self, tile: Tile, piece: Piece) -> bool {
+        (self.rules.hostility.throne.contains(piece) && tile == self.board.throne)
+            || (self.rules.hostility.corners.contains(piece)
+            && self.board.corners.contains(&tile))
+            || (self.rules.hostility.edge.contains(piece)
+            && !self.board.tile_in_bounds(tile))
+    }
 
     /// Determine whether the given tile is hostile to the given piece.
     pub fn tile_hostile(&self, tile: Tile, piece: Piece) -> bool {
@@ -112,11 +122,7 @@ impl<T: BitField> Game<T> {
         } else {
             // Tile is empty. So it is only hostile if it is a special tile/edge and the rules state
             // that it is hostile to the given piece.
-            (self.rules.hostility.throne.contains(piece) && tile == self.board.throne)
-                || (self.rules.hostility.corners.contains(piece)
-                    && self.board.corners.contains(&tile))
-                || (self.rules.hostility.edge.contains(piece)
-                    && !self.board.tile_in_bounds(tile))
+            self.special_tile_hostile(tile, piece)
         }
     }
     
@@ -245,7 +251,6 @@ impl<T: BitField> Game<T> {
             return true
         }
         for t in &encl.boundary {
-            println!("testing whether tile {t:?} is safe");
             let piece = self.board.get_piece(*t)
                 .expect("Boundary should not include empty tiles.");
             // It would be more efficient to just find the hostile piece once, and would usually
@@ -257,17 +262,16 @@ impl<T: BitField> Game<T> {
             // deemed safe and either (a) is hostile; or (b) can be occupied by a hostile soldier
             // and is currently unoccupied.
             'axisloop: for axis in [Vertical, Horizontal] {
-                println!("testing axis {axis:?}");
                 for d in [-1, 1] {
                     let n_coords = Move::new(*t, axis, d).to_coords();
-                    println!("testing {n_coords:?}");
                     if let Ok(n_tile) = self.board.coords_to_tile(n_coords) {
-                        println!("found a tile");
                         let is_inside = encl.contains(&n_tile);
                         if (inside_safe && is_inside) || (outside_safe && !is_inside) {
-                            // Tile is on a side of the boundary that is known to be safe
-                            println!("Tile is on a side of the boundary that is known to be safe");
-                            continue 'axisloop;
+                            // Tile is on a side of the boundary that is known to be safe (ie, no
+                            // enemies). Therefore, it is safe unless it is a hostile tile.
+                            if !self.special_tile_hostile(n_tile, piece) {
+                                continue 'axisloop;
+                            }
                         }
                         if (!self.tile_hostile(n_tile, piece)) && (
                             self.board.tile_occupied(n_tile)
@@ -275,19 +279,16 @@ impl<T: BitField> Game<T> {
                         ) {
                             // Tile is not hostile, AND is either occupied (by a friendly piece) or
                             // is not occupiable by a hostile piece according to the game rules
-                            println!("Tile is not hostile, AND is either occupied (by a friendly piece) or is not occupiable by a hostile piece according to the game rules");
                             continue 'axisloop;
                         }
                     } else {
                         // Coords are out of bounds
                         if !self.rules.hostility.edge.contains(piece) {
                             // Piece is at edge and edge is not hostile
-                            println!("Piece is at edge and edge is not hostile");
                             continue 'axisloop;
                         }
                     }
                 }
-                println!("not safe");
                 return false
             }
         }
@@ -536,7 +537,7 @@ mod tests {
     use crate::rules::{Ruleset, ShieldwallRules, COPENHAGEN_HNEFATAFL, FEDERATION_BRANDUBH};
     use crate::tiles::{Move, Tile};
     use crate::PieceType::Soldier;
-    use crate::{hashset, Piece};
+    use crate::{hashset, HostilityRules, Piece};
     use std::collections::HashSet;
     use std::fs;
     use std::path::PathBuf;
@@ -877,18 +878,28 @@ mod tests {
             "......."
         ].join("\n");
         
+        let safe_corners = Ruleset {
+            hostility: HostilityRules {
+                corners: PieceSet::none(),
+                edge: PieceSet::none(),
+                throne: PieceSet::none()
+            },
+            ..COPENHAGEN_HNEFATAFL
+        };
+        
         let candidates = [
-            // string, inside_safe, outside_safe, is_secure, i
-            (&setup_1, false, true, true, 0),
-            (&setup_1, false, false, false, 1),
-            (&setup_2, false, true, true, 2),
-            (&setup_2, true, false, true, 3),
-            (&setup_3, false, true, false, 4),
-            (&setup_4, false, true, true, 5),
-            (&setup_4, true, false, true, 6),
+            // string, inside_safe, outside_safe, is_secure, rules
+            (&setup_1, false, true, true, COPENHAGEN_HNEFATAFL),
+            (&setup_1, false, false, false, COPENHAGEN_HNEFATAFL),
+            (&setup_2, false, true, true, COPENHAGEN_HNEFATAFL),
+            (&setup_2, true, false, true, COPENHAGEN_HNEFATAFL),
+            (&setup_3, false, true, false, COPENHAGEN_HNEFATAFL),
+            (&setup_4, false, true, false, COPENHAGEN_HNEFATAFL),
+            (&setup_4, false, true, true, safe_corners),
+            (&setup_4, true, false, true, COPENHAGEN_HNEFATAFL),
         ];
-        for (string, inside_safe, outside_safe, is_secure, i) in candidates {
-            let g: Game<u64> = Game::new(COPENHAGEN_HNEFATAFL, string).unwrap();
+        for (string, inside_safe, outside_safe, is_secure, rules) in candidates {
+            let g: Game<u64> = Game::new(rules, string).unwrap();
             let encl_opt = g.board.find_enclosure(
                 Tile::new(2, 3),
                 PieceSet::from(King),

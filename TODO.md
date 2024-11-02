@@ -22,8 +22,8 @@
 
 ## Proof of concept client
 
+- [ ] Implement WASM client.
 - [ ] Implement AI for Federation Brandubh.
-- [ ] Implement WASM GUI for playing against AI.
 
 ## Beyond
 
