@@ -6,6 +6,7 @@ mod game;
 mod tiles;
 mod traits;
 mod utils;
+mod board_state;
 
 pub use crate::{
     game::{
@@ -16,7 +17,13 @@ pub use crate::{
     },
     board::{
         Board,
-        SimpleBoardState
+        SmallBoard,
+        MediumBoard,
+    },
+    board_state::{
+        BitfieldBoardState,
+        SmallBoardState,
+        MediumBoardState,
     },
     error::{
         ParseError,

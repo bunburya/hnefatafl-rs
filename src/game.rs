@@ -19,6 +19,7 @@ use crate::{Axis, PieceSet};
 use std::cmp::PartialEq;
 use std::collections::HashSet;
 use std::str::FromStr;
+use crate::board_state::BoardState;
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum InvalidMove {
@@ -80,14 +81,14 @@ pub enum MoveValidity {
 
 /// A struct representing a single game, including all state and associated information (such as
 /// rules) needed to play.
-pub struct Game<T: BitField> {
+pub struct Game<T: BoardState> {
     pub board: Board<T>,
     pub rules: Ruleset,
     pub turn: u32,
     pub side_to_play: Side
 }
 
-impl<T: BitField> Game<T> {
+impl<T: BoardState> Game<T> {
 
     /// Create a new [`Game`] from the given rules and starting positions.
     pub fn new(rules: Ruleset, starting_board: &str) -> Result<Self, ParseError> {
@@ -408,6 +409,11 @@ impl<T: BitField> Game<T> {
     pub fn detect_exit_fort(&self) -> bool {
         let king_tile = self.board.get_king();
         
+        // King is at edge
+        if !self.board.tile_in_bounds(king_tile) {
+            return false
+        }
+        
         // Check king is enclosed by his own pieces
         if let Some(encl) = self.board.find_enclosure(
             king_tile,
@@ -416,10 +422,6 @@ impl<T: BitField> Game<T> {
             false,
             true
         ) {
-            // Check enclosure has edge access
-            if !encl.unoccupied.iter().any(|t| self.board.tile_at_edge(*t)) {
-                return false
-            }
             // King has space to move
             if !self.board.neighbors(king_tile).iter().any(|t| !self.board.tile_occupied(*t)) {
                 return false
@@ -537,7 +539,7 @@ mod tests {
     use crate::rules::{Ruleset, ShieldwallRules, COPENHAGEN_HNEFATAFL, FEDERATION_BRANDUBH};
     use crate::tiles::{Move, Tile};
     use crate::PieceType::Soldier;
-    use crate::{hashset, HostilityRules, Piece};
+    use crate::{hashset, HostilityRules, MediumBoardState, Piece, SmallBoardState};
     use std::collections::HashSet;
     use std::fs;
     use std::path::PathBuf;
@@ -550,7 +552,7 @@ mod tests {
     
     #[test]
     fn test_check_move_validity() {
-        let mut fb_game: Game<u64> = Game::new(
+        let mut fb_game: Game<SmallBoardState> = Game::new(
             FEDERATION_BRANDUBH,
             "...t...\n...t...\n...T...\nttTKTtt\n...T...\n...t...\n...t..."
         ).unwrap();
@@ -625,7 +627,7 @@ mod tests {
             Valid
         );
         
-        let mut test_game: Game<u64> = Game::new(
+        let mut test_game: Game<SmallBoardState> = Game::new(
             TEST_RULES,
             ".......\n.....Tt\n..T....\n..t..t.\nTt....T\n..t....\n..T..K."
         ).unwrap();
@@ -661,7 +663,7 @@ mod tests {
     
     #[test]
     fn test_check_move_outcome() {
-        let mut test_game: Game<u64> = Game::new(
+        let mut test_game: Game<SmallBoardState> = Game::new(
             TEST_RULES,
             "....t..\n.....Tt\n..T....\n..t..t.\nTt....T\n..t....\n..T..K."
         ).unwrap();
@@ -813,7 +815,7 @@ mod tests {
             Tile::new(3, 7)
         ).unwrap();
 
-        let g_corner: Game<u128> = Game::new(COPENHAGEN_HNEFATAFL, &corner_sw).unwrap();
+        let g_corner: Game<MediumBoardState> = Game::new(COPENHAGEN_HNEFATAFL, &corner_sw).unwrap();
         assert_eq!(g_corner.detect_shieldwall(n), None);
         assert_eq!(g_corner.detect_shieldwall(cm), Some(hashset!(
             Tile::new(5, 8),
@@ -821,29 +823,29 @@ mod tests {
             Tile::new(7, 8)
         )));
         
-        let g_no_corner: Game<u128> = Game::new(no_corner_rules, &corner_sw).unwrap();
+        let g_no_corner: Game<MediumBoardState> = Game::new(no_corner_rules, &corner_sw).unwrap();
         assert_eq!(g_no_corner.detect_shieldwall(m), None);
         
-        let g_regular: Game<u128> = Game::new(no_corner_rules, &regular_sw).unwrap();
+        let g_regular: Game<MediumBoardState> = Game::new(no_corner_rules, &regular_sw).unwrap();
         assert_eq!(g_regular.detect_shieldwall(m), Some(hashset!(
             Tile::new(4, 8),
             Tile::new(5, 8),
             Tile::new(6, 8)
         )));
         
-        let g_king: Game<u128> = Game::new(no_corner_rules, &regular_sw_king).unwrap();
+        let g_king: Game<MediumBoardState> = Game::new(no_corner_rules, &regular_sw_king).unwrap();
         assert_eq!(g_king.detect_shieldwall(m), Some(hashset!(
             Tile::new(4, 8),
             Tile::new(6, 8)
         )));
         
-        let g_gap: Game<u128> = Game::new(no_corner_rules, &no_sw_gap).unwrap();
+        let g_gap: Game<MediumBoardState> = Game::new(no_corner_rules, &no_sw_gap).unwrap();
         assert_eq!(g_gap.detect_shieldwall(m), None);
 
-        let g_friend: Game<u128> = Game::new(no_corner_rules, &no_sw_friend).unwrap();
+        let g_friend: Game<MediumBoardState> = Game::new(no_corner_rules, &no_sw_friend).unwrap();
         assert_eq!(g_gap.detect_shieldwall(m), None);
 
-        let g_small: Game<u128> = Game::new(no_corner_rules, &no_sw_small).unwrap();
+        let g_small: Game<MediumBoardState> = Game::new(no_corner_rules, &no_sw_small).unwrap();
         assert_eq!(g_gap.detect_shieldwall(m), None);
     }
     
@@ -899,7 +901,7 @@ mod tests {
             (&setup_4, true, false, true, COPENHAGEN_HNEFATAFL),
         ];
         for (string, inside_safe, outside_safe, is_secure, rules) in candidates {
-            let g: Game<u64> = Game::new(rules, string).unwrap();
+            let g: Game<MediumBoardState> = Game::new(rules, string).unwrap();
             let encl_opt = g.board.find_enclosure(
                 Tile::new(2, 3),
                 PieceSet::from(King),
@@ -928,7 +930,7 @@ mod tests {
             if line.starts_with('#') {
                 continue
             }
-            let mut g: Game<u128> = Game::new(
+            let mut g: Game<MediumBoardState> = Game::new(
                 rules,
                 starting_posn
             ).unwrap();
