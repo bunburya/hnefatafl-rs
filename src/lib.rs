@@ -41,9 +41,11 @@ pub use crate::{
         KingStrength,
         ThroneRule,
         HostilityRules,
-        FEDERATION_BRANDUBH
+        FEDERATION_BRANDUBH,
+        COPENHAGEN_HNEFATAFL
     },
     tiles::{
+        Coords,
         Tile,
         Axis
     },

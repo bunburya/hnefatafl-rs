@@ -6,11 +6,6 @@ use crate::PieceType::King;
 use std::cmp::PartialEq;
 use crate::rules::KingAttack::Armed;
 
-enum SpecialTileType {
-    Throne,
-    Corner,
-    BaseCamp
-}
 
 /// Rules relating to who may occupy/pass through the throne.
 #[derive(PartialEq, Copy, Clone, Debug)]

@@ -10,12 +10,12 @@ use std::str::FromStr;
 /// or column values.
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct Coords {
-    pub(crate) row: i8,
-    pub(crate) col: i8
+    pub row: i8,
+    pub col: i8
 }
 
 impl Coords {
-    pub(crate) fn new(row: i8, col: i8) -> Self {
+    pub fn new(row: i8, col: i8) -> Self {
         Self { row, col }
     }
 }
