@@ -7,12 +7,13 @@ mod tiles;
 mod bitfield;
 mod utils;
 mod board_state;
+mod play;
 
 pub use crate::{
     game::{
         Game,
         GameOutcome,
-        MoveOutcome,
+        PlayOutcome,
         InvalidMove
     },
     board::{
@@ -27,7 +28,7 @@ pub use crate::{
     },
     error::{
         ParseError,
-        MoveError
+        PlayError
     },
     pieces::{
         Piece,
@@ -44,8 +45,8 @@ pub use crate::{
     },
     tiles::{
         Tile,
-        Move,
         Axis
     },
+    play::Play,
     bitfield::BitField
 };

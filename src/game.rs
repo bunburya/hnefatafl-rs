@@ -10,7 +10,7 @@ use crate::pieces::{Piece, Side};
 use crate::rules::KingAttack::{Anvil, Armed, Hammer};
 use crate::rules::KingStrength::{Strong, StrongByThrone, Weak};
 use crate::rules::{Ruleset, ShieldwallRules, ThroneRule};
-use crate::tiles::{Coords, Move, Tile};
+use crate::tiles::{Coords, Tile};
 use crate::bitfield::BitField;
 use crate::Axis::{Horizontal, Vertical};
 use crate::InvalidMove::WrongPlayer;
@@ -20,6 +20,7 @@ use std::cmp::PartialEq;
 use std::collections::HashSet;
 use std::str::FromStr;
 use crate::board_state::BoardState;
+use crate::play::{Play, PlayWithCaptures};
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum InvalidMove {
@@ -54,7 +55,7 @@ pub enum GameOutcome {
 
 /// A struct describing the outcome of a single move.
 #[derive(Eq, PartialEq, Debug, Default)]
-pub struct MoveOutcome {
+pub struct PlayOutcome {
     /// Tiles containing pieces that have been captured by the move.
     pub captures: HashSet<Tile>,
     /// The outcome of the game, if the move has brought the game to an end.
@@ -85,7 +86,8 @@ pub struct Game<T: BoardState> {
     pub board: Board<T>,
     pub rules: Ruleset,
     pub turn: u32,
-    pub side_to_play: Side
+    pub side_to_play: Side,
+    pub play_record: Vec<PlayWithCaptures>
 }
 
 impl<T: BoardState> Game<T> {
@@ -96,7 +98,8 @@ impl<T: BoardState> Game<T> {
             board: Board::from_str(starting_board)?,
             rules,
             turn: 0,
-            side_to_play: if rules.attacker_starts { Attacker } else { Defender }
+            side_to_play: if rules.attacker_starts { Attacker } else { Defender },
+            play_record: Vec::new()
         })
     }
     
@@ -139,9 +142,9 @@ impl<T: BoardState> Game<T> {
 
     /// Check whether a move is valid. If the move is valid, returns `None`; otherwise, the wrapped
     /// [`InvalidMove`] variant indicates why the move is invalid.
-    pub fn check_move_validity(&self, m: Move) -> MoveValidity {
-        let from = m.from;
-        let to = m.to();
+    pub fn check_move_validity(&self, play: Play) -> MoveValidity {
+        let from = play.from;
+        let to = play.to();
         let maybe_piece = self.board.get_piece(from);
         match maybe_piece {
             None => Invalid(NoPiece),
@@ -176,7 +179,7 @@ impl<T: BoardState> Game<T> {
                 ) && (to == self.board.throne) {
                     return Invalid(MoveOntoBlockedTile)
                 }
-                if self.rules.slow_pieces.contains(piece) && m.distance() > 1 {
+                if self.rules.slow_pieces.contains(piece) && play.distance() > 1 {
                     // Slow piece can't move more than one space at a time
                     return Invalid(TooFar)
                 }
@@ -200,7 +203,7 @@ impl<T: BoardState> Game<T> {
     }
     
     /// Get the outcome of the game, if any. If None, the game is still ongoing.
-    pub fn get_game_outcome(&self, m: Move, caps: &HashSet<Tile>) -> Option<GameOutcome> {
+    pub fn get_game_outcome(&self, play: Play, caps: &HashSet<Tile>) -> Option<GameOutcome> {
         if caps.len() as u8 >= self.board.state.count_pieces(self.side_to_play.other()) {
             // All opposing pieces have been captured.
             return Some(Winner(self.side_to_play))
@@ -209,14 +212,17 @@ impl<T: BoardState> Game<T> {
             // Attacker has captured the king.
             return Some(Winner(Attacker))
         }
-        if (self.side_to_play == Defender) 
-            && self.board.is_king(m.from) 
-            && (
-                (self.rules.edge_escape && self.board.tile_at_edge(m.to()))
-                || (!self.rules.edge_escape && self.board.corners.contains(&m.to()))
-        ) {
-            // King has escaped.
-            return Some(Winner(Defender))
+        if self.side_to_play == Defender {
+            if self.board.is_king(play.from) && (
+                (self.rules.edge_escape && self.board.tile_at_edge(play.to())) 
+                    || (!self.rules.edge_escape && self.board.corners.contains(&play.to()))
+            ) {
+                // King has escaped.
+                return Some(Winner(Defender))
+            }
+            if self.rules.exit_fort && self.detect_exit_fort() {
+                return Some(Winner(Defender))
+            }
         }
         None
     }
@@ -264,7 +270,7 @@ impl<T: BoardState> Game<T> {
             // and is currently unoccupied.
             'axisloop: for axis in [Vertical, Horizontal] {
                 for d in [-1, 1] {
-                    let n_coords = Move::new(*t, axis, d).to_coords();
+                    let n_coords = Play::new(*t, axis, d).to_coords();
                     if let Ok(n_tile) = self.board.coords_to_tile(n_coords) {
                         let is_inside = encl.contains(&n_tile);
                         if (inside_safe && is_inside) || (outside_safe && !is_inside) {
@@ -304,18 +310,18 @@ impl<T: BoardState> Game<T> {
     /// that cannot be captured in a shieldwall).
     fn dir_sw_search(
         &self,
-        m: Move,
+        play: Play,
         sw_rule: ShieldwallRules,
         axis: Axis,
         away_from_edge: i8,
         dir: i8
     ) -> Option<HashSet<Tile>> {
-        let mut t = m.to();
+        let mut t = play.to();
         // Key is an occupied tile at edge of the board (which is threatened with capture);
         // value is the tile, on the opposite side to the edge, occupied by the opposing piece.
         let mut wall: HashSet<Tile> = HashSet::new();
         loop {
-            let step = Move::new(t, axis, dir);
+            let step = Play::new(t, axis, dir);
             // Move one tile along the edge
             t = step.to();
             if !self.board.tile_in_bounds(t) {
@@ -341,7 +347,7 @@ impl<T: BoardState> Game<T> {
             }
             let piece = piece_opt.expect("Tile should be occupied.");
             if piece.side == self.side_to_play.other() {
-                let pin = Move::new(
+                let pin = Play::new(
                     t,
                     axis.other(),
                     away_from_edge
@@ -369,9 +375,9 @@ impl<T: BoardState> Game<T> {
     /// Detect whether the given move has created a shieldwall according to the applicable rules.
     /// Returns `None` if no shieldwall is detected; otherwise returns a set of tiles that have been
     /// captured in the shieldwall.
-    fn detect_shieldwall(&self, m: Move) -> Option<HashSet<Tile>> {
+    fn detect_shieldwall(&self, play: Play) -> Option<HashSet<Tile>> {
         let sw_rule = self.rules.shieldwall?;
-        let to = m.to();
+        let to = play.to();
         let (axis, away_from_edge) = if to.row == 0 {
             (Horizontal, 1i8)
         } else if to.row == self.board.side_len - 1 {
@@ -385,9 +391,9 @@ impl<T: BoardState> Game<T> {
             // therefore must be a move to the edge.
             return None
         };
-        let mut wall = self.dir_sw_search(m, sw_rule, axis, away_from_edge, -1);
+        let mut wall = self.dir_sw_search(play, sw_rule, axis, away_from_edge, -1);
         if wall.is_none() {
-            wall = self.dir_sw_search(m, sw_rule, axis,  away_from_edge, 1);
+            wall = self.dir_sw_search(play, sw_rule, axis, away_from_edge, 1);
         }
         if let Some(w) = wall {
             if w.len() < 2 {
@@ -438,14 +444,16 @@ impl<T: BoardState> Game<T> {
     }
 
     /// Get the outcome of a move (number of captures, whether it ends the game, etc).
-    pub fn get_move_outcome(&self, m: Move) -> MoveOutcome {
+    pub fn get_play_outcome(&self, play: Play) -> PlayOutcome {
         let mut captures: HashSet<Tile> = HashSet::new();
-        let occupant = self.board.get_piece(m.from);
+        let occupant = self.board.get_piece(play.from);
         if occupant.is_none() {
-            return MoveOutcome { captures, game_outcome: None }
+            return PlayOutcome { captures, game_outcome: None }
         }
         let mover = occupant.expect("Moving piece must not be None");
-        let to = m.to();
+        let to = play.to();
+        
+        // Detect normal captures
         if mover.piece_type != King 
             || self.rules.king_attack == Armed 
             || self.rules.king_attack == Hammer {
@@ -489,29 +497,31 @@ impl<T: BoardState> Game<T> {
 
         }
 
-        if let Some(walled) = self.detect_shieldwall(m) {
+        // Detect shieldwall captures
+        if let Some(walled) = self.detect_shieldwall(play) {
             captures.extend(walled);
         }
 
-        let game_outcome = self.get_game_outcome(m, &captures);
-        MoveOutcome { captures, game_outcome }
+        let game_outcome = self.get_game_outcome(play, &captures);
+        PlayOutcome { captures, game_outcome }
     }
     
     /// Actually "do" a move, checking validity, getting outcome, applying outcome to board state,
     /// switching side to play and returning a description of the game status following the move.
-    pub fn do_move(&mut self, m: Move) -> Result<GameStatus, InvalidMove> {
-        if let Invalid(v) = self.check_move_validity(m) {
+    pub fn do_move(&mut self, play: Play) -> Result<GameStatus, InvalidMove> {
+        if let Invalid(v) = self.check_move_validity(play) {
             return Err(v)
         };
-        let move_outcome = self.get_move_outcome(m);
-        self.board.move_piece(m.from, m.to());
-        for c in move_outcome.captures {
+        let play_outcome = self.get_play_outcome(play);
+        self.board.move_piece(play.from, play.to());
+        for &c in &play_outcome.captures {
             self.board.remove_piece(c)
         }
 
         self.turn += 1;
         self.side_to_play = self.side_to_play.other();
-        Ok(match move_outcome.game_outcome {
+        self.play_record.push(PlayWithCaptures { play, captures: play_outcome.captures });
+        Ok(match play_outcome.game_outcome {
             Some(outcome) => Over(outcome),
             None => Ongoing
         })
@@ -531,18 +541,20 @@ mod tests {
         TooFar
     };
     use crate::game::MoveValidity::{Invalid, Valid};
-    use crate::game::{Game, GameStatus, MoveOutcome};
+    use crate::game::{Game, GameStatus, PlayOutcome};
     use crate::pieces::PieceSet;
     use crate::pieces::PieceType::King;
     use crate::pieces::Side::{Attacker, Defender};
     use crate::rules::ThroneRule::NoPass;
     use crate::rules::{Ruleset, ShieldwallRules, COPENHAGEN_HNEFATAFL, FEDERATION_BRANDUBH};
-    use crate::tiles::{Move, Tile};
+    use crate::tiles::Tile;
     use crate::PieceType::Soldier;
     use crate::{hashset, HostilityRules, MediumBoardState, Piece, SmallBoardState};
     use std::collections::HashSet;
     use std::fs;
     use std::path::PathBuf;
+    use std::str::FromStr;
+    use crate::play::{Play, PlayWithCaptures};
 
     const TEST_RULES: Ruleset = Ruleset {
         slow_pieces: PieceSet::from_piece_type(King),
@@ -558,21 +570,21 @@ mod tests {
         ).unwrap();
 
         assert_eq!(
-            fb_game.check_move_validity(Move::from_tiles(
+            fb_game.check_move_validity(Play::from_tiles(
                 Tile::new(3, 1),
                 Tile::new(4, 1)
             ).unwrap()),
             Valid
         );
         assert_eq!(
-            fb_game.check_move_validity(Move::from_tiles(
+            fb_game.check_move_validity(Play::from_tiles(
                 Tile::new(0, 3),
                 Tile::new(0, 0)
             ).unwrap()),
             Invalid(MoveOntoBlockedTile)
         );
         assert_eq!(
-            fb_game.check_move_validity(Move::from_tiles(
+            fb_game.check_move_validity(Play::from_tiles(
                 Tile::new(1, 1),
                 Tile::new(2, 1)
             ).unwrap()),
@@ -580,7 +592,7 @@ mod tests {
         );
         
         assert_eq!(
-            fb_game.check_move_validity(Move::from_tiles(
+            fb_game.check_move_validity(Play::from_tiles(
                 Tile::new(0, 3),
                 Tile::new(0, 7)
             ).unwrap()),
@@ -588,20 +600,20 @@ mod tests {
         );
 
         assert_eq!(
-            fb_game.check_move_validity(Move::from_tiles(
+            fb_game.check_move_validity(Play::from_tiles(
                 Tile::new(0, 3),
                 Tile::new(2, 3)
             ).unwrap()),
             Invalid(BlockedByPiece)
         );
         
-        fb_game.do_move(Move::from_tiles(
+        fb_game.do_move(Play::from_tiles(
             Tile::new(3, 1),
             Tile::new(4, 1)
         ).unwrap()).unwrap();
         
         assert_eq!(
-            fb_game.check_move_validity(Move::from_tiles(
+            fb_game.check_move_validity(Play::from_tiles(
                 Tile::new(3, 3),
                 Tile::new(3, 2)
             ).unwrap()),
@@ -612,7 +624,7 @@ mod tests {
         fb_game.board.move_piece(Tile::new(3, 3), Tile::new(3, 2));
 
         assert_eq!(
-            fb_game.check_move_validity(Move::from_tiles(
+            fb_game.check_move_validity(Play::from_tiles(
                 Tile::new(2, 3),
                 Tile::new(3, 3)
             ).unwrap()),
@@ -620,7 +632,7 @@ mod tests {
         );
 
         assert_eq!(
-            fb_game.check_move_validity(Move::from_tiles(
+            fb_game.check_move_validity(Play::from_tiles(
                 Tile::new(3, 2),
                 Tile::new(3, 3)
             ).unwrap()),
@@ -635,7 +647,7 @@ mod tests {
         test_game.side_to_play = Defender;
         
         assert_eq!(
-            test_game.check_move_validity(Move::from_tiles(
+            test_game.check_move_validity(Play::from_tiles(
                 Tile::new(6, 5),
                 Tile::new(6, 3)
             ).unwrap()),
@@ -643,7 +655,7 @@ mod tests {
         );
         
         assert_eq!(
-            test_game.check_move_validity(Move::from_tiles(
+            test_game.check_move_validity(Play::from_tiles(
                 Tile::new(6, 5),
                 Tile::new(6, 4)
             ).unwrap()),
@@ -653,7 +665,7 @@ mod tests {
         test_game.side_to_play = Attacker;
         
         assert_eq!(
-            test_game.check_move_validity(Move::from_tiles(
+            test_game.check_move_validity(Play::from_tiles(
                 Tile::new(3, 2),
                 Tile::new(3, 4)
             ).unwrap()),
@@ -662,29 +674,29 @@ mod tests {
     }
     
     #[test]
-    fn test_check_move_outcome() {
+    fn test_check_play_outcome() {
         let mut test_game: Game<SmallBoardState> = Game::new(
             TEST_RULES,
             "....t..\n.....Tt\n..T....\n..t..t.\nTt....T\n..t....\n..T..K."
         ).unwrap();
         
         assert_eq!(
-            test_game.get_move_outcome(Move::from_tiles(
+            test_game.get_play_outcome(Play::from_tiles(
                 Tile::new(0, 4),
                 Tile::new(6, 4)
             ).unwrap()),
-            MoveOutcome {
+            PlayOutcome {
                 captures: [Tile::new(6, 5)].into(),
                 game_outcome: Some(Winner(Attacker))
             }
         );
         
         assert_eq!(
-            test_game.get_move_outcome(Move::from_tiles(
+            test_game.get_play_outcome(Play::from_tiles(
                 Tile::new(4, 6),
                 Tile::new(4, 2)
             ).unwrap()),
-            MoveOutcome {
+            PlayOutcome {
                 captures: [
                     Tile::new(4, 1),
                     Tile::new(3, 2),
@@ -697,22 +709,22 @@ mod tests {
         test_game.side_to_play = test_game.side_to_play.other();
         
         assert_eq!(
-            test_game.get_move_outcome(Move::from_tiles(
+            test_game.get_play_outcome(Play::from_tiles(
                 Tile::new(6, 5),
                 Tile::new(6, 6)
             ).unwrap()),
-            MoveOutcome {
+            PlayOutcome {
                 captures: [].into(),
                 game_outcome: Some(Winner(Defender))
             }
         );
         
         assert_eq!(
-            test_game.get_move_outcome(Move::from_tiles(
+            test_game.get_play_outcome(Play::from_tiles(
                 Tile::new(6, 5),
                 Tile::new(5, 5)
             ).unwrap()),
-            MoveOutcome::default()
+            PlayOutcome::default()
         )
     }
 
@@ -802,15 +814,15 @@ mod tests {
             ".........",
         ].join("\n");
 
-        let cm = Move::from_tiles(
+        let cm = Play::from_tiles(
             Tile::new(4, 6),
             Tile::new(4, 8)
         ).unwrap();
-        let m = Move::from_tiles(
+        let m = Play::from_tiles(
             Tile::new(3, 6),
             Tile::new(3, 8)
         ).unwrap();
-        let n = Move::from_tiles(
+        let n = Play::from_tiles(
             Tile::new(3, 6),
             Tile::new(3, 7)
         ).unwrap();
@@ -1017,12 +1029,12 @@ mod tests {
             if outcome.is_empty() {
                 continue
             }
-            let moves = cols[0].split(' ').collect::<Vec<&str>>();
-            for m_str in moves {
-                let mc_opt = Move::from_str_with_captures(m_str);
-                if let Ok((m, c)) = mc_opt {
-                    assert_eq!(g.check_move_validity(m), Valid);
-                    let m_outcome = g.get_move_outcome(m);
+            let plays = cols[0].split(' ').collect::<Vec<&str>>();
+            for p_str in plays {
+                let pr_opt = PlayWithCaptures::from_str(p_str);
+                if let Ok(PlayWithCaptures { play: p, captures: c }) = pr_opt {
+                    assert_eq!(g.check_move_validity(p), Valid);
+                    let m_outcome = g.get_play_outcome(p);
                     if !c.is_empty() {
                         // Test data doesn't report capture of king as a capture using "x" notation
                         let without_king: HashSet<Tile> = m_outcome.captures.iter()
@@ -1032,11 +1044,11 @@ mod tests {
                         assert_eq!(without_king, c);
                     }
                     
-                    let game_status_res = g.do_move(m);
+                    let game_status_res = g.do_move(p);
                     assert!(game_status_res.is_ok());
                     last_game_status = game_status_res.unwrap();
                 } else {
-                    assert_eq!(m_str, "timeout")
+                    assert_eq!(p_str, "timeout")
                 }
             }
 

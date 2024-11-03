@@ -17,7 +17,7 @@ pub enum ParseError {
     /// returned when trying to parse.
     BadInt(ParseIntError),
     /// Tried to parse a string which represents an invalid [`Move`].
-    BadMove(MoveError),
+    BadPlay(PlayError),
     /// A generic error type where the given string could not be parsed for some reason.
     BadString(String)
     
@@ -30,7 +30,7 @@ impl From<ParseIntError> for ParseError {
 }
 
 #[derive(Debug, Eq, PartialEq)]
-pub enum MoveError {
+pub enum PlayError {
     DisjointTiles
 }
 

@@ -83,6 +83,8 @@ pub struct Ruleset {
     pub king_attack: KingAttack,
     /// Rules relating to shieldwall captures.
     pub shieldwall: Option<ShieldwallRules>,
+    /// Whether the king can escape through an exit fort.
+    pub exit_fort: bool,
     /// Whether the throne blocks movement.
     pub throne_movement: ThroneRule,
     /// What pieces may enter the corners.
@@ -101,6 +103,7 @@ pub const FEDERATION_BRANDUBH: Ruleset = Ruleset {
     king_strength: StrongByThrone,
     king_attack: Armed,
     shieldwall: None,
+    exit_fort: false,
     throne_movement: KingEntry,
     may_enter_corners: PieceSet::from_piece_type(King),
     hostility: HostilityRules {
@@ -121,6 +124,7 @@ pub const COPENHAGEN_HNEFATAFL: Ruleset = Ruleset {
         corners_may_close: true,
         captures: PieceSet::from_piece_type(Soldier)
     }),
+    exit_fort: true,
     throne_movement: KingEntry,
     may_enter_corners: PieceSet::from_piece_type(King),
     hostility: HostilityRules {
