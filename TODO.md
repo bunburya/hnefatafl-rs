@@ -1,7 +1,7 @@
 ## Immediate priorities
 
 - [X] Implement `Coords` as unbounded row-col pair and use where appropriate.
-- [ ] Testing for exit fort detection.
+- [X] Testing for exit fort detection.
 - [ ] Clean up unit tests.
 - [ ] Remove references to non-standard units for now.
 - [X] Iterate occupied squares.

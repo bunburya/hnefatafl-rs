@@ -915,6 +915,84 @@ mod tests {
 
     }
     
+    #[test]
+    fn test_exit_forts() {
+        let exit_fort_flat = [
+            ".........",
+            ".........",
+            "........t",
+            ".......tT",
+            ".......T.",
+            "......tT.",
+            ".......TK",
+            ".......tT",
+            ".........",
+        ].join("\n");
+        let exit_fort_bulge = [
+            ".........",
+            ".........",
+            ".........",
+            ".........",
+            ".........",
+            ".....TTTT",
+            ".....T..K",
+            "......TTT",
+            ".........",
+        ].join("\n");
+        let no_fort_enemy = [
+            ".........",
+            ".........",
+            ".........",
+            "........T",
+            ".......Tt",
+            ".......T.",
+            ".......TK",
+            "........T",
+            ".........",
+        ].join("\n");
+        let no_fort_unfree = [
+            ".........",
+            ".........",
+            ".........",
+            "........T",
+            ".......TT",
+            ".......TT",
+            ".......TK",
+            "........T",
+            ".........",
+        ].join("\n");
+        let no_fort_gap = [
+            ".........",
+            ".........",
+            ".........",
+            "........T",
+            ".........",
+            "....t..T.",
+            ".......TK",
+            "........T",
+            ".........",
+        ].join("\n");
+        let no_fort_vuln = [
+            ".........",
+            ".........",
+            ".........",
+            ".........",
+            ".........",
+            "......TTT",
+            ".....T..K",
+            "......TTT",
+            ".........",
+        ].join("\n");
+        for s in [exit_fort_flat, exit_fort_bulge] {
+            let g: Game<MediumBoardState> = Game::new(COPENHAGEN_HNEFATAFL, &s).unwrap();
+            assert!(g.detect_exit_fort());
+        }
+        for s in [no_fort_enemy, no_fort_unfree, no_fort_gap] {
+            let g: Game<MediumBoardState> = Game::new(COPENHAGEN_HNEFATAFL, &s).unwrap();
+            assert!(!g.detect_exit_fort());
+        }
+    }
+    
     fn test_real_games(rules: Ruleset, starting_posn: &str, fname: &str) {
         let f: PathBuf = [
             env!("CARGO_MANIFEST_DIR"),
