@@ -11,7 +11,6 @@ use crate::rules::KingAttack::{Anvil, Armed, Hammer};
 use crate::rules::KingStrength::{Strong, StrongByThrone, Weak};
 use crate::rules::{Ruleset, ShieldwallRules, ThroneRule};
 use crate::tiles::{Coords, Tile};
-use crate::bitfield::BitField;
 use crate::Axis::{Horizontal, Vertical};
 use crate::InvalidMove::WrongPlayer;
 use crate::PieceType::Soldier;

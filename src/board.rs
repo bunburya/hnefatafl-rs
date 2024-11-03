@@ -7,7 +7,6 @@ use crate::utils::UniqueStack;
 use crate::PieceSet;
 use std::collections::HashSet;
 use std::fmt::{Display, Formatter, Write};
-use std::ops::RangeBounds;
 use std::str::FromStr;
 
 const NEIGHBOR_OFFSETS: [[i8; 2]; 4] = [[-1, 0], [1, 0], [0, -1], [0, 1]];

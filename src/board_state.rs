@@ -2,7 +2,6 @@ use crate::ParseError::BadLineLen;
 use crate::PieceType::{King, Soldier};
 use crate::Side::{Attacker, Defender};
 use crate::{BitField, ParseError, Piece, Side, Tile};
-use std::str::FromStr;
 
 
 /// Store information on the current board state (ie, pieces). This struct currently handles only a
@@ -148,6 +147,7 @@ impl<T: BitField> BoardState for BitfieldBoardState<T> {
         self.defenders &= mask;
     }
 
+    /// Get the piece that occupies a tile, if any.
     fn get_piece(&self, t: Tile) -> Option<Piece> {
         let mask = T::tile_mask(t);
         if (self.defenders & mask) > 0.into() {
@@ -197,7 +197,6 @@ impl<T: BitField> BoardState for BitfieldBoardState<T> {
     }
 }
 
-
 pub type SmallBoardState = BitfieldBoardState<u64>;
 pub type MediumBoardState = BitfieldBoardState<u128>;
 
@@ -207,7 +206,6 @@ mod tests {
     use crate::Side::{Attacker, Defender};
     use crate::{hashset, BitfieldBoardState, MediumBoardState, Tile};
     use std::collections::HashSet;
-    use std::hash::Hash;
 
     #[test]
     fn test_iter_occupied() {
@@ -220,7 +218,7 @@ mod tests {
             "...t...",
             "...t..."
         ].join("\n");
-        let (board_state, side_len): (MediumBoardState, u8) 
+        let (board_state, _): (MediumBoardState, u8) 
             = BitfieldBoardState::from_str_with_side_len(&state_str).unwrap();
         let attackers: HashSet<Tile> = board_state.iter_occupied(Attacker).collect();
         let expected = hashset!(
