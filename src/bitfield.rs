@@ -1,5 +1,6 @@
 use crate::tiles::Tile;
-use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not, Shl};
+use std::fmt::Debug;
+use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not, Shl, Shr};
 
 /// A trait for any integer type that can be used as a bitfield to store board state. See also the
 /// [`crate::impl_bitfield!`] macro that can help to implement this trait for a particular integer
@@ -13,9 +14,12 @@ pub trait BitField:
     BitOr<Output=Self> +
     BitOrAssign +
     Not<Output=Self> +
-    Shl<Output=Self> +
+    Shr<u32, Output=Self> +
+    Shl<u32, Output=Self> +
     PartialOrd +
-    Default
+    PartialEq +
+    Default +
+    Debug
 {
     /// The type that is returned by `Self::to_be_bytes` and accepted by `Self::from_be_bytes`.
     /// In general this should be of the form `[u8; n]` where `n` is the size in bytes of the
@@ -48,10 +52,24 @@ pub trait BitField:
     /// Create a bitmask for the given tile. Only the bit corresponding to the tile's position on
     /// the board will be set.
     fn tile_mask(t: Tile) -> Self {
-        //println!("Getting mask for {t:?} ({t})");
-        //println!("Shifting by {}", (t.row() * Self::ROW_WIDTH) + t.col());
         Self::from(1) << ((t.row * Self::ROW_WIDTH) + t.col).into()
     }
+    
+    /// Covert the given bit index to a tile.
+    fn bit_to_tile(bit: u32) -> Tile {
+        let row = bit / (Self::ROW_WIDTH as u32);
+        let col = bit - (row * (Self::ROW_WIDTH as u32));
+        Tile { row: row as u8, col: col as u8 }
+    }
+    
+    /// Return the number of trailing zeros in the bitfield.
+    fn trailing_zeros(self) -> u32;
+
+    /// Return the number of leading zeros in the bitfield.
+    fn leading_zeros(self) -> u32;
+    
+    /// Whether the bitfield is empty (ie, no set bits).
+    fn is_empty(self) -> bool;
 
 }
 
@@ -74,6 +92,18 @@ pub trait BitField:
 
             fn from_be_bytes(bytes: Self::Bytes) -> Self {
                 <$t>::from_be_bytes(bytes)
+            }
+            
+            fn trailing_zeros(self) -> u32 {
+                <$t>::trailing_zeros(self)
+            }
+            
+            fn leading_zeros(self) -> u32 {
+                <$t>::leading_zeros(self)
+            }
+            
+            fn is_empty(self) -> bool {
+                self == 0
             }
         }
     };

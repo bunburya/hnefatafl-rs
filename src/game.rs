@@ -11,7 +11,7 @@ use crate::rules::KingAttack::{Anvil, Armed, Hammer};
 use crate::rules::KingStrength::{Strong, StrongByThrone, Weak};
 use crate::rules::{Ruleset, ShieldwallRules, ThroneRule};
 use crate::tiles::{Coords, Move, Tile};
-use crate::traits::BitField;
+use crate::bitfield::BitField;
 use crate::Axis::{Horizontal, Vertical};
 use crate::InvalidMove::WrongPlayer;
 use crate::PieceType::Soldier;
@@ -975,8 +975,20 @@ mod tests {
     #[test]
     fn test_real_copenhagen() {
         test_real_games(
-            COPENHAGEN_HNEFATAFL, 
-            "...ttttt...\n.....t.....\n...........\nt....T....t\nt...TTT...t\ntt.TTKTT.tt\nt...TTT...t\nt....T....t\n...........\n.....t.....\n...ttttt...",
+            COPENHAGEN_HNEFATAFL,
+            &[
+                "...ttttt...",
+                ".....t.....",
+                "...........",
+                "t....T....t",
+                "t...TTT...t",
+                "tt.TTKTT.tt",
+                "t...TTT...t",
+                "t....T....t",
+                "...........",
+                ".....t.....",
+                "...ttttt..."
+            ].join("\n"),
             "copenhagen_hnefatafl.csv"
         )
     }
@@ -985,7 +997,15 @@ mod tests {
     fn test_real_brandubh() {
         test_real_games(
             FEDERATION_BRANDUBH,
-            "...t...\n...t...\n...T...\nttTKTtt\n...T...\n...t...\n...t...",
+            &[
+                "...t...",
+                "...t...",
+                "...T...",
+                "ttTKTtt",
+                "...T...",
+                "...t...",
+                "...t..."
+            ].join("\n"),
             "brandubh.csv"
         )
     }

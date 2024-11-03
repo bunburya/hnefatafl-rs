@@ -4,7 +4,7 @@ mod board;
 mod error;
 mod game;
 mod tiles;
-mod traits;
+mod bitfield;
 mod utils;
 mod board_state;
 
@@ -47,5 +47,5 @@ pub use crate::{
         Move,
         Axis
     },
-    traits::BitField
+    bitfield::BitField
 };

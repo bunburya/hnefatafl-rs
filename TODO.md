@@ -1,11 +1,11 @@
 ## Immediate priorities
 
 - [X] Implement `Coords` as unbounded row-col pair and use where appropriate.
-- [ ] Restrict instantiation of `Tile` to appropriate factory function which checks bounds.
 - [ ] Testing for exit fort detection.
 - [ ] Clean up unit tests.
 - [ ] Remove references to non-standard units for now.
-- [ ] Functions for enumerating all pieces and all possible moves for a given piece.
+- [X] Iterate occupied squares.
+- [ ] Iterate possible moves for a piece.
 - [ ] Advanced win conditions (enclosures, repetition rule)
 - [ ] Ensure everything is documented, including overview of project, which is/is not supported and assumptions.
 

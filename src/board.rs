@@ -1,8 +1,7 @@
 use crate::board_state::{BoardState, MediumBoardState, SmallBoardState};
-use crate::error::ParseError::BadLineLen;
 use crate::error::{BoardError, ParseError};
-use crate::pieces::PieceType::King;
 use crate::pieces::Piece;
+use crate::pieces::PieceType::King;
 use crate::tiles::{Coords, Tile};
 use crate::utils::UniqueStack;
 use crate::PieceSet;
@@ -336,22 +335,7 @@ impl<T: BoardState> Display for Board<T> {
 impl<T: BoardState> FromStr for Board<T> {
     type Err = ParseError;
     fn from_str(value: &str) -> Result<Self, Self::Err> {
-        let s = value.trim();
-        let mut side_len = 0u8;
-        let mut state = T::default();
-        for (r, line) in s.lines().enumerate() {
-            let line_len = line.len() as u8;
-            if side_len == 0 {
-                side_len = line_len
-            } else if line_len != side_len {
-                return Err(BadLineLen(line.len()))
-            }
-            for (c, chr) in line.chars().enumerate() {
-                if chr != '.' {
-                    state.place_piece(Tile::new(r as u8, c as u8), Piece::try_from(chr)?)
-                }
-            }
-        }
+        let (state, side_len) = T::from_str_with_side_len(value)?;
         Ok(Self::with_state(state, side_len))
     }
 }

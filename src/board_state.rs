@@ -1,10 +1,15 @@
-use crate::{BitField, Piece, Side, Tile};
+use crate::ParseError::BadLineLen;
 use crate::PieceType::{King, Soldier};
 use crate::Side::{Attacker, Defender};
+use crate::{BitField, ParseError, Piece, Side, Tile};
+use std::str::FromStr;
+
 
 /// Store information on the current board state (ie, pieces). This struct currently handles only a
 /// simple board, ie, a king and soldiers (no knights, commanders, etc).
 pub trait BoardState: Default {
+    
+    type Iter: Iterator<Item=Tile>;
 
     /// Get the tile on which the king is currently placed.
     fn get_king(&self) -> Tile;
@@ -33,6 +38,49 @@ pub trait BoardState: Default {
     /// Count the number of pieces of the given side left on the board. Includes the king for
     /// defenders.
     fn count_pieces(&self, side: Side) -> u8;
+
+    fn iter_occupied(&self, side: Side) -> Self::Iter;
+    
+    /// Parse board state from a string, returning the state and the length of the board's side.
+    fn from_str_with_side_len(value: &str) -> Result<(Self, u8), ParseError> {
+        let s = value.trim();
+        let mut side_len = 0u8;
+        let mut state = Self::default();
+        for (r, line) in s.lines().enumerate() {
+            let line_len = line.len() as u8;
+            if side_len == 0 {
+                side_len = line_len
+            } else if line_len != side_len {
+                return Err(BadLineLen(line.len()))
+            }
+            for (c, chr) in line.chars().enumerate() {
+                if chr != '.' {
+                    state.place_piece(Tile::new(r as u8, c as u8), Piece::try_from(chr)?)
+                }
+            }
+        }
+        Ok((state, side_len))
+    }
+}
+
+pub struct BitfieldIter<T: BitField> {
+    /// Bitfield representing board state.
+    state: T,
+    /// Keeps track of current position in the bitfield.
+    i: u32,
+}
+
+impl<T: BitField> Iterator for BitfieldIter<T> {
+    type Item = Tile;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let skipped = self.state >> self.i;
+        if skipped.is_empty()  {
+            return None
+        }
+        self.i += skipped.trailing_zeros() + 1;
+        Some(T::bit_to_tile(self.i - 1))
+    }
 }
 
 /// Store information on the current board state (ie, pieces). This struct currently handles only a
@@ -55,7 +103,9 @@ pub struct BitfieldBoardState<T: BitField> {
 }
 
 impl<T: BitField> BoardState for BitfieldBoardState<T> {
-
+    
+    type Iter = BitfieldIter<T>;
+    
     /// Get the tile on which the king is currently placed.
     fn get_king(&self) -> Tile {
         let row = (self.defenders.to_be_bytes().as_ref()[0] & 0b1111_0000) >> 4;
@@ -129,7 +179,69 @@ impl<T: BitField> BoardState for BitfieldBoardState<T> {
             Defender => self.defenders
         }.count_ones() as u8
     }
+    
+    fn iter_occupied(&self, side: Side) -> Self::Iter {
+        let state_with_king = match side {
+            Attacker => self.attackers,
+            Defender => self.defenders
+        };
+        // unset bits which encode the position of the king
+        let mut state_bytes = state_with_king.to_be_bytes();
+        let state_bytes_slice = state_bytes.as_mut();
+        state_bytes_slice[0] &= 0b0000_1111;  // Unset 4 most significant bits
+        let state = T::from_be_bytes_slice(state_bytes_slice);
+        Self::Iter {
+            state,
+            i: 0
+        }
+    }
 }
+
 
 pub type SmallBoardState = BitfieldBoardState<u64>;
 pub type MediumBoardState = BitfieldBoardState<u128>;
+
+#[cfg(test)]
+mod tests {
+    use crate::board_state::BoardState;
+    use crate::Side::{Attacker, Defender};
+    use crate::{hashset, BitfieldBoardState, MediumBoardState, Tile};
+    use std::collections::HashSet;
+    use std::hash::Hash;
+
+    #[test]
+    fn test_iter_occupied() {
+        let state_str = [
+            "...t...",
+            "...t...",
+            "...T...",
+            "ttTKTtt",
+            "...T...",
+            "...t...",
+            "...t..."
+        ].join("\n");
+        let (board_state, side_len): (MediumBoardState, u8) 
+            = BitfieldBoardState::from_str_with_side_len(&state_str).unwrap();
+        let attackers: HashSet<Tile> = board_state.iter_occupied(Attacker).collect();
+        let expected = hashset!(
+            Tile::new(0, 3),
+            Tile::new(1, 3),
+            Tile::new(5, 3),
+            Tile::new(6, 3),
+            Tile::new(3, 0),
+            Tile::new(3, 1),
+            Tile::new(3, 5),
+            Tile::new(3, 6)
+        );
+        assert_eq!(attackers, expected);
+        let defenders: HashSet<Tile> = board_state.iter_occupied(Defender).collect();
+        let expected = hashset!(
+            Tile::new(2, 3),
+            Tile::new(3, 3),
+            Tile::new(4, 3),
+            Tile::new(3, 2),
+            Tile::new(3, 4)
+        );
+        assert_eq!(defenders, expected);
+    }
+}
