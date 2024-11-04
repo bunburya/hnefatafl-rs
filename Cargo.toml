@@ -2,6 +2,13 @@
 name = "hnefatafl"
 version = "0.0.1-alpha"
 edition = "2021"
+license = "MIT"
+description = "A crate for building software for the tafl family of board games"
+repository = "https://github.com/bunburya/hnefatafl-rs"
+readme = "README.md"
+keywords = ["tafl", "hnefatafl", "gamedev", "boardgames"]
+categories = ["game-development", "game-engines"]
+
 
 [lib]
 name = "hnefatafl"
