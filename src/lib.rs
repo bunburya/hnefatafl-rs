@@ -12,6 +12,7 @@ mod play;
 pub use crate::{
     game::{
         Game,
+        GameStatus,
         GameOutcome,
         PlayOutcome,
         InvalidMove

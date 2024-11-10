@@ -4,6 +4,7 @@ use crate::error::ParseError::BadChar;
 use crate::pieces::PieceType::{Commander, Guard, King, Knight, Mercenary, Soldier};
 use crate::pieces::Side::{Attacker, Defender};
 
+/// The two sides of the game (attacker and defender).
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum Side {
     Attacker = 0,
@@ -21,13 +22,6 @@ impl Side {
     }
 }
 
-impl Shl<Side> for PieceType {
-    type Output = u16;
-    fn shl(self, rhs: Side) -> Self::Output {
-        (self as u16) << (rhs as u16)
-    }
-}
-
 /// The different types of pieces that can occupy a board.
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub enum PieceType {
@@ -37,6 +31,13 @@ pub enum PieceType {
     Commander = 0b0000_1000,
     Guard =     0b0001_0000,
     Mercenary = 0b0010_0000
+}
+
+impl Shl<Side> for PieceType {
+    type Output = u16;
+    fn shl(self, rhs: Side) -> Self::Output {
+        (self as u16) << (rhs as u16)
+    }
 }
 
 impl BitOr<PieceType> for PieceType {
@@ -135,6 +136,7 @@ impl TryFrom<char> for Piece {
     }
 }
 
+
 #[derive(Copy, Clone, Debug)]
 pub struct PieceSet(u16);
 
@@ -152,8 +154,8 @@ impl From<PieceType> for PieceSet {
     }
 }
 
-/// Create a new [`PieceSet`] containing the given piece types (on both sides).
 impl From<Vec<PieceType>> for PieceSet {
+    /// Create a new [`PieceSet`] containing the given piece types (on both sides).
     fn from(value: Vec<PieceType>) -> Self {
         Self(value.into_iter().fold(0u16, |acc, piece_type| {
             acc | (piece_type as u16) | ((piece_type as u16) << 8)

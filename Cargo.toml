@@ -9,9 +9,12 @@ readme = "README.md"
 keywords = ["tafl", "hnefatafl", "gamedev", "boardgames"]
 categories = ["game-development", "game-engines"]
 
-
 [lib]
 name = "hnefatafl"
 path = "src/lib.rs"
+
+[[bin]]
+name = "hnefatafl-demo"
+path = "src/main.rs"
 
 [dependencies]

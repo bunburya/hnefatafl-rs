@@ -101,6 +101,7 @@ impl From<Tile> for (u8, u8) {
     }
 }
 
+/// A single axis of movement (vertical or horizontal).
 #[derive(Eq, PartialEq, Debug, Clone, Copy)]
 pub enum Axis {
     Vertical = 0,

@@ -1,9 +1,8 @@
 use crate::tiles::Coords;
 use crate::Axis::{Horizontal, Vertical};
-use crate::ParseError::{BadPlay, BadString, EmptyString};
+use crate::ParseError::{BadPlay, BadString};
 use crate::PlayError::DisjointTiles;
-use crate::{Axis, ParseError, PlayError, Tile};
-use std::collections::HashSet;
+use crate::{Axis, ParseError, Piece, PlayError, PlayOutcome, Side, Tile};
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
@@ -18,34 +17,10 @@ use std::str::FromStr;
 pub struct Play {
     pub from: Tile,
     /// The axis along which the move occurs, ie, horizontal or vertical.
-    pub(crate) axis: Axis,
+    pub axis: Axis,
     /// The signed distance in tiles covered by the move. A negative number means that the move is
     /// going "backwards", ie, to a lower-numbered row or column.
-    pub(crate) displacement: i8
-}
-
-impl FromStr for Play {
-    type Err = ParseError;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let tokens: Vec<&str> = s.split('-').collect();
-        if tokens.len() != 2 {
-            return Err(BadString(String::from(s)))
-        };
-        let m_res = Play::from_tiles(
-            Tile::from_str(tokens[0])?,
-            Tile::from_str(tokens[1])?
-        );
-        match m_res {
-            Ok(m) => Ok(m),
-            Err(e) => Err(BadPlay(e))
-        }
-    }
-}
-
-impl Display for Play {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}-{}", self.from, self.to())
-    }
+    pub displacement: i8
 }
 
 impl Play {
@@ -95,24 +70,42 @@ impl Play {
     }
 }
 
-pub struct PlayWithCaptures {
-    pub play: Play,
-    pub captures: HashSet<Tile>
+impl FromStr for Play {
+    type Err = ParseError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let tokens: Vec<&str> = s.split('-').collect();
+        if tokens.len() != 2 {
+            return Err(BadString(String::from(s)))
+        };
+        let m_res = Play::from_tiles(
+            Tile::from_str(tokens[0])?,
+            Tile::from_str(tokens[1])?
+        );
+        match m_res {
+            Ok(m) => Ok(m),
+            Err(e) => Err(BadPlay(e))
+        }
+    }
 }
 
-impl FromStr for PlayWithCaptures {
-    type Err = ParseError;
-    
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s.is_empty() {
-            return Err(EmptyString);
-        }
-        let tokens = s.split('x').collect::<Vec<&str>>();
-        let play = Play::from_str(tokens[0])?;
-        let mut captures: HashSet<Tile> = HashSet::new();
-        for c in tokens[1..].iter() {
-            captures.insert(Tile::from_str(c)?);
-        }
-        Ok(PlayWithCaptures { play, captures })
+impl Display for Play {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}-{}", self.from, self.to())
     }
+}
+
+/// A struct representing a capture of a single piece.
+pub struct Capture {
+    tile: Tile,
+    piece: Piece
+}
+
+/// A record of a single play.
+pub struct PlayRecord {
+    /// The side that made the play.
+    pub(crate) side: Side,
+    /// Details of the play (piece movement) itself.
+    pub(crate) play: Play,
+    /// Details of the outcome of the play.
+    pub(crate) outcome: PlayOutcome
 }

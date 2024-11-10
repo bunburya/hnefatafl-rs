@@ -19,7 +19,7 @@ use std::cmp::PartialEq;
 use std::collections::HashSet;
 use std::str::FromStr;
 use crate::board_state::BoardState;
-use crate::play::{Play, PlayWithCaptures};
+use crate::play::{Play, PlayRecord};
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum InvalidMove {
@@ -44,7 +44,7 @@ pub enum InvalidMove {
 }
 
 /// The outcome of a single game.
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Eq, PartialEq, Debug, Copy, Clone)]
 pub enum GameOutcome {
     /// Game has been won by the specified side.
     Winner(Side),
@@ -86,7 +86,7 @@ pub struct Game<T: BoardState> {
     pub rules: Ruleset,
     pub turn: u32,
     pub side_to_play: Side,
-    pub play_record: Vec<PlayWithCaptures>
+    pub play_history: Vec<PlayRecord>
 }
 
 impl<T: BoardState> Game<T> {
@@ -98,7 +98,7 @@ impl<T: BoardState> Game<T> {
             rules,
             turn: 0,
             side_to_play: if rules.attacker_starts { Attacker } else { Defender },
-            play_record: Vec::new()
+            play_history: Vec::new()
         })
     }
     
@@ -518,12 +518,18 @@ impl<T: BoardState> Game<T> {
         }
 
         self.turn += 1;
-        self.side_to_play = self.side_to_play.other();
-        self.play_record.push(PlayWithCaptures { play, captures: play_outcome.captures });
-        Ok(match play_outcome.game_outcome {
+        let record = PlayRecord {
+            side: self.side_to_play,
+            play,
+            outcome: play_outcome,
+        };
+        let game_status = match record.outcome.game_outcome { 
             Some(outcome) => Over(outcome),
             None => Ongoing
-        })
+        };
+        self.side_to_play = self.side_to_play.other();
+        self.play_history.push(record);
+        Ok(game_status)
     }
 }
 
@@ -548,18 +554,33 @@ mod tests {
     use crate::rules::{Ruleset, ShieldwallRules, COPENHAGEN_HNEFATAFL, FEDERATION_BRANDUBH};
     use crate::tiles::Tile;
     use crate::PieceType::Soldier;
-    use crate::{hashset, HostilityRules, MediumBoardState, Piece, SmallBoardState};
+    use crate::{hashset, HostilityRules, MediumBoardState, ParseError, Piece, SmallBoardState};
     use std::collections::HashSet;
     use std::fs;
     use std::path::PathBuf;
     use std::str::FromStr;
-    use crate::play::{Play, PlayWithCaptures};
+    use crate::ParseError::EmptyString;
+    use crate::play::{Play};
 
     const TEST_RULES: Ruleset = Ruleset {
         slow_pieces: PieceSet::from_piece_type(King),
         throne_movement: NoPass,
         ..FEDERATION_BRANDUBH
     };
+    
+    fn play_captures_from_str(s: &str) -> Result<(Play, HashSet<Tile>), ParseError> {
+        if s.is_empty() {
+            return Err(EmptyString);
+        }
+        let tokens = s.split('x').collect::<Vec<&str>>();
+        let play = Play::from_str(tokens[0])?;
+        let mut captures: HashSet<Tile> = HashSet::new();
+        for c in tokens[1..].iter() {
+            captures.insert(Tile::from_str(c)?);
+        }
+        Ok((play, captures))
+        
+    }
     
     #[test]
     fn test_check_move_validity() {
@@ -1030,8 +1051,7 @@ mod tests {
             }
             let plays = cols[0].split(' ').collect::<Vec<&str>>();
             for p_str in plays {
-                let pr_opt = PlayWithCaptures::from_str(p_str);
-                if let Ok(PlayWithCaptures { play: p, captures: c }) = pr_opt {
+                if let Ok((p, c)) = play_captures_from_str(p_str) {
                     assert_eq!(g.check_move_validity(p), Valid);
                     let m_outcome = g.get_play_outcome(p);
                     if !c.is_empty() {

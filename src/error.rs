@@ -1,6 +1,8 @@
 use std::num::ParseIntError;
 use crate::error::ParseError::BadInt;
+use crate::play::Play;
 
+/// Errors that may be encountered when parsing a string.
 #[derive(Debug, Eq, PartialEq)]
 pub enum ParseError {
     /// Tried to parse a string, but it was not the expected length. The given `usize` is the
@@ -29,11 +31,13 @@ impl From<ParseIntError> for ParseError {
     }
 }
 
+/// Errors that may be encountered when constructing a [`Play`].
 #[derive(Debug, Eq, PartialEq)]
 pub enum PlayError {
     DisjointTiles
 }
 
+/// Errors relating to the board.
 pub enum BoardError {
     OutOfBounds
 }

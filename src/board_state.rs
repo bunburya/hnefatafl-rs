@@ -197,7 +197,9 @@ impl<T: BitField> BoardState for BitfieldBoardState<T> {
     }
 }
 
+/// Board state suitable for boards up to 7x7.
 pub type SmallBoardState = BitfieldBoardState<u64>;
+/// Board state suitable for board up to 11x11.
 pub type MediumBoardState = BitfieldBoardState<u128>;
 
 #[cfg(test)]
