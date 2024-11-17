@@ -5,9 +5,9 @@
 - [ ] Clean up unit tests.
 - [ ] Remove references to non-standard units for now.
 - [X] Iterate occupied squares.
-- [ ] Iterate possible moves for a piece.
+- [X] Iterate possible moves for a piece.
 - [ ] Advanced win conditions (enclosures, repetition rule)
-- [ ] Ensure everything is documented, including overview of project, which is/is not supported and assumptions.
+- [ ] Ensure everything is documented, including overview of project, what is/is not supported and assumptions.
 
 ## Support for extra rules/pieces
 
@@ -22,7 +22,8 @@
 
 ## Proof of concept client
 
-- [ ] Implement WASM client.
+- [X] CLI client.
+- [ ] WASM client.
 - [ ] Implement AI for Federation Brandubh.
 
 ## Beyond

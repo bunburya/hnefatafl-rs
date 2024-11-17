@@ -13,7 +13,7 @@ use std::str::FromStr;
 /// negative displacement representing a move "backwards" along the relevant axis, ie, to a
 /// lower-numbered row or column). This way, moves are guaranteed to be along a row or column (but
 /// are not guaranteed to be within the bounds of the board).
-#[derive(Debug, Eq, PartialEq, Clone, Copy)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy, Hash)]
 pub struct Play {
     pub from: Tile,
     /// The axis along which the move occurs, ie, horizontal or vertical.

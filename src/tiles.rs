@@ -5,6 +5,34 @@ use std::fmt::{Debug, Display, Formatter};
 use std::ops::Add;
 use std::str::FromStr;
 
+/// An offset which can be applied to [`Coords`] and which is composed of the axis of movement and
+/// an offset along that axis.
+#[derive(Debug, Copy, Clone)]
+pub struct AxisOffset {
+    pub axis: Axis,
+    pub offset: i8,
+}
+
+impl AxisOffset {
+    pub fn new(axis: Axis, offset: i8) -> Self {
+        Self { axis, offset }
+    }
+}
+
+/// An offset which can be applied to [`Coords`] and which is composed of the row and column offset
+/// to be applied.
+#[derive(Debug, Copy, Clone)]
+pub struct RowColOffset{
+    row: i8,
+    col: i8
+}
+
+impl RowColOffset {
+    pub(crate) fn new(row: i8, col: i8) -> Self {
+        Self { row, col }
+    }
+}
+
 /// An unbounded row-column pair representing a hypothetical location, which may or may not be on
 /// the board. Can be used to represent out-of-bounds locations, including those with negative row
 /// or column values.
@@ -29,13 +57,23 @@ impl From<Tile> for Coords {
     }
 }
 
-impl Add<(i8, i8)> for Coords {
+impl Add<RowColOffset> for Coords {
     type Output = Self;
 
-    fn add(self, rhs: (i8, i8)) -> Self {
+    fn add(self, rhs: RowColOffset) -> Self {
         Self {
-            row: self.row + rhs.0,
-            col: self.col + rhs.1
+            row: self.row + rhs.row,
+            col: self.col + rhs.col
+        }
+    }
+}
+
+impl Add<AxisOffset> for Coords {
+    type Output = Self;
+    fn add(self, rhs: AxisOffset) -> Self {
+        match rhs.axis {
+            Vertical => Coords::new(self.row + rhs.offset, self.col),
+            Horizontal => Coords::new(self.row, self.col + rhs.offset),
         }
     }
 }
@@ -102,7 +140,7 @@ impl From<Tile> for (u8, u8) {
 }
 
 /// A single axis of movement (vertical or horizontal).
-#[derive(Eq, PartialEq, Debug, Clone, Copy)]
+#[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
 pub enum Axis {
     Vertical = 0,
     Horizontal = 0x80

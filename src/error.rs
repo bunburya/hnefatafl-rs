@@ -38,6 +38,10 @@ pub enum PlayError {
 }
 
 /// Errors relating to the board.
+#[derive(Debug, Eq, PartialEq)]
 pub enum BoardError {
-    OutOfBounds
+    /// Coordinates are out of bounds, ie, not on board.
+    OutOfBounds,
+    /// There is no piece at the given tile, where one is expected.
+    NoPiece
 }

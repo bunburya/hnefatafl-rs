@@ -1,5 +1,6 @@
 use crate::board::{Board, Enclosure};
-use crate::error::ParseError;
+use crate::board_state::BoardState;
+use crate::error::{BoardError, ParseError};
 use crate::game::GameOutcome::Winner;
 use crate::game::GameStatus::{Ongoing, Over};
 use crate::game::InvalidMove::{BlockedByPiece, MoveOntoBlockedTile, MoveThroughBlockedTile, NoCommonAxis, NoPiece, OutOfBounds, TooFar};
@@ -7,10 +8,12 @@ use crate::game::MoveValidity::{Invalid, Valid};
 use crate::pieces::PieceType::King;
 use crate::pieces::Side::{Attacker, Defender};
 use crate::pieces::{Piece, Side};
+use crate::play::{Play, PlayRecord};
 use crate::rules::KingAttack::{Anvil, Armed, Hammer};
 use crate::rules::KingStrength::{Strong, StrongByThrone, Weak};
-use crate::rules::{Ruleset, ShieldwallRules, ThroneRule};
-use crate::tiles::{Coords, Tile};
+use crate::rules::ThroneRule::{KingEntry, KingPass, NoEntry, NoPass, NoThrone};
+use crate::rules::{Ruleset, ShieldwallRules};
+use crate::tiles::{AxisOffset, Coords, RowColOffset, Tile};
 use crate::Axis::{Horizontal, Vertical};
 use crate::InvalidMove::WrongPlayer;
 use crate::PieceType::Soldier;
@@ -18,8 +21,6 @@ use crate::{Axis, PieceSet};
 use std::cmp::PartialEq;
 use std::collections::HashSet;
 use std::str::FromStr;
-use crate::board_state::BoardState;
-use crate::play::{Play, PlayRecord};
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum InvalidMove {
@@ -139,6 +140,30 @@ impl<T: BoardState> Game<T> {
         }
     }
 
+    /// Whether the given piece can occupy or pass the given tile according to the game rules and
+    /// current board state. Returns a pair of `bool`s indicating whether the piece can occupy or
+    /// pass, respectively.
+    pub fn can_occupy_or_pass(&self, tile: Tile, piece: Piece) -> (bool, bool) {
+        if self.board.tile_occupied(tile) {
+            (false, false)
+        } else if tile == self.board.throne {
+            match self.rules.throne_movement {
+                NoThrone => (true, true),
+                NoPass => (false, false),
+                NoEntry => (false, true),
+                KingPass => {
+                    let is_king = piece.piece_type == King;
+                    (is_king, is_king)
+                },
+                KingEntry => (piece.piece_type == King, true),
+            }
+        } else if self.board.corners.contains(&tile) {
+            (self.rules.may_enter_corners.contains(piece), false)
+        } else {
+            (true, true)
+        }
+    }
+
     /// Check whether a move is valid. If the move is valid, returns `None`; otherwise, the wrapped
     /// [`InvalidMove`] variant indicates why the move is invalid.
     pub fn check_move_validity(&self, play: Play) -> MoveValidity {
@@ -166,14 +191,14 @@ impl<T: BoardState> Game<T> {
                     return Invalid(MoveOntoBlockedTile)
                 }
                 if (
-                    (self.rules.throne_movement == ThroneRule::NoPass)
-                        || ((self.rules.throne_movement == ThroneRule::KingPass)
+                    (self.rules.throne_movement == NoPass)
+                        || ((self.rules.throne_movement == KingPass)
                             && piece.piece_type != King)
                 ) && between.contains(&self.board.throne) {
                     return Invalid(MoveThroughBlockedTile)
                 }
-                if ((self.rules.throne_movement == ThroneRule::NoEntry)
-                    || ((self.rules.throne_movement == ThroneRule::KingEntry)
+                if ((self.rules.throne_movement == NoEntry)
+                    || ((self.rules.throne_movement == KingEntry)
                         && piece.piece_type != King)
                 ) && (to == self.board.throne) {
                     return Invalid(MoveOntoBlockedTile)
@@ -235,8 +260,8 @@ impl<T: BoardState> Game<T> {
         }
         let t = Tile::new(coords.row as u8, coords.col as u8);
         if self.board.throne == t && (
-            (self.rules.throne_movement == ThroneRule::NoEntry) 
-                || (self.rules.throne_movement == ThroneRule::KingEntry && piece.piece_type != King)
+            (self.rules.throne_movement == NoEntry)
+                || (self.rules.throne_movement == KingEntry && piece.piece_type != King)
         ) {
             return false
         }
@@ -479,11 +504,21 @@ impl<T: BoardState> Game<T> {
                             // Get the tiles surrounding `n` on the perpendicular axis.
                             let n_coords = Coords::from(n);
                             let perp_hostile= if to.row == n.row {
-                                self.coords_hostile(n_coords + (1, 0), other_piece)
-                                    && self.coords_hostile(n_coords + (-1, 0), other_piece)
+                                self.coords_hostile(
+                                    n_coords + RowColOffset::new(1, 0),
+                                    other_piece
+                                ) && self.coords_hostile(
+                                    n_coords + RowColOffset::new(-1, 0),
+                                    other_piece
+                                )
                             } else {
-                                self.coords_hostile(n_coords + (0, 1), other_piece)
-                                    && self.coords_hostile( n_coords + (0, -1), other_piece)
+                                self.coords_hostile(
+                                    n_coords + RowColOffset::new(0, 1),
+                                    other_piece
+                                ) && self.coords_hostile( 
+                                    n_coords + RowColOffset::new(0, -1),
+                                    other_piece
+                                )
                             };
                             if !perp_hostile {
                                 continue
@@ -531,12 +566,92 @@ impl<T: BoardState> Game<T> {
         self.play_history.push(record);
         Ok(game_status)
     }
+
+    /// Iterate over the possible plays that can be made by the piece at the given tile. Returns an
+    /// error if there is no piece at the given tile.
+    pub fn iter_plays(&self, tile: Tile) -> Result<PlayIterator<T>, BoardError> {
+        PlayIterator::new(self, tile)
+    }
+}
+
+/// An iterator over the possible plays that can be made by the piece at the given tile. Note that
+/// because this struct holds a reference to the [`Game`], the game may not be mutated while the
+/// iterator exists.
+pub struct PlayIterator<'a, T: BoardState> {
+    game: &'a Game<T>,
+    start_tile: Tile,
+    current_tile: Tile,
+    piece: Piece,
+    direction: AxisOffset,
+}
+
+impl<'a, T: BoardState> PlayIterator<'a, T> {
+
+    pub fn new(game: &'a Game<T>, tile: Tile) -> Result<Self, BoardError> {
+        if let Some(piece) = game.board.get_piece(tile) {
+            Ok(Self {
+                game,
+                start_tile: tile,
+                current_tile: tile,
+                piece,
+                direction: AxisOffset { axis: Vertical, offset: 1 }
+            })
+        } else {
+            Err(BoardError::NoPiece)
+        }
+    }
+
+    /// Get the next direction by rotating the current direction 90 degrees. If the rotation would
+    /// bring us back to the start, return `None` instead as we have been through all rotations.
+    fn next_direction(&self) -> Option<AxisOffset> {
+        match self.direction {
+            AxisOffset { axis: Vertical, offset: 1 } => Some(AxisOffset::new(Vertical, -1)),
+            AxisOffset { axis: Vertical, offset: -1 } => Some(AxisOffset::new(Horizontal, 1)),
+            AxisOffset { axis: Horizontal, offset: 1 } => Some(AxisOffset::new(Horizontal, -1)),
+            _ => None
+        }
+    }
+}
+
+impl<'a, T: BoardState> Iterator for PlayIterator<'a, T> {
+    type Item = Play;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            let dest_coords = Coords::from(self.current_tile) + self.direction;
+            if let Ok(dest_tile) = self.game.board.coords_to_tile(dest_coords) {
+                // New tile is in bounds
+                self.current_tile = dest_tile;
+                let (can_occupy, can_pass) = self.game.can_occupy_or_pass(dest_tile, self.piece);
+                if can_occupy {
+                    // We found a tile we can occupy, so return that
+                    return Some(Play::from_tiles(self.start_tile, dest_tile)
+                        .expect("Tiles should be on same axis."))
+                } else if can_pass {
+                    // We can't occupy this tile, but we can pass it, so go back to the start of the
+                    // loop to continue in the same direction
+                    continue
+                } else {
+                    // We can neither occupy nor pass this tile so move on to trying the next
+                    // direction. If we have already tried all the directions, there are no more
+                    // plays available so return `None`.
+                    self.direction = self.next_direction()?;
+                    self.current_tile = self.start_tile;
+                    continue
+                }
+            } else {
+                // New tile would be out of bounds so move on to trying the next direction.
+                self.direction = self.next_direction()?;
+                self.current_tile = self.start_tile;
+                continue
+            }
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::game::GameOutcome::Winner;
-    use crate::game::GameStatus::Over;
     use crate::game::InvalidMove::{
         BlockedByPiece,
         MoveOntoBlockedTile,
@@ -546,46 +661,31 @@ mod tests {
         TooFar
     };
     use crate::game::MoveValidity::{Invalid, Valid};
-    use crate::game::{Game, GameStatus, PlayOutcome};
+    use crate::game::{Game, PlayOutcome};
     use crate::pieces::PieceSet;
     use crate::pieces::PieceType::King;
     use crate::pieces::Side::{Attacker, Defender};
+    use crate::play::Play;
+    use crate::preset::{rules, boards};
     use crate::rules::ThroneRule::NoPass;
-    use crate::rules::{Ruleset, ShieldwallRules, COPENHAGEN_HNEFATAFL, FEDERATION_BRANDUBH};
+    use crate::rules::{Ruleset, ShieldwallRules};
     use crate::tiles::Tile;
     use crate::PieceType::Soldier;
-    use crate::{hashset, HostilityRules, MediumBoardState, ParseError, Piece, SmallBoardState};
+    use crate::{hashset, HostilityRules, MediumBoardState, Piece, SmallBoardState};
     use std::collections::HashSet;
-    use std::fs;
-    use std::path::PathBuf;
-    use std::str::FromStr;
-    use crate::ParseError::EmptyString;
-    use crate::play::{Play};
+    use crate::preset::rules::BRANDUBH;
 
     const TEST_RULES: Ruleset = Ruleset {
         slow_pieces: PieceSet::from_piece_type(King),
         throne_movement: NoPass,
-        ..FEDERATION_BRANDUBH
+        ..rules::BRANDUBH
     };
     
-    fn play_captures_from_str(s: &str) -> Result<(Play, HashSet<Tile>), ParseError> {
-        if s.is_empty() {
-            return Err(EmptyString);
-        }
-        let tokens = s.split('x').collect::<Vec<&str>>();
-        let play = Play::from_str(tokens[0])?;
-        let mut captures: HashSet<Tile> = HashSet::new();
-        for c in tokens[1..].iter() {
-            captures.insert(Tile::from_str(c)?);
-        }
-        Ok((play, captures))
-        
-    }
-    
+
     #[test]
     fn test_check_move_validity() {
         let mut fb_game: Game<SmallBoardState> = Game::new(
-            FEDERATION_BRANDUBH,
+            rules::BRANDUBH,
             "...t...\n...t...\n...T...\nttTKTtt\n...T...\n...t...\n...t..."
         ).unwrap();
 
@@ -756,7 +856,7 @@ mod tests {
                 corners_may_close: false,
                 captures: PieceSet::from(Soldier)
             }),
-            ..COPENHAGEN_HNEFATAFL
+            ..rules::COPENHAGEN
         };
 
         let king_capture_rules = Ruleset{
@@ -764,7 +864,7 @@ mod tests {
                 corners_may_close: false,
                 captures: PieceSet::all()
             }),
-            ..COPENHAGEN_HNEFATAFL
+            ..rules::COPENHAGEN
         };
 
         let corner_sw = [
@@ -847,7 +947,7 @@ mod tests {
             Tile::new(3, 7)
         ).unwrap();
 
-        let g_corner: Game<MediumBoardState> = Game::new(COPENHAGEN_HNEFATAFL, &corner_sw).unwrap();
+        let g_corner: Game<MediumBoardState> = Game::new(rules::COPENHAGEN, &corner_sw).unwrap();
         assert_eq!(g_corner.detect_shieldwall(n), None);
         assert_eq!(g_corner.detect_shieldwall(cm), Some(hashset!(
             Tile::new(5, 8),
@@ -918,19 +1018,19 @@ mod tests {
                 edge: PieceSet::none(),
                 throne: PieceSet::none()
             },
-            ..COPENHAGEN_HNEFATAFL
+            ..rules::COPENHAGEN
         };
         
         let candidates = [
             // string, inside_safe, outside_safe, is_secure, rules
-            (&setup_1, false, true, true, COPENHAGEN_HNEFATAFL),
-            (&setup_1, false, false, false, COPENHAGEN_HNEFATAFL),
-            (&setup_2, false, true, true, COPENHAGEN_HNEFATAFL),
-            (&setup_2, true, false, true, COPENHAGEN_HNEFATAFL),
-            (&setup_3, false, true, false, COPENHAGEN_HNEFATAFL),
-            (&setup_4, false, true, false, COPENHAGEN_HNEFATAFL),
+            (&setup_1, false, true, true, rules::COPENHAGEN),
+            (&setup_1, false, false, false, rules::COPENHAGEN),
+            (&setup_2, false, true, true, rules::COPENHAGEN),
+            (&setup_2, true, false, true, rules::COPENHAGEN),
+            (&setup_3, false, true, false, rules::COPENHAGEN),
+            (&setup_4, false, true, false, rules::COPENHAGEN),
             (&setup_4, false, true, true, safe_corners),
-            (&setup_4, true, false, true, COPENHAGEN_HNEFATAFL),
+            (&setup_4, true, false, true, rules::COPENHAGEN),
         ];
         for (string, inside_safe, outside_safe, is_secure, rules) in candidates {
             let g: Game<MediumBoardState> = Game::new(rules, string).unwrap();
@@ -1016,106 +1116,85 @@ mod tests {
             ".........",
         ].join("\n");
         for s in [exit_fort_flat, exit_fort_bulge] {
-            let g: Game<MediumBoardState> = Game::new(COPENHAGEN_HNEFATAFL, &s).unwrap();
+            let g: Game<MediumBoardState> = Game::new(rules::COPENHAGEN, &s).unwrap();
             assert!(g.detect_exit_fort());
         }
-        for s in [no_fort_enemy, no_fort_unfree, no_fort_gap] {
-            let g: Game<MediumBoardState> = Game::new(COPENHAGEN_HNEFATAFL, &s).unwrap();
+        for s in [no_fort_enemy, no_fort_unfree, no_fort_gap, no_fort_vuln] {
+            let g: Game<MediumBoardState> = Game::new(rules::COPENHAGEN, &s).unwrap();
             assert!(!g.detect_exit_fort());
         }
     }
     
-    fn test_real_games(rules: Ruleset, starting_posn: &str, fname: &str) {
-        let f: PathBuf = [
-            env!("CARGO_MANIFEST_DIR"),
-            "resources",
-            "test",
-            "games",
-            fname
-        ].iter().collect();
-        let s = fs::read_to_string(f).unwrap();
-        let lines = s.split('\n');
-        let mut last_game_status: GameStatus = GameStatus::Ongoing;
-        for line in lines {
-            if line.starts_with('#') {
-                continue
-            }
-            let mut g: Game<MediumBoardState> = Game::new(
-                rules,
-                starting_posn
-            ).unwrap();
-            let cols = line.split(',').collect::<Vec<&str>>();
-            let outcome = cols.last().unwrap();
-            if outcome.is_empty() {
-                continue
-            }
-            let plays = cols[0].split(' ').collect::<Vec<&str>>();
-            for p_str in plays {
-                if let Ok((p, c)) = play_captures_from_str(p_str) {
-                    assert_eq!(g.check_move_validity(p), Valid);
-                    let m_outcome = g.get_play_outcome(p);
-                    if !c.is_empty() {
-                        // Test data doesn't report capture of king as a capture using "x" notation
-                        let without_king: HashSet<Tile> = m_outcome.captures.iter()
-                            .filter(|t| !g.board.is_king(**t))
-                            .map(|t| t.to_owned())
-                            .collect();
-                        assert_eq!(without_king, c);
-                    }
-                    
-                    let game_status_res = g.do_move(p);
-                    assert!(game_status_res.is_ok());
-                    last_game_status = game_status_res.unwrap();
-                } else {
-                    assert_eq!(p_str, "timeout")
-                }
-            }
-
-            if let Over(Winner(side)) = last_game_status {
-                let expected = match side {
-                    Attacker => "Black",
-                    Defender => "White"
-                };
-                assert_eq!(&expected, outcome);
-            }
-        }
-    }
-    
     #[test]
-    fn test_real_copenhagen() {
-        test_real_games(
-            COPENHAGEN_HNEFATAFL,
-            &[
-                "...ttttt...",
-                ".....t.....",
-                "...........",
-                "t....T....t",
-                "t...TTT...t",
-                "tt.TTKTT.tt",
-                "t...TTT...t",
-                "t....T....t",
-                "...........",
-                ".....t.....",
-                "...ttttt..."
-            ].join("\n"),
-            "copenhagen_hnefatafl.csv"
-        )
-    }
-    
-    #[test]
-    fn test_real_brandubh() {
-        test_real_games(
-            FEDERATION_BRANDUBH,
-            &[
-                "...t...",
-                "...t...",
-                "...T...",
-                "ttTKTtt",
-                "...T...",
-                "...t...",
-                "...t..."
-            ].join("\n"),
-            "brandubh.csv"
+    fn test_iter_plays() {
+        let game: Game<SmallBoardState> = Game::new(rules::BRANDUBH, boards::BRANDUBH).unwrap();
+        assert!(game.iter_plays(Tile::new(0, 0)).is_err());
+        assert!(game.iter_plays(Tile::new(1, 0)).is_err());
+        let outer_att_tile = Tile::new(0, 3);
+        let outer_att_iter = game.iter_plays(outer_att_tile);
+        assert!(outer_att_iter.is_ok());
+        assert_eq!(
+            outer_att_iter.unwrap().collect::<HashSet<Play>>(),
+            hashset!(
+                Play::from_tiles(outer_att_tile, Tile::new(0, 1)).unwrap(),
+                Play::from_tiles(outer_att_tile, Tile::new(0, 2)).unwrap(),
+                Play::from_tiles(outer_att_tile, Tile::new(0, 4)).unwrap(),
+                Play::from_tiles(outer_att_tile, Tile::new(0, 5)).unwrap()
+            )
+        );
+        let inner_att_tile = Tile::new(1, 3);
+        let inner_att_iter = game.iter_plays(inner_att_tile);
+        assert!(inner_att_iter.is_ok());
+        assert_eq!(
+            inner_att_iter.unwrap().collect::<HashSet<Play>>(),
+            hashset!(
+                Play::from_tiles(inner_att_tile, Tile::new(1, 0)).unwrap(),
+                Play::from_tiles(inner_att_tile, Tile::new(1, 1)).unwrap(),
+                Play::from_tiles(inner_att_tile, Tile::new(1, 2)).unwrap(),
+                Play::from_tiles(inner_att_tile, Tile::new(1, 4)).unwrap(),
+                Play::from_tiles(inner_att_tile, Tile::new(1, 5)).unwrap(),
+                Play::from_tiles(inner_att_tile, Tile::new(1, 6)).unwrap()
+            )
+        );
+        let outer_def_tile = Tile::new(2, 3);
+        let outer_def_iter = game.iter_plays(outer_def_tile);
+        assert!(outer_def_iter.is_ok());
+        assert_eq!(
+            outer_def_iter.unwrap().collect::<HashSet<Play>>(),
+            hashset!(
+                Play::from_tiles(outer_def_tile, Tile::new(2, 0)).unwrap(),
+                Play::from_tiles(outer_def_tile, Tile::new(2, 1)).unwrap(),
+                Play::from_tiles(outer_def_tile, Tile::new(2, 2)).unwrap(),
+                Play::from_tiles(outer_def_tile, Tile::new(2, 4)).unwrap(),
+                Play::from_tiles(outer_def_tile, Tile::new(2, 5)).unwrap(),
+                Play::from_tiles(outer_def_tile, Tile::new(2, 6)).unwrap()
+            )
+        );
+        let king_tile = Tile::new(3, 3);
+        let king_iter = game.iter_plays(king_tile);
+        assert!(king_iter.is_ok());
+        assert_eq!(king_iter.unwrap().collect::<HashSet<Play>>(), HashSet::new());
+        let game: Game<SmallBoardState> = Game::new(
+            BRANDUBH,
+            ".T.....\n.......\n.......\n.t...K.\n.......\n.......\n......."
+        ).unwrap();
+        
+        // Test moving through (but not onto) throne and blocking by piece
+        let test_tile = Tile::new(3, 1);
+        let iter = game.iter_plays(test_tile);
+        assert!(iter.is_ok());
+        assert_eq!(
+            iter.unwrap().collect::<HashSet<Play>>(),
+            hashset!(
+                Play::from_tiles(test_tile, Tile::new(1, 1)).unwrap(),
+                Play::from_tiles(test_tile, Tile::new(2, 1)).unwrap(),
+                Play::from_tiles(test_tile, Tile::new(4, 1)).unwrap(),
+                Play::from_tiles(test_tile, Tile::new(5, 1)).unwrap(),
+                Play::from_tiles(test_tile, Tile::new(6, 1)).unwrap(),
+                Play::from_tiles(test_tile, Tile::new(3, 0)).unwrap(),
+                Play::from_tiles(test_tile, Tile::new(3, 2)).unwrap(),
+                Play::from_tiles(test_tile, Tile::new(3, 4)).unwrap()
+            )
         )
     }
 

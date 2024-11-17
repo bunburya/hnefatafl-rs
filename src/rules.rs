@@ -1,10 +1,5 @@
 use crate::pieces::PieceSet;
-use crate::pieces::PieceType::Soldier;
-use crate::rules::ThroneRule::KingEntry;
-use crate::KingStrength::{Strong, StrongByThrone};
-use crate::PieceType::King;
 use std::cmp::PartialEq;
-use crate::rules::KingAttack::Armed;
 
 
 /// Rules relating to who may occupy/pass through the throne.
@@ -92,41 +87,3 @@ pub struct Ruleset {
     pub attacker_starts: bool,
 }
 
-/// Rules for Federation Brandubh.
-pub const FEDERATION_BRANDUBH: Ruleset = Ruleset {
-    edge_escape: false,
-    king_strength: StrongByThrone,
-    king_attack: Armed,
-    shieldwall: None,
-    exit_fort: false,
-    throne_movement: KingEntry,
-    may_enter_corners: PieceSet::from_piece_type(King),
-    hostility: HostilityRules {
-        throne: PieceSet::from_piece_type(Soldier),
-        corners: PieceSet::all(),
-        edge: PieceSet::none()
-    },
-    slow_pieces: PieceSet::none(),
-    attacker_starts: true
-};
-
-/// Rules for Copenhagen Hnefatafl.
-pub const COPENHAGEN_HNEFATAFL: Ruleset = Ruleset {
-    edge_escape: false,
-    king_strength: Strong,
-    king_attack: Armed,
-    shieldwall: Some(ShieldwallRules {
-        corners_may_close: true,
-        captures: PieceSet::from_piece_type(Soldier)
-    }),
-    exit_fort: true,
-    throne_movement: KingEntry,
-    may_enter_corners: PieceSet::from_piece_type(King),
-    hostility: HostilityRules {
-        throne: PieceSet::all(),
-        corners: PieceSet::from_piece_type(Soldier),
-        edge: PieceSet::none()
-    },
-    slow_pieces: PieceSet::none(),
-    attacker_starts: true
-};

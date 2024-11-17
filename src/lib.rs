@@ -2,12 +2,13 @@ mod rules;
 mod pieces;
 mod board;
 mod error;
-mod game;
+pub mod game;
 mod tiles;
 mod bitfield;
 mod utils;
 mod board_state;
 mod play;
+pub mod preset;
 
 pub use crate::{
     game::{
@@ -41,9 +42,7 @@ pub use crate::{
         Ruleset,
         KingStrength,
         ThroneRule,
-        HostilityRules,
-        FEDERATION_BRANDUBH,
-        COPENHAGEN_HNEFATAFL
+        HostilityRules
     },
     tiles::{
         Coords,
@@ -51,5 +50,5 @@ pub use crate::{
         Axis
     },
     play::Play,
-    bitfield::BitField
+    bitfield::BitField,
 };

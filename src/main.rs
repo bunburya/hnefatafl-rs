@@ -1,8 +1,9 @@
 use std::io::stdin;
 use std::str::FromStr;
-use hnefatafl::{Game, Play, SmallBoardState, FEDERATION_BRANDUBH};
+use hnefatafl::{Game, Play, SmallBoardState};
 use hnefatafl::GameStatus::Over;
 use hnefatafl::GameOutcome::{Draw, Winner};
+use hnefatafl::preset;
 
 fn input(prompt: &str) -> std::io::Result<String> {
     println!("{prompt}");
@@ -28,8 +29,8 @@ fn get_play() -> Play {
 fn main() {
     println!("hnefatafl-rs demo");
     let mut game: Game<SmallBoardState> = Game::new(
-        FEDERATION_BRANDUBH, 
-        "...t...\n...t...\n...T...\nttTKTtt\n...T...\n...t...\n...t..."
+        preset::rules::BRANDUBH, 
+        preset::boards::BRANDUBH,
     ).expect("Could not create game.");
     loop {
         println!("Board:");
