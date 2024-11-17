@@ -1,3 +1,5 @@
+#![cfg(feature = "demo")]
+
 use std::io::stdin;
 use std::str::FromStr;
 use hnefatafl::{Game, Play, SmallBoardState};
