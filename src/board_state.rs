@@ -4,8 +4,7 @@ use crate::Side::{Attacker, Defender};
 use crate::{BitField, ParseError, Piece, Side, Tile};
 
 
-/// Store information on the current board state (ie, pieces). This struct currently handles only a
-/// simple board, ie, a king and soldiers (no knights, commanders, etc).
+/// Store information on the current board state (ie, pieces). 
 pub trait BoardState: Default {
     
     type Iter: Iterator<Item=Tile>;
@@ -82,15 +81,14 @@ impl<T: BitField> Iterator for BitfieldIter<T> {
     }
 }
 
-/// Store information on the current board state (ie, pieces). This struct currently handles only a
-/// simple board, ie, a king and soldiers (no knights, commanders, etc).
+/// Store information on the current board state (ie, pieces) using bitfields. This struct currently
+/// handles only a simple board, ie, a king and soldiers (no knights, commanders, etc).
 ///
-/// Bitfields are used to minimise memory usage. The parameter `T` is a type that implements the
-/// [`BitField`] trait (most of the integer types do this), ensuring that it supports the relevant
-/// bitwise operations.  A single integer of type `T` is used to record the positions of all
-/// attacker pieces, and another integer is used to record the positions of the defender bits. There
-/// should generally be some bits left over, which are used to encode the current position of the
-/// king.
+/// The parameter `T` is a type that implements the [`BitField`] trait, ensuring that it supports
+/// the relevant bitwise operations.  A single integer of type `T` is used to record the positions
+/// of all attacker pieces, and another integer is used to record the positions of the defender
+/// bits. There should generally be some bits left over, which are used to encode the current
+/// position of the king.
 ///
 /// Currently only basic getting and setting is implemented at the bitfield level. More complex game
 /// logic (like checking move validity, etc) is implemented elsewhere and uses [Tile] structs. If

@@ -4,6 +4,7 @@ pub mod rules {
     use crate::rules::ShieldwallRules;
     use crate::{HostilityRules, PieceSet, Ruleset};
     use crate::PieceType::{King, Soldier};
+    use crate::rules::EnclosureWinRules::WithoutEdgeAccess;
     use crate::Side::Attacker;
     use crate::ThroneRule::KingEntry;
 
@@ -25,7 +26,8 @@ pub mod rules {
             edge: PieceSet::none()
         },
         slow_pieces: PieceSet::none(),
-        starting_side: Attacker
+        starting_side: Attacker,
+        enclosure_win: Some(WithoutEdgeAccess)
     };
 
     /// Rules for Federation Brandubh.
@@ -43,10 +45,9 @@ pub mod rules {
             edge: PieceSet::none()
         },
         slow_pieces: PieceSet::none(),
-        starting_side: Attacker
+        starting_side: Attacker,
+        enclosure_win: Some(WithoutEdgeAccess)
     };
-
-
 }
 
 pub mod boards {

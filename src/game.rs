@@ -21,6 +21,7 @@ use crate::{Axis, PieceSet};
 use std::cmp::PartialEq;
 use std::collections::HashSet;
 use std::str::FromStr;
+use crate::rules::EnclosureWinRules::WithoutEdgeAccess;
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum InvalidMove {
@@ -224,36 +225,6 @@ impl<T: BoardState> Game<T> {
                 self.board.corners.contains(&k) || self.board.throne == k
             }
         }
-    }
-    
-    /// Get the outcome of the game, if any. If None, the game is still ongoing.
-    pub fn get_game_outcome(&self, play: Play, caps: &HashSet<Tile>) -> Option<GameOutcome> {
-        if caps.len() as u8 >= self.board.state.count_pieces(self.side_to_play.other()) {
-            // All opposing pieces have been captured.
-            return Some(Winner(self.side_to_play))
-        } 
-        if self.side_to_play == Attacker && caps.contains(&self.board.state.get_king()) {
-            // Attacker has captured the king.
-            return Some(Winner(Attacker))
-        }
-        if self.side_to_play == Defender {
-            if self.board.is_king(play.from) && (
-                (self.rules.edge_escape && self.board.tile_at_edge(play.to())) 
-                    || (!self.rules.edge_escape && self.board.corners.contains(&play.to()))
-            ) {
-                // King has escaped.
-                return Some(Winner(Defender))
-            }
-            if self.rules.exit_fort && self.detect_exit_fort() {
-                // King has escaped through exit fort.
-                return Some(Winner(Defender))
-            }
-        }
-        if !self.side_can_play(self.side_to_play.other()) {
-            // Other side has no playable moves.
-            return Some(Winner(self.side_to_play))
-        }
-        None
     }
     
     /// Whether the tile (if any) at the given [`Coords`] can theoretically be occupied by the given
@@ -544,7 +515,53 @@ impl<T: BoardState> Game<T> {
         let game_outcome = self.get_game_outcome(play, &captures);
         PlayOutcome { captures, game_outcome }
     }
-    
+
+    /// Get the outcome of the game, if any. If None, the game is still ongoing.
+    pub fn get_game_outcome(&self, play: Play, caps: &HashSet<Tile>) -> Option<GameOutcome> {
+        if caps.len() as u8 >= self.board.state.count_pieces(self.side_to_play.other()) {
+            // All opposing pieces have been captured.
+            return Some(Winner(self.side_to_play))
+        }
+        if self.side_to_play == Attacker {
+            if caps.contains(&self.board.state.get_king()) {
+                // Attacker has captured the king.
+                return Some(Winner(Attacker))
+            }
+            if let Some(encl_win) = self.rules.enclosure_win {
+                if let Some(encl) = self.board.find_enclosure(
+                    self.board.get_king(),
+                    PieceSet::from(Defender),
+                    PieceSet::from(Attacker),
+                    encl_win == WithoutEdgeAccess,
+                    true
+                ) {
+                    if encl.occupied.len() == self.board.state.count_pieces(Defender) as usize
+                        && self.enclosure_secure(&encl, false, true) {
+                        return Some(Winner(Attacker))
+                    }
+                }
+            } 
+        } else {
+            if self.board.is_king(play.from) && (
+                (self.rules.edge_escape && self.board.tile_at_edge(play.to()))
+                    || (!self.rules.edge_escape && self.board.corners.contains(&play.to()))
+            ) {
+                // King has escaped.
+                return Some(Winner(Defender))
+            }
+            if self.rules.exit_fort && self.detect_exit_fort() {
+                // King has escaped through exit fort.
+                return Some(Winner(Defender))
+            }
+        }
+        if !self.side_can_play(self.side_to_play.other()) {
+            // Other side has no playable moves.
+            return Some(Winner(self.side_to_play))
+        }
+        None
+    }
+
+
     /// Actually "do" a move, checking validity, getting outcome, applying outcome to board state,
     /// switching side to play and returning a description of the game status following the move.
     pub fn do_move(&mut self, play: Play) -> Result<GameStatus, InvalidMove> {

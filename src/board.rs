@@ -28,8 +28,8 @@ impl Enclosure {
     }
 }
 
-
-
+/// Information about the game board, including its current state (as a struct implementing the
+/// [`BoardState`] trait), its side length and the positions of its throne and corners.
 pub struct Board<T: BoardState> {
     pub state: T,
     pub side_len: u8,
@@ -39,6 +39,7 @@ pub struct Board<T: BoardState> {
 
 impl<T: BoardState> Board<T> {
     
+    /// Create an empty board with the given side length.
     pub fn new(side_len: u8) -> Self {
         let corners = [
             Tile::new(0, 0),
@@ -54,6 +55,7 @@ impl<T: BoardState> Board<T> {
         }
     }
 
+    /// Create a new board with the given state.
     pub fn with_state(state: T, side_len: u8) -> Self {
         let mut board = Board::new(side_len);
         board.state = state;
@@ -189,6 +191,8 @@ impl<T: BoardState> Board<T> {
         self.state.is_king(tile)
     }
     
+    /// Check whether the tile at the given row and column is part of an enclosure.
+    /// Used by [`Self::find_enclosure`]. 
     fn row_col_enclosed(
         &self,
         row: i8,

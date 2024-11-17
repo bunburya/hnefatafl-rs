@@ -3,7 +3,7 @@ use std::cmp::PartialEq;
 use crate::Side;
 
 /// Rules relating to who may occupy/pass through the throne.
-#[derive(PartialEq, Copy, Clone, Debug)]
+#[derive(PartialEq, Eq, Copy, Clone, Debug)]
 pub enum ThroneRule {
     /// Board has no throne
     NoThrone,
@@ -60,6 +60,15 @@ pub struct ShieldwallRules {
     pub captures: PieceSet
 }
 
+/// Circumstances in which attacker wins as a result of enclosing all defenders.
+#[derive(PartialEq, Eq, Copy, Clone, Debug)]
+pub enum EnclosureWinRules {
+    /// Attacker wins if defender is entirely surrounded, even if defender has edge access. 
+    WithEdgeAccess,
+    /// Attacker wins if defender is entirely surrounded without edge access.
+    WithoutEdgeAccess,
+}
+
 /// A set of rules for a tafl game.
 #[derive(Copy, Clone, Debug)]
 pub struct Ruleset {
@@ -85,5 +94,7 @@ pub struct Ruleset {
     pub slow_pieces: PieceSet,
     /// Which side goes first.
     pub starting_side: Side,
+    /// Whether attacker can win by enclosing all defending pieces.
+    pub enclosure_win: Option<EnclosureWinRules>
 }
 
