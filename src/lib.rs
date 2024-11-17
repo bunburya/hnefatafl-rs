@@ -16,7 +16,6 @@ pub use crate::{
         GameStatus,
         GameOutcome,
         PlayOutcome,
-        InvalidMove
     },
     board::{
         Board,
@@ -30,7 +29,8 @@ pub use crate::{
     },
     error::{
         ParseError,
-        PlayError
+        PlayError,
+        InvalidPlay
     },
     pieces::{
         Piece,

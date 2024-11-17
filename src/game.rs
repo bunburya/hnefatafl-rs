@@ -1,9 +1,9 @@
 use crate::board::{Board, Enclosure};
 use crate::board_state::BoardState;
-use crate::error::{BoardError, ParseError};
+use crate::error::{BoardError, InvalidPlay, ParseError};
 use crate::game::GameOutcome::Winner;
 use crate::game::GameStatus::{Ongoing, Over};
-use crate::game::InvalidMove::{BlockedByPiece, MoveOntoBlockedTile, MoveThroughBlockedTile, NoCommonAxis, NoPiece, OutOfBounds, TooFar};
+use crate::game::InvalidPlay::{BlockedByPiece, MoveOntoBlockedTile, MoveThroughBlockedTile, NoCommonAxis, NoPiece, OutOfBounds, TooFar};
 use crate::game::MoveValidity::{Invalid, Valid};
 use crate::pieces::PieceType::King;
 use crate::pieces::Side::{Attacker, Defender};
@@ -12,38 +12,17 @@ use crate::play::{Play, PlayRecord};
 use crate::rules::KingAttack::{Anvil, Armed, Hammer};
 use crate::rules::KingStrength::{Strong, StrongByThrone, Weak};
 use crate::rules::ThroneRule::{KingEntry, KingPass, NoEntry, NoPass, NoThrone};
-use crate::rules::{Ruleset, ShieldwallRules};
+use crate::rules::{RepetitionRule, Ruleset, ShieldwallRules};
 use crate::tiles::{AxisOffset, Coords, RowColOffset, Tile};
 use crate::Axis::{Horizontal, Vertical};
-use crate::InvalidMove::WrongPlayer;
 use crate::PieceType::Soldier;
 use crate::{Axis, PieceSet};
 use std::cmp::PartialEq;
 use std::collections::HashSet;
 use std::str::FromStr;
+use crate::error::InvalidPlay::{GameOver, WrongPlayer};
+use crate::GameOutcome::Draw;
 use crate::rules::EnclosureWinRules::WithoutEdgeAccess;
-
-#[derive(Debug, Eq, PartialEq)]
-pub enum InvalidMove {
-    /// The piece being moved does not belong to the player whose turn it is.
-    WrongPlayer,
-    /// There is no piece to move at the given tile.
-    NoPiece,
-    /// The destination tile would be outside the board.
-    OutOfBounds,
-    /// The start and end tiles do not share an axis (ie, they are not on the same row or column).
-    NoCommonAxis,
-    /// Another piece is blocking the move.
-    BlockedByPiece,
-    /// The move is blocked by a special tile which, according to the game rules, is not passable
-    /// by this piece.
-    MoveThroughBlockedTile,
-    /// This move would end on a special tile which, according to the game rules, this piece may not
-    /// occupy.
-    MoveOntoBlockedTile,
-    /// The move is further than this piece is permitted to move in one go.
-    TooFar
-}
 
 /// The outcome of a single game.
 #[derive(Eq, PartialEq, Debug, Copy, Clone)]
@@ -64,7 +43,7 @@ pub struct PlayOutcome {
 }
 
 /// The current status of the game.
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Eq, PartialEq, Debug, Copy, Clone)]
 pub enum GameStatus {
     /// Game is still ongoing.
     Ongoing,
@@ -78,7 +57,7 @@ pub enum MoveValidity {
     /// Move is valid.
     Valid,
     /// Move is invalid, for the given reason.
-    Invalid(InvalidMove)
+    Invalid(InvalidPlay)
 }
 
 /// A struct representing a single game, including all state and associated information (such as
@@ -88,7 +67,8 @@ pub struct Game<T: BoardState> {
     pub rules: Ruleset,
     pub turn: u32,
     pub side_to_play: Side,
-    pub play_history: Vec<PlayRecord>
+    pub play_history: Vec<PlayRecord>,
+    pub status: GameStatus,
 }
 
 impl<T: BoardState> Game<T> {
@@ -100,7 +80,8 @@ impl<T: BoardState> Game<T> {
             rules,
             turn: 0,
             side_to_play: rules.starting_side,
-            play_history: Vec::new()
+            play_history: Vec::new(),
+            status: GameStatus::Ongoing
         })
     }
     
@@ -166,8 +147,11 @@ impl<T: BoardState> Game<T> {
     }
 
     /// Check whether a move is valid. If the move is valid, returns `None`; otherwise, the wrapped
-    /// [`InvalidMove`] variant indicates why the move is invalid.
+    /// [`InvalidPlay`] variant indicates why the move is invalid.
     pub fn check_move_validity(&self, play: Play) -> MoveValidity {
+        if self.status != Ongoing {
+            return Invalid(GameOver)
+        }
         let from = play.from;
         let to = play.to();
         let maybe_piece = self.board.get_piece(from);
@@ -226,7 +210,7 @@ impl<T: BoardState> Game<T> {
             }
         }
     }
-    
+
     /// Whether the tile (if any) at the given [`Coords`] can theoretically be occupied by the given
     /// piece according to the rules of the game. Does not take account of whether the tile is
     /// already occupied or actually accessible.
@@ -440,7 +424,28 @@ impl<T: BoardState> Game<T> {
         } else {
             false
         }
-        
+    }
+
+    /// Detect whether a play has been repeated `n` times. `last_play` is the last play that was
+    /// made (not yet saved to `Self::play_history`) and `side` is the side that made the play.
+    pub fn detect_repetition(&self, last_play: Play, playing_side: Side, n: usize) -> bool {
+        // NB: This function is called *before* `last_play` has been added to `self.play_history`
+        let n_plays = self.play_history.len();
+        if n_plays < (n - 1) * 4 {
+            // Not enough moves for there to have been n repetitions
+            return false
+        }
+        let mut chunks = self.play_history.rchunks(4);
+        // Get n chunks of four plays
+        if let Some(first_chunk) = chunks.next() {
+            // First play in last chunk is the same as the most recent play
+            return first_chunk[0].play == last_play
+                && first_chunk[0].side == playing_side
+                // All n chunks are identical
+                && chunks.take(n - 1).all(|chunk| 
+                    PlayRecord::slice_eq_ignore_outcome(chunk, first_chunk))
+        }
+        false
     }
 
     /// Get the outcome of a move (number of captures, whether it ends the game, etc).
@@ -540,7 +545,7 @@ impl<T: BoardState> Game<T> {
                         return Some(Winner(Attacker))
                     }
                 }
-            } 
+            }
         } else {
             if self.board.is_king(play.from) && (
                 (self.rules.edge_escape && self.board.tile_at_edge(play.to()))
@@ -554,17 +559,29 @@ impl<T: BoardState> Game<T> {
                 return Some(Winner(Defender))
             }
         }
+        
+        if let Some(RepetitionRule { n_repetitions, is_loss }) = self.rules.repetition_rule {
+            if self.detect_repetition(play, self.side_to_play, n_repetitions) {
+                return if is_loss {
+                    Some(Winner(self.side_to_play.other()))
+                } else {
+                    Some(Draw)
+                }
+            }
+        }
+        
         if !self.side_can_play(self.side_to_play.other()) {
             // Other side has no playable moves.
             return Some(Winner(self.side_to_play))
         }
+        
         None
     }
 
 
     /// Actually "do" a move, checking validity, getting outcome, applying outcome to board state,
     /// switching side to play and returning a description of the game status following the move.
-    pub fn do_move(&mut self, play: Play) -> Result<GameStatus, InvalidMove> {
+    pub fn do_move(&mut self, play: Play) -> Result<GameStatus, InvalidPlay> {
         if let Invalid(v) = self.check_move_validity(play) {
             return Err(v)
         };
@@ -586,6 +603,7 @@ impl<T: BoardState> Game<T> {
         };
         self.side_to_play = self.side_to_play.other();
         self.play_history.push(record);
+        self.status = game_status;
         Ok(game_status)
     }
 
@@ -684,7 +702,7 @@ impl<'a, T: BoardState> Iterator for PlayIterator<'a, T> {
 #[cfg(test)]
 mod tests {
     use crate::game::GameOutcome::Winner;
-    use crate::game::InvalidMove::{
+    use crate::game::InvalidPlay::{
         BlockedByPiece,
         MoveOntoBlockedTile,
         MoveThroughBlockedTile,
@@ -705,6 +723,8 @@ mod tests {
     use crate::PieceType::Soldier;
     use crate::{hashset, HostilityRules, MediumBoardState, Piece, SmallBoardState};
     use std::collections::HashSet;
+    use std::str::FromStr;
+    use crate::GameStatus::{Ongoing, Over};
 
     const TEST_RULES: Ruleset = Ruleset {
         slow_pieces: PieceSet::from_piece_type(King),
@@ -1238,5 +1258,22 @@ mod tests {
         assert!(game.side_can_play(Attacker));
         assert!(!game.side_can_play(Defender));
     } 
+    
+    #[test]
+    fn test_repetitions() {
+        let mut game: Game<SmallBoardState> = Game::new(
+            rules::BRANDUBH,
+            boards::BRANDUBH
+        ).unwrap();
+        for _ in 0..2 {
+            game.do_move(Play::from_str("d6-f6").unwrap()).unwrap();
+            game.do_move(Play::from_str("d5-f5").unwrap()).unwrap();
+            game.do_move(Play::from_str("f6-d6").unwrap()).unwrap();
+            game.do_move(Play::from_str("f5-d5").unwrap()).unwrap();
+        }
+        assert_eq!(game.status, Ongoing);
+        game.do_move(Play::from_str("d6-f6").unwrap()).unwrap();
+        assert_eq!(game.status, Over(Winner(Defender)));
+    }
 
 }

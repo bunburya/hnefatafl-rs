@@ -6,7 +6,7 @@
 - [ ] Remove references to non-standard units for now.
 - [X] Iterate occupied squares.
 - [X] Iterate possible moves for a piece.
-- [ ] Advanced win conditions (enclosures, repetition rule)
+- [X] Advanced win conditions (enclosures, repetition rule)
 - [ ] Ensure everything is documented, including overview of project, what is/is not supported and assumptions.
 
 ## Support for extra rules/pieces

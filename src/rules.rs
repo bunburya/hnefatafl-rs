@@ -69,6 +69,16 @@ pub enum EnclosureWinRules {
     WithoutEdgeAccess,
 }
 
+/// Consequence of repeated plays.
+#[derive(Clone, Copy, Debug)]
+pub struct RepetitionRule {
+    /// Number of repetitions that will trigger the rule. 
+    pub(crate) n_repetitions: usize,
+    /// Whether repetitions result in a loss for the repeating player. If this is `false`, then
+    /// repetitions will result in a draw.
+    pub(crate) is_loss: bool
+}
+
 /// A set of rules for a tafl game.
 #[derive(Copy, Clone, Debug)]
 pub struct Ruleset {
@@ -95,6 +105,8 @@ pub struct Ruleset {
     /// Which side goes first.
     pub starting_side: Side,
     /// Whether attacker can win by enclosing all defending pieces.
-    pub enclosure_win: Option<EnclosureWinRules>
+    pub enclosure_win: Option<EnclosureWinRules>,
+    /// Whether repeated moves result in a loss or draw.
+    pub repetition_rule: Option<RepetitionRule>
 }
 

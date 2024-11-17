@@ -101,6 +101,7 @@ pub struct Capture {
 }
 
 /// A record of a single play.
+#[derive(Debug, PartialEq, Eq)]
 pub struct PlayRecord {
     /// The side that made the play.
     pub(crate) side: Side,
@@ -108,4 +109,24 @@ pub struct PlayRecord {
     pub(crate) play: Play,
     /// Details of the outcome of the play.
     pub(crate) outcome: PlayOutcome
+}
+
+impl PlayRecord {
+    
+    /// Compare two slices of records, ignoring the outcome of each record.
+    pub(crate) fn slice_eq_ignore_outcome(slice1: &[PlayRecord], slice2: &[PlayRecord]) -> bool {
+        slice1.iter().zip(slice2.iter()).all(|(a, b)| a.eq_ignore_outcome(b))
+    }
+    
+    /// Whether these two records are equal, ignoring the outcomes of the moves.
+    pub fn eq_ignore_outcome(&self, other: &Self) -> bool {
+        self.side == other.side && self.play == other.play
+    }
+}
+
+/// A record of all past plays in a game.
+#[derive(Debug, Default)]
+pub struct PlayHistory {
+    attacker_moves: Vec<PlayRecord>,
+    defender_moves: Vec<PlayRecord>
 }

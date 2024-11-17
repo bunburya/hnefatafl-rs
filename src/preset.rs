@@ -1,7 +1,7 @@
 pub mod rules {
     use crate::KingStrength::{Strong, StrongByThrone};
     use crate::rules::KingAttack::Armed;
-    use crate::rules::ShieldwallRules;
+    use crate::rules::{RepetitionRule, ShieldwallRules};
     use crate::{HostilityRules, PieceSet, Ruleset};
     use crate::PieceType::{King, Soldier};
     use crate::rules::EnclosureWinRules::WithoutEdgeAccess;
@@ -27,7 +27,8 @@ pub mod rules {
         },
         slow_pieces: PieceSet::none(),
         starting_side: Attacker,
-        enclosure_win: Some(WithoutEdgeAccess)
+        enclosure_win: Some(WithoutEdgeAccess),
+        repetition_rule: Some(RepetitionRule { n_repetitions: 3, is_loss: true })
     };
 
     /// Rules for Federation Brandubh.
@@ -46,7 +47,8 @@ pub mod rules {
         },
         slow_pieces: PieceSet::none(),
         starting_side: Attacker,
-        enclosure_win: Some(WithoutEdgeAccess)
+        enclosure_win: Some(WithoutEdgeAccess),
+        repetition_rule: Some(RepetitionRule { n_repetitions: 3, is_loss: true })
     };
 }
 
