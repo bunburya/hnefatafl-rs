@@ -83,7 +83,7 @@ fn test_real_copenhagen() {
     test_real_games(
         rules::COPENHAGEN,
         boards::COPENHAGEN,
-        "copenhagen_hnefatafl.csv"
+        "copenhagen.csv"
     )
 }
 

@@ -4,6 +4,7 @@ pub mod rules {
     use crate::rules::ShieldwallRules;
     use crate::{HostilityRules, PieceSet, Ruleset};
     use crate::PieceType::{King, Soldier};
+    use crate::Side::Attacker;
     use crate::ThroneRule::KingEntry;
 
     /// Rules for Copenhagen Hnefatafl.
@@ -24,7 +25,7 @@ pub mod rules {
             edge: PieceSet::none()
         },
         slow_pieces: PieceSet::none(),
-        attacker_starts: true
+        starting_side: Attacker
     };
 
     /// Rules for Federation Brandubh.
@@ -42,7 +43,7 @@ pub mod rules {
             edge: PieceSet::none()
         },
         slow_pieces: PieceSet::none(),
-        attacker_starts: true
+        starting_side: Attacker
     };
 
 

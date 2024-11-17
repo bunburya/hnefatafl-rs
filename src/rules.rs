@@ -1,6 +1,6 @@
 use crate::pieces::PieceSet;
 use std::cmp::PartialEq;
-
+use crate::Side;
 
 /// Rules relating to who may occupy/pass through the throne.
 #[derive(PartialEq, Copy, Clone, Debug)]
@@ -83,7 +83,7 @@ pub struct Ruleset {
     pub hostility: HostilityRules,
     /// Types of piece whose movement is restricted to one tile per move.
     pub slow_pieces: PieceSet,
-    /// Whether attacker goes first (if `false`, defender goes first)
-    pub attacker_starts: bool,
+    /// Which side goes first.
+    pub starting_side: Side,
 }
 

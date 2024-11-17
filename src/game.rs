@@ -98,7 +98,7 @@ impl<T: BoardState> Game<T> {
             board: Board::from_str(starting_board)?,
             rules,
             turn: 0,
-            side_to_play: if rules.attacker_starts { Attacker } else { Defender },
+            side_to_play: rules.starting_side,
             play_history: Vec::new()
         })
     }
@@ -245,8 +245,13 @@ impl<T: BoardState> Game<T> {
                 return Some(Winner(Defender))
             }
             if self.rules.exit_fort && self.detect_exit_fort() {
+                // King has escaped through exit fort.
                 return Some(Winner(Defender))
             }
+        }
+        if !self.side_can_play(self.side_to_play.other()) {
+            // Other side has no playable moves.
+            return Some(Winner(self.side_to_play))
         }
         None
     }
@@ -572,6 +577,16 @@ impl<T: BoardState> Game<T> {
     pub fn iter_plays(&self, tile: Tile) -> Result<PlayIterator<T>, BoardError> {
         PlayIterator::new(self, tile)
     }
+    
+    /// Whether the given side could make any play given the current board.
+    pub fn side_can_play(&self, side: Side) -> bool {
+        for tile in self.board.state.iter_occupied(side) {
+            if self.iter_plays(tile).expect("Tile must not be empty.").next().is_some() {
+                return true
+            }
+        }
+        false
+    }
 }
 
 /// An iterator over the possible plays that can be made by the piece at the given tile. Note that
@@ -673,7 +688,6 @@ mod tests {
     use crate::PieceType::Soldier;
     use crate::{hashset, HostilityRules, MediumBoardState, Piece, SmallBoardState};
     use std::collections::HashSet;
-    use crate::preset::rules::BRANDUBH;
 
     const TEST_RULES: Ruleset = Ruleset {
         slow_pieces: PieceSet::from_piece_type(King),
@@ -1175,10 +1189,10 @@ mod tests {
         assert!(king_iter.is_ok());
         assert_eq!(king_iter.unwrap().collect::<HashSet<Play>>(), HashSet::new());
         let game: Game<SmallBoardState> = Game::new(
-            BRANDUBH,
+            rules::BRANDUBH,
             ".T.....\n.......\n.......\n.t...K.\n.......\n.......\n......."
         ).unwrap();
-        
+
         // Test moving through (but not onto) throne and blocking by piece
         let test_tile = Tile::new(3, 1);
         let iter = game.iter_plays(test_tile);
@@ -1197,5 +1211,15 @@ mod tests {
             )
         )
     }
+    
+    #[test]
+    fn test_can_play() {
+        let game: Game<SmallBoardState> = Game::new(
+            rules::BRANDUBH,
+            "..tt...\n.tTKt..\n..tt...\n.......\n.......\n.......\n......."
+        ).unwrap();
+        assert!(game.side_can_play(Attacker));
+        assert!(!game.side_can_play(Defender));
+    } 
 
 }
