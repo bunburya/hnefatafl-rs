@@ -315,6 +315,11 @@ impl<T: BoardState> Board<T> {
         }
         Some(enclosure)
     }
+
+    /// Return an iterator over all tiles on the board.
+    pub fn iter_tiles(&self) -> TileIterator {
+        TileIterator::new(self.side_len)
+    }
     
 }
 
@@ -343,6 +348,39 @@ impl<T: BoardState> FromStr for Board<T> {
     }
 }
 
+pub struct TileIterator {
+    side_len: u8,
+    current_row: u8,
+    current_col: u8
+}
+
+impl TileIterator {
+    fn new(side_len: u8) -> Self {
+        Self {
+            side_len,
+            current_row: 0,
+            current_col: 0
+        }
+    }
+}
+
+impl Iterator for TileIterator {
+    type Item = Tile;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.current_row >= self.side_len {
+            return None
+        }
+        let tile = Tile::new(self.current_row, self.current_col);
+        if self.current_col >= self.side_len - 1 {
+            self.current_row += 1;
+            self.current_col = 0;
+        } else {
+            self.current_col += 1;
+        }
+        Some(tile)
+    }
+}
+
 /// A [`Board`] suitable for board sizes up 7x7. 
 pub type SmallBoard = Board<SmallBoardState>;
 
@@ -362,6 +400,7 @@ mod tests {
     use crate::Side::{Attacker, Defender};
     use std::collections::HashSet;
     use std::str::FromStr;
+    use crate::preset::boards;
 
     /// Assert that the given vector does not contain duplicates, and contains the same items as
     /// a comparison vector (ignoring order).
@@ -620,6 +659,18 @@ mod tests {
             false
         );
         assert!(encl_res.is_some());
+    }
+
+    #[test]
+    fn test_iter_tiles() {
+        let board: SmallBoard = Board::from_str(boards::BRANDUBH).unwrap();
+        let mut iter = board.iter_tiles();
+        for r in 0..7 {
+            for c in 0..7 {
+                assert_eq!(iter.next(), Some(Tile::new(r, c)));
+            }
+        }
+        assert_eq!(iter.next(), None);
     }
 
 }

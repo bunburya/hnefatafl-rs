@@ -24,7 +24,7 @@
 
 - [X] CLI client.
 - [ ] WASM client.
-- [ ] Implement AI for Federation Brandubh.
+- [ ] Implement AI for Brandubh.
 
 ## Beyond
 

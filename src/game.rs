@@ -608,7 +608,7 @@ impl<T: BoardState> Game<T> {
     }
 
     /// Iterate over the possible plays that can be made by the piece at the given tile. Returns an
-    /// error if there is no piece at the given tile.
+    /// error if there is no piece at the given tile. Order of iteration is not guaranteed.
     pub fn iter_plays(&self, tile: Tile) -> Result<PlayIterator<T>, BoardError> {
         PlayIterator::new(self, tile)
     }
@@ -626,7 +626,7 @@ impl<T: BoardState> Game<T> {
 
 /// An iterator over the possible plays that can be made by the piece at the given tile. Note that
 /// because this struct holds a reference to the [`Game`], the game may not be mutated while the
-/// iterator exists.
+/// iterator exists. Order of iteration is not guaranteed.
 pub struct PlayIterator<'a, T: BoardState> {
     game: &'a Game<T>,
     start_tile: Tile,

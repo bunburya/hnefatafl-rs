@@ -17,7 +17,7 @@ Currently the crate includes a number of structs, traits and enums to describe v
 Many of the most popular rule variants can be constructed, including Copenhagen Hnefatafl, Tablut, Brandubh and Sea
 Battle.
 
-A very basic demo (a terminal-based Brandubh game) is also implemented (run `cargo run` to play).
+A very basic demo (a terminal-based Brandubh game) is also implemented (run `cargo run --features demo` to play).
 
 ## What is not (yet) implemented
 

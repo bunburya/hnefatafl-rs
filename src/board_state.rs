@@ -12,9 +12,7 @@ pub trait BoardState: Default {
     /// Get the tile on which the king is currently placed.
     fn get_king(&self) -> Tile;
 
-    /// Store the given location as the position of the king. **NB**: Does not set the relevant bit
-    /// (or unset the bit corresponding to the king's previous location), which must be handled
-    /// separately.
+    /// Store the given location as the position of the king. 
     fn set_king(&mut self, t: Tile);
 
     /// Check whether the given tile contains the king.
@@ -22,12 +20,13 @@ pub trait BoardState: Default {
         self.get_king() == t
     }
 
-    /// Place a piece representing the given side at the given position by setting the relevant bit.
+    /// Place a piece representing the given side at the given position.
     fn place_piece(&mut self, t: Tile, piece: Piece);
 
-    /// Clear a tile by unsetting the relevant bit.
+    /// Clear a tile.
     fn clear_tile(&mut self, t: Tile);
 
+    /// Get the piece that occupies the given tile, if any.
     fn get_piece(&self, t: Tile) -> Option<Piece>;
 
     /// Check if there is any piece occupying a tile.
@@ -37,6 +36,7 @@ pub trait BoardState: Default {
     /// defenders.
     fn count_pieces(&self, side: Side) -> u8;
 
+    /// Iterate over all occupied tiles on the board. Order of iteration is not guaranteed.
     fn iter_occupied(&self, side: Side) -> Self::Iter;
     
     /// Parse board state from a string, returning the state and the length of the board's side.
@@ -103,7 +103,6 @@ impl<T: BitField> BoardState for BitfieldBoardState<T> {
     
     type Iter = BitfieldIter<T>;
     
-    /// Get the tile on which the king is currently placed.
     fn get_king(&self) -> Tile {
         let row = (self.defenders.to_be_bytes().as_ref()[0] & 0b1111_0000) >> 4;
         let col = (self.attackers.to_be_bytes().as_ref()[0] & 0b1111_0000) >> 4;
@@ -145,7 +144,6 @@ impl<T: BitField> BoardState for BitfieldBoardState<T> {
         self.defenders &= mask;
     }
 
-    /// Get the piece that occupies a tile, if any.
     fn get_piece(&self, t: Tile) -> Option<Piece> {
         let mask = T::tile_mask(t);
         if (self.defenders & mask) > 0.into() {
@@ -162,22 +160,19 @@ impl<T: BitField> BoardState for BitfieldBoardState<T> {
 
     }
 
-    /// Check if there is any piece occupying a tile.
     fn tile_occupied(&self, t: Tile) -> bool {
         let all_pieces = self.defenders | self.attackers;
         let mask = T::tile_mask(t);
         (all_pieces & mask) > 0.into()
     }
 
-    /// Count the number of pieces of the given side left on the board. Includes the king for
-    /// defenders.
     fn count_pieces(&self, side: Side) -> u8 {
         match side {
             Attacker => self.attackers,
             Defender => self.defenders
         }.count_ones() as u8
     }
-    
+
     fn iter_occupied(&self, side: Side) -> Self::Iter {
         let state_with_king = match side {
             Attacker => self.attackers,
