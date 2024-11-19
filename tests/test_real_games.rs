@@ -47,13 +47,18 @@ fn test_real_games(rules: Ruleset, starting_posn: &str, fname: &str) {
             continue
         }
         let plays = cols[0].split(' ').collect::<Vec<&str>>();
+        //println!("{line}");
         for p_str in plays {
+            //println!("{p_str}");
+            //println!("{}", g.board);
             if let Ok((p, c)) = play_captures_from_str(p_str) {
                 assert_eq!(g.check_move_validity(p), MoveValidity::Valid);
-                let m_outcome = g.get_play_outcome(p);
+                let piece = g.board.move_piece(p.from, p.to());
+                let captures = g.get_captures(p, piece);
+                g.board.move_piece(p.to(), p.from);
                 if !c.is_empty() {
                     // Test data doesn't report capture of king as a capture using "x" notation
-                    let without_king: HashSet<Tile> = m_outcome.captures.iter()
+                    let without_king: HashSet<Tile> = captures.iter()
                         .filter(|t| !g.board.is_king(**t))
                         .map(|t| t.to_owned())
                         .collect();

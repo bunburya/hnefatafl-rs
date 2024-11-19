@@ -164,16 +164,16 @@ impl<T: BoardState> Board<T> {
     }
 
     /// Move a piece from one position to another. This does not check whether a move is valid; it
-    /// just unsets the bit at `from` and sets the bit at `to`.
-    pub fn move_piece(&mut self, from: Tile, to: Tile) {
-        let maybe_piece = self.get_piece(from);
-        if let Some(piece) = maybe_piece {
-            if piece.piece_type == King {
-                self.state.set_king(to)
-            }
-            self.place_piece(to, piece);
-            self.state.clear_tile(from)
+    /// just unsets the bit at `from` and sets the bit at `to`. Returns the piece that was moved.
+    /// Panics if there is no piece at `from`.
+    pub fn move_piece(&mut self, from: Tile, to: Tile) -> Piece {
+        let piece = self.get_piece(from).expect("No piece to move.");
+        if piece.piece_type == King {
+            self.state.set_king(to)
         }
+        self.place_piece(to, piece);
+        self.state.clear_tile(from);
+        piece
     }
 
     /// Get the piece (if any) that occupies the given tile.

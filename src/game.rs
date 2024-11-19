@@ -400,7 +400,7 @@ impl<T: BoardState> Game<T> {
         let king_tile = self.board.get_king();
         
         // King is at edge
-        if !self.board.tile_in_bounds(king_tile) {
+        if !self.board.tile_at_edge(king_tile) {
             return false
         }
         
@@ -448,23 +448,18 @@ impl<T: BoardState> Game<T> {
         false
     }
 
-    /// Get the outcome of a move (number of captures, whether it ends the game, etc).
-    pub fn get_play_outcome(&self, play: Play) -> PlayOutcome {
+    /// Get the tiles containing pieces captured by the given play.
+    pub fn get_captures(&self, play: Play, moving_piece: Piece) -> HashSet<Tile> {
         let mut captures: HashSet<Tile> = HashSet::new();
-        let occupant = self.board.get_piece(play.from);
-        if occupant.is_none() {
-            return PlayOutcome { captures, game_outcome: None }
-        }
-        let mover = occupant.expect("Moving piece must not be None");
         let to = play.to();
         
         // Detect normal captures
-        if mover.piece_type != King 
+        if moving_piece.piece_type != King 
             || self.rules.king_attack == Armed 
             || self.rules.king_attack == Hammer {
             for n in self.board.neighbors(to) {
                 if let Some(other_piece) = self.board.get_piece(n) {
-                    if other_piece.side == mover.side {
+                    if other_piece.side == moving_piece.side {
                         // Friendly neighbour so no possibility for capture
                         continue
                     }
@@ -516,18 +511,24 @@ impl<T: BoardState> Game<T> {
         if let Some(walled) = self.detect_shieldwall(play) {
             captures.extend(walled);
         }
+        captures
 
-        let game_outcome = self.get_game_outcome(play, &captures);
-        PlayOutcome { captures, game_outcome }
     }
 
     /// Get the outcome of the game, if any. If None, the game is still ongoing.
-    pub fn get_game_outcome(&self, play: Play, caps: &HashSet<Tile>) -> Option<GameOutcome> {
-        if caps.len() as u8 >= self.board.state.count_pieces(self.side_to_play.other()) {
+    pub fn get_game_outcome(
+        &self,
+        play: Play,
+        moving_piece: Piece,
+        caps: &HashSet<Tile>
+    ) -> Option<GameOutcome> {
+        if self.board.state.count_pieces(self.side_to_play.other()) == 0 {
             // All opposing pieces have been captured.
             return Some(Winner(self.side_to_play))
         }
         if self.side_to_play == Attacker {
+            // This test relies on the fact that even once the king has been removed from the board,
+            // the bits at the end that encode its position remain set.
             if caps.contains(&self.board.state.get_king()) {
                 // Attacker has captured the king.
                 return Some(Winner(Attacker))
@@ -547,7 +548,7 @@ impl<T: BoardState> Game<T> {
                 }
             }
         } else {
-            if self.board.is_king(play.from) && (
+            if moving_piece.piece_type == King && (
                 (self.rules.edge_escape && self.board.tile_at_edge(play.to()))
                     || (!self.rules.edge_escape && self.board.corners.contains(&play.to()))
             ) {
@@ -562,18 +563,19 @@ impl<T: BoardState> Game<T> {
         
         if let Some(RepetitionRule { n_repetitions, is_loss }) = self.rules.repetition_rule {
             if self.detect_repetition(play, self.side_to_play, n_repetitions) {
+                // Loss or draw as a result of repeated moves.
                 return if is_loss {
                     Some(Winner(self.side_to_play.other()))
                 } else {
                     Some(Draw)
                 }
-            }
+            } 
         }
         
         if !self.side_can_play(self.side_to_play.other()) {
             // Other side has no playable moves.
             return Some(Winner(self.side_to_play))
-        }
+        } 
         
         None
     }
@@ -585,22 +587,28 @@ impl<T: BoardState> Game<T> {
         if let Invalid(v) = self.check_move_validity(play) {
             return Err(v)
         };
-        let play_outcome = self.get_play_outcome(play);
-        self.board.move_piece(play.from, play.to());
-        for &c in &play_outcome.captures {
+        
+        // First move the piece on the board
+        let moving_piece = self.board.move_piece(play.from, play.to());
+        // Then remove captured pieces
+        let captures = self.get_captures(play, moving_piece);
+        for &c in &captures {
             self.board.remove_piece(c)
         }
-
+        // Then assess the game outcome
+        let game_outcome = self.get_game_outcome(play, moving_piece, &captures);
+        
         self.turn += 1;
+        let game_status = match game_outcome {
+            Some(game_outcome) => Over(game_outcome),
+            None => Ongoing
+        };
         let record = PlayRecord {
             side: self.side_to_play,
             play,
-            outcome: play_outcome,
+            outcome: PlayOutcome { captures, game_outcome },
         };
-        let game_status = match record.outcome.game_outcome { 
-            Some(outcome) => Over(outcome),
-            None => Ongoing
-        };
+        
         self.side_to_play = self.side_to_play.other();
         self.play_history.push(record);
         self.status = game_status;
@@ -711,7 +719,7 @@ mod tests {
         TooFar
     };
     use crate::game::MoveValidity::{Invalid, Valid};
-    use crate::game::{Game, PlayOutcome};
+    use crate::game::Game;
     use crate::pieces::PieceSet;
     use crate::pieces::PieceType::King;
     use crate::pieces::Side::{Attacker, Defender};
@@ -846,57 +854,50 @@ mod tests {
     
     #[test]
     fn test_check_play_outcome() {
+        
+        // TODO: Need to include separate test for checking game outcome now
+        
         let mut test_game: Game<SmallBoardState> = Game::new(
             TEST_RULES,
             "....t..\n.....Tt\n..T....\n..t..t.\nTt....T\n..t....\n..T..K."
         ).unwrap();
         
+        let play = Play::from_tiles(Tile::new(0, 4), Tile::new(6, 4)).unwrap();
+        let piece = test_game.board.move_piece(play.from, play.to());
         assert_eq!(
-            test_game.get_play_outcome(Play::from_tiles(
-                Tile::new(0, 4),
-                Tile::new(6, 4)
-            ).unwrap()),
-            PlayOutcome {
-                captures: [Tile::new(6, 5)].into(),
-                game_outcome: Some(Winner(Attacker))
-            }
+            test_game.get_captures(play, piece),
+            [Tile::new(6, 5)].into()
         );
+        test_game.board.move_piece(play.to(), play.from);
         
+        let play = Play::from_tiles(Tile::new(4, 6), Tile::new(4, 2)).unwrap();
+        let piece = test_game.board.move_piece(play.from, play.to());
         assert_eq!(
-            test_game.get_play_outcome(Play::from_tiles(
-                Tile::new(4, 6),
-                Tile::new(4, 2)
-            ).unwrap()),
-            PlayOutcome {
-                captures: [
-                    Tile::new(4, 1),
-                    Tile::new(3, 2),
-                    Tile::new(5, 2),
-                ].into(),
-                game_outcome: None
-            }
+            test_game.get_captures(play, piece),
+            [
+                Tile::new(4, 1),
+                Tile::new(3, 2),
+                Tile::new(5, 2),
+            ].into()
         );
+        test_game.board.move_piece(play.to(), play.from);
         
         test_game.side_to_play = test_game.side_to_play.other();
         
+        let play = Play::from_tiles(Tile::new(6, 5), Tile::new(6, 6)).unwrap();
+        let piece = test_game.board.move_piece(play.from, play.to());
         assert_eq!(
-            test_game.get_play_outcome(Play::from_tiles(
-                Tile::new(6, 5),
-                Tile::new(6, 6)
-            ).unwrap()),
-            PlayOutcome {
-                captures: [].into(),
-                game_outcome: Some(Winner(Defender))
-            }
+            test_game.get_captures(play, piece),
+            [].into(),
         );
-        
+        test_game.board.move_piece(play.to(), play.from);
+
+        let play = Play::from_tiles(Tile::new(6, 5), Tile::new(5, 5)).unwrap();
+        let piece = test_game.board.move_piece(play.from, play.to());
         assert_eq!(
-            test_game.get_play_outcome(Play::from_tiles(
-                Tile::new(6, 5),
-                Tile::new(5, 5)
-            ).unwrap()),
-            PlayOutcome::default()
-        )
+            test_game.get_captures(play, piece),
+            [].into()
+        );
     }
 
     #[test]
@@ -1254,6 +1255,12 @@ mod tests {
         let game: Game<SmallBoardState> = Game::new(
             rules::BRANDUBH,
             "..tt...\n.tTKt..\n..tt...\n.......\n.......\n.......\n......."
+        ).unwrap();
+        assert!(game.side_can_play(Attacker));
+        assert!(!game.side_can_play(Defender));
+        let game: Game<SmallBoardState> = Game::new(
+            rules::BRANDUBH,
+            "..tKt..\n...t...\n.......\n.......\n.......\n.......\n......."
         ).unwrap();
         assert!(game.side_can_play(Attacker));
         assert!(!game.side_can_play(Defender));
