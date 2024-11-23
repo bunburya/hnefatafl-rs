@@ -50,6 +50,25 @@ pub mod rules {
         enclosure_win: Some(WithoutEdgeAccess),
         repetition_rule: Some(RepetitionRule { n_repetitions: 3, is_loss: true })
     };
+
+    pub const MAGPIE: Ruleset = Ruleset {
+        edge_escape: false,
+        king_strength: Strong,
+        king_attack: Armed,
+        shieldwall: None,
+        exit_fort: false,
+        throne_movement: KingEntry,
+        may_enter_corners: PieceSet::from_piece_type(King),
+        hostility: HostilityRules {
+            throne: PieceSet::all(),
+            corners: PieceSet::all(),
+            edge: PieceSet::none(),
+        },
+        slow_pieces: PieceSet::from_piece_type(King),
+        starting_side: Attacker,
+        enclosure_win: None,
+        repetition_rule: None
+    };
 }
 
 pub mod boards {
@@ -74,6 +93,16 @@ pub mod boards {
         ttTKTtt\n\
         ...T...\n\
         ...t...\n\
+        ...t...\
+    ";
+
+    pub const MAGPIE: &str = "\
+        ...t...\n\
+        .t...t.\n\
+        ...T...\n\
+        t.TKT.t\n\
+        ...T...\n\
+        .t...t.\n\
         ...t...\
     ";
 }

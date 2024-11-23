@@ -7,15 +7,18 @@ use std::str::FromStr;
 
 /// An offset which can be applied to [`Coords`] and which is composed of the axis of movement and
 /// an offset along that axis.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct AxisOffset {
+    /// The axis along which the tile is offset.
     pub axis: Axis,
-    pub offset: i8,
+    /// The signed length in tiles of the offset. A negative number means that the offset is
+    /// going "backwards", ie, to a lower-numbered row or column.
+    pub displacement: i8,
 }
 
 impl AxisOffset {
-    pub fn new(axis: Axis, offset: i8) -> Self {
-        Self { axis, offset }
+    pub fn new(axis: Axis, displacement: i8) -> Self {
+        Self { axis, displacement }
     }
 }
 
@@ -72,8 +75,8 @@ impl Add<AxisOffset> for Coords {
     type Output = Self;
     fn add(self, rhs: AxisOffset) -> Self {
         match rhs.axis {
-            Vertical => Coords::new(self.row + rhs.offset, self.col),
-            Horizontal => Coords::new(self.row, self.col + rhs.offset),
+            Vertical => Coords::new(self.row + rhs.displacement, self.col),
+            Horizontal => Coords::new(self.row, self.col + rhs.displacement),
         }
     }
 }
@@ -177,38 +180,38 @@ mod tests {
     
     #[test]
     fn test_moves() {
-        let m_res = Play::from_tiles(Tile::new(2, 4), Tile::new(2, 6));
-        assert!(m_res.is_ok());
-        let m = m_res.unwrap();
-        assert_eq!(m.from, Tile::new(2, 4));
-        assert_eq!(m.axis, Horizontal);
-        assert_eq!(m.displacement, 2);
-        assert_eq!(m.to(), Tile::new(2, 6));
+        let p_res = Play::from_tiles(Tile::new(2, 4), Tile::new(2, 6));
+        assert!(p_res.is_ok());
+        let p = p_res.unwrap();
+        assert_eq!(p.from, Tile::new(2, 4));
+        assert_eq!(p.movement.axis, Horizontal);
+        assert_eq!(p.movement.displacement, 2);
+        assert_eq!(p.to(), Tile::new(2, 6));
 
-        let m_res = Play::from_tiles(Tile::new(2, 3), Tile::new(5, 3));
-        assert!(m_res.is_ok());
-        let m = m_res.unwrap();
-        assert_eq!(m.from, Tile::new(2, 3));
-        assert_eq!(m.axis, Vertical);
-        assert_eq!(m.displacement, 3);
-        assert_eq!(m.to(), Tile::new(5, 3));
+        let p_res = Play::from_tiles(Tile::new(2, 3), Tile::new(5, 3));
+        assert!(p_res.is_ok());
+        let p = p_res.unwrap();
+        assert_eq!(p.from, Tile::new(2, 3));
+        assert_eq!(p.movement.axis, Vertical);
+        assert_eq!(p.movement.displacement, 3);
+        assert_eq!(p.to(), Tile::new(5, 3));
 
-        let m_res = Play::from_tiles(Tile::new(1, 4), Tile::new(1, 1));
-        assert!(m_res.is_ok());
-        let m = m_res.unwrap();
-        assert_eq!(m.from, Tile::new(1, 4));
-        assert_eq!(m.axis, Horizontal);
-        assert_eq!(m.displacement, -3);
-        assert_eq!(m.distance(), 3);
-        assert_eq!(m.to(), Tile::new(1, 1));
+        let p_res = Play::from_tiles(Tile::new(1, 4), Tile::new(1, 1));
+        assert!(p_res.is_ok());
+        let p = p_res.unwrap();
+        assert_eq!(p.from, Tile::new(1, 4));
+        assert_eq!(p.movement.axis, Horizontal);
+        assert_eq!(p.movement.displacement, -3);
+        assert_eq!(p.distance(), 3);
+        assert_eq!(p.to(), Tile::new(1, 1));
 
-        let m_res = Play::from_tiles(Tile::new(7, 5), Tile::new(0, 5));
-        assert!(m_res.is_ok());
-        let m = m_res.unwrap();
-        assert_eq!(m.from, Tile::new(7, 5));
-        assert_eq!(m.axis, Vertical);
-        assert_eq!(m.displacement, -7);
-        assert_eq!(m.to(), Tile::new(0, 5));
+        let p_res = Play::from_tiles(Tile::new(7, 5), Tile::new(0, 5));
+        assert!(p_res.is_ok());
+        let p = p_res.unwrap();
+        assert_eq!(p.from, Tile::new(7, 5));
+        assert_eq!(p.movement.axis, Vertical);
+        assert_eq!(p.movement.displacement, -7);
+        assert_eq!(p.to(), Tile::new(0, 5));
 
         let m_res = Play::from_tiles(Tile::new(2, 3), Tile::new(3, 6));
         assert!(m_res.is_err());

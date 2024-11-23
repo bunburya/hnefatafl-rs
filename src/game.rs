@@ -152,33 +152,39 @@ impl<T: BoardState> Game<T> {
     /// Whether the given piece can occupy or pass the given tile according to the game rules and
     /// current board state. Returns a pair of `bool`s indicating whether the piece can occupy or
     /// pass, respectively.
-    pub fn can_occupy_or_pass(&self, tile: Tile, piece: Piece) -> (bool, bool) {
-        // todo: Need to deal with slow movement. Maybe we need to call check_move_validity here
-        // (would involve getting from tile) and then only return can_pass=true where InvalidMove
-        // == MoveOntoBlockedTile (if can pass).
-        if self.board.tile_occupied(tile) {
-            (false, false)
-        } else if tile == self.board.throne {
-            match self.rules.throne_movement {
-                NoThrone => (true, true),
-                NoPass => (false, false),
-                NoEntry => (false, true),
-                KingPass => {
-                    let is_king = piece.piece_type == King;
-                    (is_king, is_king)
-                },
-                KingEntry => (piece.piece_type == King, true),
+    pub fn can_occupy_or_pass(&self, play: Play, piece: Piece) -> (bool, bool) {
+        let validity = self.check_play_validity_for_side(play, piece.side);
+        match validity {
+            Valid => (true, true),
+            Invalid(MoveOntoBlockedTile) => {
+                // Generally, the only way you could be unable to move onto a tile but be able to
+                // move past it is if the tile is a throne and the rules permit passing through, but
+                // not occupying, the throne. Of course, this will differ for knights and commanders
+                // when implemented.
+                if play.to() == self.board.throne {
+                    match self.rules.throne_movement {
+                        NoThrone => (true, true),
+                        NoPass => (false, false),
+                        NoEntry => (false, true),
+                        KingPass => {
+                            let is_king = piece.piece_type == King;
+                            (is_king, is_king)
+                        },
+                        KingEntry => (piece.piece_type == King, true),
+                    }
+                } else {
+                    // If special tile is not a throne, it must be a corner, so cannot be passed.
+                    (false, false)
+                }
+            },
+            _ => {
+                (false, false)
             }
-        } else if self.board.corners.contains(&tile) {
-            (self.rules.may_enter_corners.contains(piece), false)
-        } else {
-            (true, true)
         }
     }
 
-    /// Check whether a move is valid. If the move is valid, returns `None`; otherwise, the wrapped
-    /// [`InvalidPlay`] variant indicates why the move is invalid.
-    pub fn check_move_validity(&self, play: Play) -> MoveValidity {
+    /// Check whether a play is valid for the given side.
+    pub fn check_play_validity_for_side(&self, play: Play, side: Side) -> MoveValidity {
         if self.status != Ongoing {
             return Invalid(GameOver)
         }
@@ -188,7 +194,7 @@ impl<T: BoardState> Game<T> {
         match maybe_piece {
             None => Invalid(NoPiece),
             Some(piece) => {
-                if piece.side != self.side_to_play {
+                if piece.side != side {
                     return Invalid(WrongPlayer);
                 }
                 if !(self.board.tile_in_bounds(from) && self.board.tile_in_bounds(to)) {
@@ -196,6 +202,9 @@ impl<T: BoardState> Game<T> {
                 }
                 if (from.row != to.row) && (from.col != to.col) {
                     return Invalid(NoCommonAxis)
+                }
+                if self.board.tile_occupied(to) {
+                    return Invalid(BlockedByPiece)
                 }
                 let between = self.board.tiles_between(from, to);
                 if between.iter().any(|t| self.board.tile_occupied(*t)) {
@@ -208,13 +217,13 @@ impl<T: BoardState> Game<T> {
                 if (
                     (self.rules.throne_movement == NoPass)
                         || ((self.rules.throne_movement == KingPass)
-                            && piece.piece_type != King)
+                        && piece.piece_type != King)
                 ) && between.contains(&self.board.throne) {
                     return Invalid(MoveThroughBlockedTile)
                 }
                 if ((self.rules.throne_movement == NoEntry)
                     || ((self.rules.throne_movement == KingEntry)
-                        && piece.piece_type != King)
+                    && piece.piece_type != King)
                 ) && (to == self.board.throne) {
                     return Invalid(MoveOntoBlockedTile)
                 }
@@ -223,8 +232,14 @@ impl<T: BoardState> Game<T> {
                     return Invalid(TooFar)
                 }
                 Valid
+
             }
         }
+    }
+
+    /// Check whether a move is valid.
+    pub fn check_play_validity(&self, play: Play) -> MoveValidity {
+        self.check_play_validity_for_side(play, self.side_to_play)
     }
 
     /// Check whether the king is *currently* strong (must be surrounded on all four sides to be
@@ -284,7 +299,7 @@ impl<T: BoardState> Game<T> {
             // and is currently unoccupied.
             'axisloop: for axis in [Vertical, Horizontal] {
                 for d in [-1, 1] {
-                    let n_coords = Play::new(*t, axis, d).to_coords();
+                    let n_coords = Play::new(*t, AxisOffset::new(axis, d)).to_coords();
                     if let Ok(n_tile) = self.board.coords_to_tile(n_coords) {
                         let is_inside = encl.contains(&n_tile);
                         if (inside_safe && is_inside) || (outside_safe && !is_inside) {
@@ -335,7 +350,7 @@ impl<T: BoardState> Game<T> {
         // value is the tile, on the opposite side to the edge, occupied by the opposing piece.
         let mut wall: HashSet<Tile> = HashSet::new();
         loop {
-            let step = Play::new(t, axis, dir);
+            let step = Play::new(t, AxisOffset::new(axis, dir));
             // Move one tile along the edge
             t = step.to();
             if !self.board.tile_in_bounds(t) {
@@ -361,11 +376,7 @@ impl<T: BoardState> Game<T> {
             }
             let piece = piece_opt.expect("Tile should be occupied.");
             if piece.side == self.side_to_play.other() {
-                let pin = Play::new(
-                    t,
-                    axis.other(),
-                    away_from_edge
-                ).to();
+                let pin = Play::new(t, AxisOffset::new(axis.other(), away_from_edge)).to();
                 if let Some(p) = self.board.get_piece(pin) {
                     if p.side == self.side_to_play {
                         wall.insert(t);
@@ -614,7 +625,7 @@ impl<T: BoardState> Game<T> {
     /// Actually "do" a move, checking validity, getting outcome, applying outcome to board state,
     /// switching side to play and returning a description of the game status following the move.
     pub fn do_move(&mut self, play: Play) -> Result<GameStatus, InvalidPlay> {
-        if let Invalid(v) = self.check_move_validity(play) {
+        if let Invalid(v) = self.check_play_validity(play) {
             return Err(v)
         };
         
@@ -668,9 +679,8 @@ impl<T: BoardState> Game<T> {
 pub struct PlayIterator<'a, T: BoardState> {
     game: &'a Game<T>,
     start_tile: Tile,
-    current_tile: Tile,
     piece: Piece,
-    direction: AxisOffset,
+    movement: AxisOffset,
 }
 
 impl<'a, T: BoardState> PlayIterator<'a, T> {
@@ -680,9 +690,8 @@ impl<'a, T: BoardState> PlayIterator<'a, T> {
             Ok(Self {
                 game,
                 start_tile: tile,
-                current_tile: tile,
                 piece,
-                direction: AxisOffset { axis: Vertical, offset: 1 }
+                movement: AxisOffset { axis: Vertical, displacement: 1 }
             })
         } else {
             Err(BoardError::NoPiece)
@@ -692,11 +701,21 @@ impl<'a, T: BoardState> PlayIterator<'a, T> {
     /// Get the next direction by rotating the current direction 90 degrees. If the rotation would
     /// bring us back to the start, return `None` instead as we have been through all rotations.
     fn next_direction(&self) -> Option<AxisOffset> {
-        match self.direction {
-            AxisOffset { axis: Vertical, offset: 1 } => Some(AxisOffset::new(Vertical, -1)),
-            AxisOffset { axis: Vertical, offset: -1 } => Some(AxisOffset::new(Horizontal, 1)),
-            AxisOffset { axis: Horizontal, offset: 1 } => Some(AxisOffset::new(Horizontal, -1)),
-            _ => None
+        match self.movement.axis {
+            Vertical => {
+                if self.movement.displacement > 0 {
+                    Some(AxisOffset { axis: Vertical, displacement: -1 })
+                } else {
+                    Some(AxisOffset { axis: Horizontal, displacement: 1 })
+                }
+            },
+            Horizontal => {
+                if self.movement.displacement > 0 {
+                    Some(AxisOffset { axis: Horizontal, displacement: -1 })
+                } else {
+                    None
+                }
+            }
         }
     }
 }
@@ -706,11 +725,15 @@ impl<'a, T: BoardState> Iterator for PlayIterator<'a, T> {
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            let dest_coords = Coords::from(self.current_tile) + self.direction;
-            if let Ok(dest_tile) = self.game.board.coords_to_tile(dest_coords) {
+            //let dest_coords = Coords::from(self.current_tile) + self.direction;
+            let play = Play::new(self.start_tile, self.movement);
+            if let Ok(dest_tile) = self.game.board.coords_to_tile(play.to_coords()) {
                 // New tile is in bounds
-                self.current_tile = dest_tile;
-                let (can_occupy, can_pass) = self.game.can_occupy_or_pass(dest_tile, self.piece);
+
+                // Increase the step for the next iteration.
+                self.movement.displacement +=
+                    if self.movement.displacement.is_positive() { 1 } else { -1 };
+                let (can_occupy, can_pass) = self.game.can_occupy_or_pass(play, self.piece);
                 if can_occupy {
                     // We found a tile we can occupy, so return that
                     return Some(Play::from_tiles(self.start_tile, dest_tile)
@@ -723,14 +746,12 @@ impl<'a, T: BoardState> Iterator for PlayIterator<'a, T> {
                     // We can neither occupy nor pass this tile so move on to trying the next
                     // direction. If we have already tried all the directions, there are no more
                     // plays available so return `None`.
-                    self.direction = self.next_direction()?;
-                    self.current_tile = self.start_tile;
+                    self.movement = self.next_direction()?;
                     continue
                 }
             } else {
                 // New tile would be out of bounds so move on to trying the next direction.
-                self.direction = self.next_direction()?;
-                self.current_tile = self.start_tile;
+                self.movement = self.next_direction()?;
                 continue
             }
         }
@@ -780,21 +801,21 @@ mod tests {
         ).unwrap();
 
         assert_eq!(
-            fb_game.check_move_validity(Play::from_tiles(
+            fb_game.check_play_validity(Play::from_tiles(
                 Tile::new(3, 1),
                 Tile::new(4, 1)
             ).unwrap()),
             Valid
         );
         assert_eq!(
-            fb_game.check_move_validity(Play::from_tiles(
+            fb_game.check_play_validity(Play::from_tiles(
                 Tile::new(0, 3),
                 Tile::new(0, 0)
             ).unwrap()),
             Invalid(MoveOntoBlockedTile)
         );
         assert_eq!(
-            fb_game.check_move_validity(Play::from_tiles(
+            fb_game.check_play_validity(Play::from_tiles(
                 Tile::new(1, 1),
                 Tile::new(2, 1)
             ).unwrap()),
@@ -802,7 +823,7 @@ mod tests {
         );
         
         assert_eq!(
-            fb_game.check_move_validity(Play::from_tiles(
+            fb_game.check_play_validity(Play::from_tiles(
                 Tile::new(0, 3),
                 Tile::new(0, 7)
             ).unwrap()),
@@ -810,31 +831,32 @@ mod tests {
         );
 
         assert_eq!(
-            fb_game.check_move_validity(Play::from_tiles(
+            fb_game.check_play_validity(Play::from_tiles(
                 Tile::new(0, 3),
                 Tile::new(2, 3)
             ).unwrap()),
             Invalid(BlockedByPiece)
         );
-        
+
         fb_game.do_move(Play::from_tiles(
             Tile::new(3, 1),
             Tile::new(4, 1)
         ).unwrap()).unwrap();
-        
+
+        let play = Play::from_tiles(
+            Tile::new(3, 3),
+            Tile::new(3, 2)
+        ).unwrap();
         assert_eq!(
-            fb_game.check_move_validity(Play::from_tiles(
-                Tile::new(3, 3),
-                Tile::new(3, 2)
-            ).unwrap()),
-            Valid
+            fb_game.check_play_validity(play),
+            Invalid(BlockedByPiece)
         );
 
         fb_game.board.move_piece(Tile::new(3, 2), Tile::new(4, 2));
         fb_game.board.move_piece(Tile::new(3, 3), Tile::new(3, 2));
 
         assert_eq!(
-            fb_game.check_move_validity(Play::from_tiles(
+            fb_game.check_play_validity(Play::from_tiles(
                 Tile::new(2, 3),
                 Tile::new(3, 3)
             ).unwrap()),
@@ -842,7 +864,7 @@ mod tests {
         );
 
         assert_eq!(
-            fb_game.check_move_validity(Play::from_tiles(
+            fb_game.check_play_validity(Play::from_tiles(
                 Tile::new(3, 2),
                 Tile::new(3, 3)
             ).unwrap()),
@@ -857,7 +879,7 @@ mod tests {
         test_game.side_to_play = Defender;
         
         assert_eq!(
-            test_game.check_move_validity(Play::from_tiles(
+            test_game.check_play_validity(Play::from_tiles(
                 Tile::new(6, 5),
                 Tile::new(6, 3)
             ).unwrap()),
@@ -865,7 +887,7 @@ mod tests {
         );
         
         assert_eq!(
-            test_game.check_move_validity(Play::from_tiles(
+            test_game.check_play_validity(Play::from_tiles(
                 Tile::new(6, 5),
                 Tile::new(6, 4)
             ).unwrap()),
@@ -875,7 +897,7 @@ mod tests {
         test_game.side_to_play = Attacker;
         
         assert_eq!(
-            test_game.check_move_validity(Play::from_tiles(
+            test_game.check_play_validity(Play::from_tiles(
                 Tile::new(3, 2),
                 Tile::new(3, 4)
             ).unwrap()),

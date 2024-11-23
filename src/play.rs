@@ -1,4 +1,4 @@
-use crate::tiles::Coords;
+use crate::tiles::{AxisOffset, Coords};
 use crate::Axis::{Horizontal, Vertical};
 use crate::ParseError::{BadPlay, BadString};
 use crate::PlayError::DisjointTiles;
@@ -17,16 +17,13 @@ use std::str::FromStr;
 pub struct Play {
     pub from: Tile,
     /// The axis along which the move occurs, ie, horizontal or vertical.
-    pub axis: Axis,
-    /// The signed distance in tiles covered by the move. A negative number means that the move is
-    /// going "backwards", ie, to a lower-numbered row or column.
-    pub displacement: i8
+    pub movement: AxisOffset,
 }
 
 impl Play {
 
-    pub fn new(from: Tile, axis: Axis, displacement: i8) -> Self {
-        Self { from, axis, displacement }
+    pub fn new(from: Tile, movement: AxisOffset) -> Self {
+        Self { from, movement }
     }
 
     /// Create a new [`Play`] from source and destination tiles.
@@ -42,31 +39,25 @@ impl Play {
         } else {
             return Err(DisjointTiles)
         };
-        Ok(Self::new(src, axis, displacement))
+        Ok(Self::new(src, AxisOffset::new(axis, displacement)))
     }
 
     /// The unsigned distance in tiles covered by the move. Basically the absolute value of
-    /// [Play::displacement].
+    /// the displacement.
     pub fn distance(&self) -> u8 {
-        self.displacement.unsigned_abs()
+        self.movement.displacement.unsigned_abs()
     }
 
-    /// The move's destination tile.
+    /// The move's destination tile.  **NOTE**: This creates a tile without checking whether it is
+    /// in bounds. Use the output with caution.
     pub fn to(&self) -> Tile {
-        let d = self.displacement;
-        match self.axis {
-            Vertical => Tile::new(((self.from.row as i8) + d) as u8, self.from.col),
-            Horizontal => Tile::new(self.from.row, ((self.from.col as i8) + d) as u8)
-        }
+        let coords = self.to_coords();
+        Tile::new(coords.row as u8, coords.col as u8)
     }
 
     /// The row and column of the move's destination tile, as [`Coords`]. 
     pub fn to_coords(&self) -> Coords {
-        let d = self.displacement;
-        match self.axis {
-            Vertical => Coords { row: (self.from.row as i8) + d, col: self.from.col as i8 },
-            Horizontal => Coords { row: self.from.row as i8, col: (self.from.col as i8) + d }
-        }
+        Coords::from(self.from) + self.movement
     }
 }
 

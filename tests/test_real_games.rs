@@ -52,7 +52,7 @@ fn test_real_games(rules: Ruleset, starting_posn: &str, fname: &str) {
             //println!("{p_str}");
             //println!("{}", g.board);
             if let Ok((p, c)) = play_captures_from_str(p_str) {
-                assert_eq!(g.check_move_validity(p), MoveValidity::Valid);
+                assert_eq!(g.check_play_validity(p), MoveValidity::Valid);
                 let piece = g.board.move_piece(p.from, p.to());
                 let captures = g.get_captures(p, piece);
                 g.board.move_piece(p.to(), p.from);
