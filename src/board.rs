@@ -30,6 +30,7 @@ impl Enclosure {
 
 /// Information about the game board, including its current state (as a struct implementing the
 /// [`BoardState`] trait), its side length and the positions of its throne and corners.
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct Board<T: BoardState> {
     pub state: T,
     pub side_len: u8,

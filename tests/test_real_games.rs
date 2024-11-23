@@ -73,7 +73,7 @@ fn test_real_games(rules: Ruleset, starting_posn: &str, fname: &str) {
             }
         }
 
-        if let GameStatus::Over(GameOutcome::Winner(side)) = last_game_status {
+        if let GameStatus::Over(GameOutcome::Winner(_, side)) = last_game_status {
             let expected = match side {
                 Side::Attacker => "Black",
                 Side::Defender => "White"

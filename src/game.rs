@@ -21,20 +21,46 @@ use std::cmp::PartialEq;
 use std::collections::HashSet;
 use std::str::FromStr;
 use crate::error::InvalidPlay::{GameOver, WrongPlayer};
+use crate::game::WinReason::{AllCaptured, Enclosed, ExitFort, KingCaptured, KingEscaped, NoMoves};
 use crate::GameOutcome::Draw;
 use crate::rules::EnclosureWinRules::WithoutEdgeAccess;
+
+#[derive(Eq, PartialEq, Debug, Copy, Clone)]
+pub enum WinReason {
+    /// King has escaped in the "normal" way, ie, by reaching an edge or corner.
+    KingEscaped,
+    /// King has escaped through an exit fort.
+    ExitFort,
+    /// King has been captured.
+    KingCaptured,
+    /// All the other side's pieces have been captured.
+    AllCaptured,
+    /// The other side is completely enclosed (with or without edge or corner access, depending on
+    /// the rules).
+    Enclosed,
+    /// The other side has no legal moves available.
+    NoMoves,
+    /// The other side has repeated a move too many times.
+    Repetition
+}
+
+#[derive(Eq, PartialEq, Debug, Copy, Clone)]
+pub enum DrawReason {
+    /// A move has been repeated too many times.
+    Repetition
+}
 
 /// The outcome of a single game.
 #[derive(Eq, PartialEq, Debug, Copy, Clone)]
 pub enum GameOutcome {
     /// Game has been won by the specified side.
-    Winner(Side),
+    Winner(WinReason, Side),
     /// Game has ended in a draw.
-    Draw
+    Draw(DrawReason)
 }
 
 /// A struct describing the outcome of a single move.
-#[derive(Eq, PartialEq, Debug, Default)]
+#[derive(Eq, PartialEq, Debug, Default, Clone)]
 pub struct PlayOutcome {
     /// Tiles containing pieces that have been captured by the move.
     pub captures: HashSet<Tile>,
@@ -62,6 +88,7 @@ pub enum MoveValidity {
 
 /// A struct representing a single game, including all state and associated information (such as
 /// rules) needed to play.
+#[derive(Clone)]
 pub struct Game<T: BoardState> {
     pub board: Board<T>,
     pub rules: Ruleset,
@@ -90,9 +117,9 @@ impl<T: BoardState> Game<T> {
     pub fn special_tile_hostile(&self, tile: Tile, piece: Piece) -> bool {
         (self.rules.hostility.throne.contains(piece) && tile == self.board.throne)
             || (self.rules.hostility.corners.contains(piece)
-            && self.board.corners.contains(&tile))
+                && self.board.corners.contains(&tile))
             || (self.rules.hostility.edge.contains(piece)
-            && !self.board.tile_in_bounds(tile))
+                && !self.board.tile_in_bounds(tile))
     }
 
     /// Determine whether the given tile is hostile to the given piece.
@@ -126,6 +153,9 @@ impl<T: BoardState> Game<T> {
     /// current board state. Returns a pair of `bool`s indicating whether the piece can occupy or
     /// pass, respectively.
     pub fn can_occupy_or_pass(&self, tile: Tile, piece: Piece) -> (bool, bool) {
+        // todo: Need to deal with slow movement. Maybe we need to call check_move_validity here
+        // (would involve getting from tile) and then only return can_pass=true where InvalidMove
+        // == MoveOntoBlockedTile (if can pass).
         if self.board.tile_occupied(tile) {
             (false, false)
         } else if tile == self.board.throne {
@@ -524,14 +554,14 @@ impl<T: BoardState> Game<T> {
     ) -> Option<GameOutcome> {
         if self.board.state.count_pieces(self.side_to_play.other()) == 0 {
             // All opposing pieces have been captured.
-            return Some(Winner(self.side_to_play))
+            return Some(Winner(AllCaptured, self.side_to_play))
         }
         if self.side_to_play == Attacker {
             // This test relies on the fact that even once the king has been removed from the board,
             // the bits at the end that encode its position remain set.
             if caps.contains(&self.board.state.get_king()) {
                 // Attacker has captured the king.
-                return Some(Winner(Attacker))
+                return Some(Winner(KingCaptured, Attacker))
             }
             if let Some(encl_win) = self.rules.enclosure_win {
                 if let Some(encl) = self.board.find_enclosure(
@@ -543,7 +573,7 @@ impl<T: BoardState> Game<T> {
                 ) {
                     if encl.occupied.len() == self.board.state.count_pieces(Defender) as usize
                         && self.enclosure_secure(&encl, false, true) {
-                        return Some(Winner(Attacker))
+                        return Some(Winner(Enclosed, Attacker))
                     }
                 }
             }
@@ -553,11 +583,11 @@ impl<T: BoardState> Game<T> {
                     || (!self.rules.edge_escape && self.board.corners.contains(&play.to()))
             ) {
                 // King has escaped.
-                return Some(Winner(Defender))
+                return Some(Winner(KingEscaped, Defender))
             }
             if self.rules.exit_fort && self.detect_exit_fort() {
                 // King has escaped through exit fort.
-                return Some(Winner(Defender))
+                return Some(Winner(ExitFort, Defender))
             }
         }
         
@@ -565,16 +595,16 @@ impl<T: BoardState> Game<T> {
             if self.detect_repetition(play, self.side_to_play, n_repetitions) {
                 // Loss or draw as a result of repeated moves.
                 return if is_loss {
-                    Some(Winner(self.side_to_play.other()))
+                    Some(Winner(WinReason::Repetition, self.side_to_play.other()))
                 } else {
-                    Some(Draw)
+                    Some(Draw(DrawReason::Repetition))
                 }
             } 
         }
         
         if !self.side_can_play(self.side_to_play.other()) {
             // Other side has no playable moves.
-            return Some(Winner(self.side_to_play))
+            return Some(Winner(NoMoves, self.side_to_play))
         } 
         
         None
@@ -732,6 +762,7 @@ mod tests {
     use crate::{hashset, HostilityRules, MediumBoardState, Piece, SmallBoardState};
     use std::collections::HashSet;
     use std::str::FromStr;
+    use crate::game::WinReason::{KingCaptured, KingEscaped, Repetition};
     use crate::GameStatus::{Ongoing, Over};
 
     const TEST_RULES: Ruleset = Ruleset {
@@ -851,53 +882,67 @@ mod tests {
             Invalid(MoveThroughBlockedTile)
         );
     }
-    
+
     #[test]
     fn test_check_play_outcome() {
         
         // TODO: Need to include separate test for checking game outcome now
         
-        let mut test_game: Game<SmallBoardState> = Game::new(
+        let test_game: Game<SmallBoardState> = Game::new(
             TEST_RULES,
             "....t..\n.....Tt\n..T....\n..t..t.\nTt....T\n..t....\n..T..K."
         ).unwrap();
-        
+
+        // First, move the piece on the board directly and check that it picks up the correct
+        // captures. Then, reverse the move, and call `do_move` to check that the correct game
+        // outcome is detected.
+
+        let mut game = test_game.clone();
         let play = Play::from_tiles(Tile::new(0, 4), Tile::new(6, 4)).unwrap();
-        let piece = test_game.board.move_piece(play.from, play.to());
+        let piece = game.board.move_piece(play.from, play.to());
         assert_eq!(
-            test_game.get_captures(play, piece),
+            game.get_captures(play, piece),
             [Tile::new(6, 5)].into()
         );
-        test_game.board.move_piece(play.to(), play.from);
-        
+        game.board.move_piece(play.to(), play.from);
+        assert_eq!(game.do_move(play), Ok(Over(Winner(KingCaptured, Attacker))));
+
+        let mut game = test_game.clone();
+        game.side_to_play = Defender;
         let play = Play::from_tiles(Tile::new(4, 6), Tile::new(4, 2)).unwrap();
-        let piece = test_game.board.move_piece(play.from, play.to());
+        let piece = game.board.move_piece(play.from, play.to());
         assert_eq!(
-            test_game.get_captures(play, piece),
+            game.get_captures(play, piece),
             [
                 Tile::new(4, 1),
                 Tile::new(3, 2),
                 Tile::new(5, 2),
             ].into()
         );
-        test_game.board.move_piece(play.to(), play.from);
-        
-        test_game.side_to_play = test_game.side_to_play.other();
-        
+        game.board.move_piece(play.to(), play.from);
+        assert_eq!(game.do_move(play), Ok(Ongoing));
+
+        let mut game = test_game.clone();
+        game.side_to_play = Defender;
         let play = Play::from_tiles(Tile::new(6, 5), Tile::new(6, 6)).unwrap();
-        let piece = test_game.board.move_piece(play.from, play.to());
+        let piece = game.board.move_piece(play.from, play.to());
         assert_eq!(
-            test_game.get_captures(play, piece),
+            game.get_captures(play, piece),
             [].into(),
         );
-        test_game.board.move_piece(play.to(), play.from);
+        game.board.move_piece(play.to(), play.from);
+        assert_eq!(game.do_move(play), Ok(Over(Winner(KingEscaped, Defender))));
 
+        let mut game = test_game.clone();
+        game.side_to_play = Defender;
         let play = Play::from_tiles(Tile::new(6, 5), Tile::new(5, 5)).unwrap();
-        let piece = test_game.board.move_piece(play.from, play.to());
+        let piece = game.board.move_piece(play.from, play.to());
         assert_eq!(
-            test_game.get_captures(play, piece),
+            game.get_captures(play, piece),
             [].into()
         );
+        game.board.move_piece(play.to(), play.from);
+        assert_eq!(game.do_move(play), Ok(Ongoing));
     }
 
     #[test]
@@ -1280,7 +1325,7 @@ mod tests {
         }
         assert_eq!(game.status, Ongoing);
         game.do_move(Play::from_str("d6-f6").unwrap()).unwrap();
-        assert_eq!(game.status, Over(Winner(Defender)));
+        assert_eq!(game.status, Over(Winner(Repetition, Defender)));
     }
 
 }

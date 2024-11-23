@@ -7,7 +7,7 @@ mod tiles;
 mod bitfield;
 mod utils;
 mod board_state;
-mod play;
+pub mod play;
 pub mod preset;
 
 pub use crate::{

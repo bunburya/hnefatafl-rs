@@ -101,14 +101,14 @@ pub struct Capture {
 }
 
 /// A record of a single play.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct PlayRecord {
     /// The side that made the play.
-    pub(crate) side: Side,
+    pub side: Side,
     /// Details of the play (piece movement) itself.
-    pub(crate) play: Play,
+    pub play: Play,
     /// Details of the outcome of the play.
-    pub(crate) outcome: PlayOutcome
+    pub outcome: PlayOutcome
 }
 
 impl PlayRecord {
