@@ -1,29 +1,29 @@
 use crate::board::{Board, Enclosure};
 use crate::board_state::BoardState;
+use crate::error::InvalidPlay::{GameOver, WrongPlayer};
 use crate::error::{BoardError, InvalidPlay, ParseError};
 use crate::game::GameOutcome::Winner;
 use crate::game::GameStatus::{Ongoing, Over};
 use crate::game::InvalidPlay::{BlockedByPiece, MoveOntoBlockedTile, MoveThroughBlockedTile, NoCommonAxis, NoPiece, OutOfBounds, TooFar};
 use crate::game::MoveValidity::{Invalid, Valid};
+use crate::game::WinReason::{AllCaptured, Enclosed, ExitFort, KingCaptured, KingEscaped, NoMoves};
 use crate::pieces::PieceType::King;
 use crate::pieces::Side::{Attacker, Defender};
 use crate::pieces::{Piece, Side};
 use crate::play::{Play, PlayRecord};
+use crate::rules::EnclosureWinRules::WithoutEdgeAccess;
 use crate::rules::KingAttack::{Anvil, Armed, Hammer};
 use crate::rules::KingStrength::{Strong, StrongByThrone, Weak};
 use crate::rules::ThroneRule::{KingEntry, KingPass, NoEntry, NoPass, NoThrone};
 use crate::rules::{RepetitionRule, Ruleset, ShieldwallRules};
 use crate::tiles::{AxisOffset, Coords, RowColOffset, Tile};
 use crate::Axis::{Horizontal, Vertical};
+use crate::GameOutcome::Draw;
 use crate::PieceType::Soldier;
 use crate::{Axis, PieceSet};
 use std::cmp::PartialEq;
 use std::collections::HashSet;
 use std::str::FromStr;
-use crate::error::InvalidPlay::{GameOver, WrongPlayer};
-use crate::game::WinReason::{AllCaptured, Enclosed, ExitFort, KingCaptured, KingEscaped, NoMoves};
-use crate::GameOutcome::Draw;
-use crate::rules::EnclosureWinRules::WithoutEdgeAccess;
 
 #[derive(Eq, PartialEq, Debug, Copy, Clone)]
 pub enum WinReason {
@@ -760,6 +760,7 @@ impl<'a, T: BoardState> Iterator for PlayIterator<'a, T> {
 
 #[cfg(test)]
 mod tests {
+    use crate::game::Game;
     use crate::game::GameOutcome::Winner;
     use crate::game::InvalidPlay::{
         BlockedByPiece,
@@ -770,21 +771,20 @@ mod tests {
         TooFar
     };
     use crate::game::MoveValidity::{Invalid, Valid};
-    use crate::game::Game;
+    use crate::game::WinReason::{KingCaptured, KingEscaped, Repetition};
     use crate::pieces::PieceSet;
     use crate::pieces::PieceType::King;
     use crate::pieces::Side::{Attacker, Defender};
     use crate::play::Play;
-    use crate::preset::{rules, boards};
+    use crate::preset::{boards, rules};
     use crate::rules::ThroneRule::NoPass;
     use crate::rules::{Ruleset, ShieldwallRules};
     use crate::tiles::Tile;
+    use crate::GameStatus::{Ongoing, Over};
     use crate::PieceType::Soldier;
     use crate::{hashset, HostilityRules, MediumBoardState, Piece, SmallBoardState};
     use std::collections::HashSet;
     use std::str::FromStr;
-    use crate::game::WinReason::{KingCaptured, KingEscaped, Repetition};
-    use crate::GameStatus::{Ongoing, Over};
 
     const TEST_RULES: Ruleset = Ruleset {
         slow_pieces: PieceSet::from_piece_type(King),

@@ -1,3 +1,4 @@
+use primitive_types::{U256, U512};
 use crate::ParseError::BadLineLen;
 use crate::PieceType::{King, Soldier};
 use crate::Side::{Attacker, Defender};
@@ -102,7 +103,8 @@ pub struct BitfieldBoardState<T: BitField> {
 impl<T: BitField> BoardState for BitfieldBoardState<T> {
     
     type Iter = BitfieldIter<T>;
-    
+
+    /// Get the tile occupied by the king.
     fn get_king(&self) -> Tile {
         let row = (self.defenders.to_be_bytes().as_ref()[0] & 0b1111_0000) >> 4;
         let col = (self.attackers.to_be_bytes().as_ref()[0] & 0b1111_0000) >> 4;
@@ -144,6 +146,7 @@ impl<T: BitField> BoardState for BitfieldBoardState<T> {
         self.defenders &= mask;
     }
 
+    /// Get the piece, if any, that occupies the given tile.
     fn get_piece(&self, t: Tile) -> Option<Piece> {
         let mask = T::tile_mask(t);
         if (self.defenders & mask) > 0.into() {
@@ -160,12 +163,14 @@ impl<T: BitField> BoardState for BitfieldBoardState<T> {
 
     }
 
+    /// Check whether the given tile is occupied by any piece.
     fn tile_occupied(&self, t: Tile) -> bool {
         let all_pieces = self.defenders | self.attackers;
         let mask = T::tile_mask(t);
         (all_pieces & mask) > 0.into()
     }
 
+    /// Return the number of pieces of the given side on the board.
     fn count_pieces(&self, side: Side) -> u8 {
         match side {
             Attacker => self.attackers,
@@ -173,6 +178,7 @@ impl<T: BitField> BoardState for BitfieldBoardState<T> {
         }.count_ones() as u8
     }
 
+    /// Return an iterator over the tiles that are occupied by pieces of the given side.
     fn iter_occupied(&self, side: Side) -> Self::Iter {
         let state_with_king = match side {
             Attacker => self.attackers,
@@ -192,8 +198,14 @@ impl<T: BitField> BoardState for BitfieldBoardState<T> {
 
 /// Board state suitable for boards up to 7x7.
 pub type SmallBoardState = BitfieldBoardState<u64>;
-/// Board state suitable for board up to 11x11.
+/// Board state suitable for boards up to 11x11.
 pub type MediumBoardState = BitfieldBoardState<u128>;
+
+/// Board state suitable for boards up to 15x15.
+pub type LargeBoardState = BitfieldBoardState<U256>;
+
+/// Board state suitable for boards up to 21x21.
+pub type HugeBoardState = BitfieldBoardState<U512>;
 
 #[cfg(test)]
 mod tests {

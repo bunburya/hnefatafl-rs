@@ -9,6 +9,9 @@ readme = "README.md"
 keywords = ["tafl", "hnefatafl", "gamedev", "boardgames"]
 categories = ["game-development", "game-engines"]
 
+[dependencies]
+primitive-types = "0.13.1"
+
 [features]
 demo = []
 

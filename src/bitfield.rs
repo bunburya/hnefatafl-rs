@@ -1,10 +1,25 @@
 use crate::tiles::Tile;
+use primitive_types::{U256, U512};
 use std::fmt::Debug;
 use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not, Shl, Shr};
 
+trait ZeroArray {
+    fn zero() -> Self;
+}
+
+macro_rules! impl_zero_array {
+    ($t:ty) => {
+        impl ZeroArray for [u8; size_of::<$t>()] {
+            fn zero() -> Self {
+                [0; size_of::<$t>()]
+            }
+        }
+    }
+}
+
 /// A trait for any integer type that can be used as a bitfield to store board state. See also the
-/// [`crate::impl_bitfield!`] macro that can help to implement this trait for a particular integer
-/// type.
+/// [`crate::impl_bitfield!`] and [`crate::impl_bitfield_bigint!`] macros that can help to implement
+/// this trait for a particular integer type.
 pub trait BitField:
     Sized +
     Copy +
@@ -24,7 +39,7 @@ pub trait BitField:
     /// The type that is returned by `Self::to_be_bytes` and accepted by `Self::from_be_bytes`.
     /// In general this should be of the form `[u8; n]` where `n` is the size in bytes of the
     /// integer type.
-    type Bytes: AsRef<[u8]> + AsMut<[u8]> + Default;
+    type Bytes: AsRef<[u8]> + AsMut<[u8]> + ZeroArray;
     
     /// The number of bits used to represent a single row of the board. This number should, of
     /// course, be at least equal to the board length. It should be less than the square root
@@ -33,18 +48,18 @@ pub trait BitField:
     const ROW_WIDTH: u8;
 
     /// Returns the number of ones in the binary representation of `self`.
-    fn count_ones(self) -> u32;
+    fn count_ones(&self) -> u32;
     
     /// Return the memory representation of this integer as a byte array in big-endian (network)
     /// byte order.
-    fn to_be_bytes(self) -> Self::Bytes;
+    fn to_be_bytes(&self) -> Self::Bytes;
     
     /// Create an integer value from its representation as a byte array in big endian.
     fn from_be_bytes(bytes: Self::Bytes) -> Self;
     
     /// Create an integer value from a big endian byte array slice.
     fn from_be_bytes_slice(bytes: &[u8]) -> Self {
-        let mut new_bytes = Self::Bytes::default();
+        let mut new_bytes = Self::Bytes::zero();
         new_bytes.as_mut().copy_from_slice(bytes.as_ref());
         Self::from_be_bytes(new_bytes)
     }
@@ -63,30 +78,75 @@ pub trait BitField:
     }
     
     /// Return the number of trailing zeros in the bitfield.
-    fn trailing_zeros(self) -> u32;
+    fn trailing_zeros(&self) -> u32;
 
     /// Return the number of leading zeros in the bitfield.
-    fn leading_zeros(self) -> u32;
+    fn leading_zeros(&self) -> u32;
     
     /// Whether the bitfield is empty (ie, no set bits).
-    fn is_empty(self) -> bool;
+    fn is_empty(&self) -> bool;
 
 }
 
 /// Implement the [BitField] trait for the given integer type. First argument should be the type
 /// to implement the trait for; the second should be the byte value to use for
-/// [BitField::ROW_WIDTH].
+/// [BitField::ROW_WIDTH]. This macro is for use with types whose methods generally take `self`
+/// (not `&self`), such as the standard library integer types.
 #[macro_export] macro_rules! impl_bitfield {
     ($t:ty, $row_width:expr) => {
+
+        impl_zero_array!($t);
+
         impl BitField for $t {
             type Bytes = [u8; size_of::<$t>()];
             const ROW_WIDTH: u8 = $row_width;
 
-            fn count_ones(self) -> u32 {
+            fn count_ones(&self) -> u32 {
+                <$t>::count_ones(*self)
+            }
+
+            fn to_be_bytes(&self) -> Self::Bytes {
+                <$t>::to_be_bytes(*self)
+            }
+
+            fn from_be_bytes(bytes: Self::Bytes) -> Self {
+                <$t>::from_be_bytes(bytes)
+            }
+
+            fn trailing_zeros(&self) -> u32 {
+                <$t>::trailing_zeros(*self)
+            }
+
+            fn leading_zeros(&self) -> u32 {
+                <$t>::leading_zeros(*self)
+            }
+
+            fn is_empty(&self) -> bool {
+                *self == 0
+            }
+        }
+    };
+}
+
+
+/// Implement the [BitField] trait for the given integer type. First argument should be the type
+/// to implement the trait for; the second should be the byte value to use for
+/// [BitField::ROW_WIDTH]. This macro is for use with types whose methods generally take `&self`
+/// (not `self`), like some large integer types.
+#[macro_export] macro_rules! impl_bitfield_bigint {
+    ($t:ty, $row_width:expr) => {
+
+        impl_zero_array!($t);
+
+        impl BitField for $t {
+            type Bytes = [u8; size_of::<$t>()];
+            const ROW_WIDTH: u8 = $row_width;
+
+            fn count_ones(&self) -> u32 {
                 <$t>::count_ones(self)
             }
             
-            fn to_be_bytes(self) -> Self::Bytes {
+            fn to_be_bytes(&self) -> Self::Bytes {
                 <$t>::to_be_bytes(self)
             }
 
@@ -94,20 +154,23 @@ pub trait BitField:
                 <$t>::from_be_bytes(bytes)
             }
             
-            fn trailing_zeros(self) -> u32 {
+            fn trailing_zeros(&self) -> u32 {
                 <$t>::trailing_zeros(self)
             }
             
-            fn leading_zeros(self) -> u32 {
+            fn leading_zeros(&self) -> u32 {
                 <$t>::leading_zeros(self)
             }
             
-            fn is_empty(self) -> bool {
-                self == 0
+            fn is_empty(&self) -> bool {
+                *self == Self::zero()
             }
         }
     };
 }
 
+
 impl_bitfield!(u64, 7);
 impl_bitfield!(u128, 11);
+impl_bitfield_bigint!(U256, 15);
+impl_bitfield_bigint!(U512, 21);

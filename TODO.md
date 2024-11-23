@@ -8,6 +8,8 @@
 - [X] Iterate possible moves for a piece.
 - [X] Advanced win conditions (enclosures, repetition rule)
 - [ ] Ensure everything is documented, including overview of project, what is/is not supported and assumptions.
+- [ ] Clean up `lib.rs`.
+- [X] Larger boards.
 
 ## Support for extra rules/pieces
 
