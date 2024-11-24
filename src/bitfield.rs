@@ -90,8 +90,7 @@ pub trait BitField:
 
 /// Implement the [BitField] trait for the given integer type. First argument should be the type
 /// to implement the trait for; the second should be the byte value to use for
-/// [BitField::ROW_WIDTH]. This macro is for use with types whose methods generally take `self`
-/// (not `&self`), such as the standard library integer types.
+/// [BitField::ROW_WIDTH]. This macro is for use with the standard library integer types .
 #[macro_export] macro_rules! impl_bitfield {
     ($t:ty, $row_width:expr) => {
 
@@ -131,8 +130,11 @@ pub trait BitField:
 
 /// Implement the [BitField] trait for the given integer type. First argument should be the type
 /// to implement the trait for; the second should be the byte value to use for
-/// [BitField::ROW_WIDTH]. This macro is for use with types whose methods generally take `&self`
-/// (not `self`), like some large integer types.
+/// [BitField::ROW_WIDTH]. This macro is for use with the big integer types provided by the
+/// [`primitive_types`] crate. It implements the trait in a way that works with the methods exposed
+/// by these types. Trying to use this macro on other types (or, conversely, trying to use the
+/// [`crate::impl_bitfield!`] macro on the `primitive_types` types) could result in weird and
+/// difficult to debug errors like stack overflows.
 #[macro_export] macro_rules! impl_bitfield_bigint {
     ($t:ty, $row_width:expr) => {
 
@@ -143,15 +145,15 @@ pub trait BitField:
             const ROW_WIDTH: u8 = $row_width;
 
             fn count_ones(&self) -> u32 {
-                <$t>::count_ones(self)
+                self.to_be_bytes().iter().map(|b| b.count_ones()).sum()
             }
             
             fn to_be_bytes(&self) -> Self::Bytes {
-                <$t>::to_be_bytes(self)
+                <$t>::to_big_endian(self)
             }
 
             fn from_be_bytes(bytes: Self::Bytes) -> Self {
-                <$t>::from_be_bytes(bytes)
+                <$t>::from_big_endian(&bytes)
             }
             
             fn trailing_zeros(&self) -> u32 {

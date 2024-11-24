@@ -1,12 +1,12 @@
-use primitive_types::{U256, U512};
 use crate::ParseError::BadLineLen;
 use crate::PieceType::{King, Soldier};
 use crate::Side::{Attacker, Defender};
 use crate::{BitField, ParseError, Piece, Side, Tile};
+use primitive_types::{U256, U512};
 
 
 /// Store information on the current board state (ie, pieces). 
-pub trait BoardState: Default {
+pub trait BoardState: Default + Clone {
     
     type Iter: Iterator<Item=Tile>;
 
@@ -60,6 +60,35 @@ pub trait BoardState: Default {
         }
         Ok((state, side_len))
     }
+
+    fn from_fen_with_side_len(value: &str) -> Result<(Self, u8), ParseError> {
+        let mut side_len = 0u8;
+        let mut state = Self::default();
+        for (r, line) in value.split('/').enumerate() {
+            let mut n_empty = 0;
+            let mut c = 0u8;
+            for chr in line.chars() {
+                if chr.is_digit(10) {
+                    n_empty = (n_empty * 10) + (chr as u8 - '0' as u8);
+                } else {
+                    c += n_empty;
+                    n_empty = 0;
+                    state.place_piece(Tile::new(r as u8, c), Piece::try_from(chr)?);
+                    c += 1;
+                }
+            }
+            if n_empty > 0 {
+                c += n_empty;
+            }
+            println!("{line}, size {c}");
+            if side_len == 0 {
+                side_len = c;
+            } else if side_len != c {
+                return Err(BadLineLen(c as usize))
+            }
+        }
+        Ok((state, side_len))
+    }
 }
 
 pub struct BitfieldIter<T: BitField> {
@@ -94,7 +123,7 @@ impl<T: BitField> Iterator for BitfieldIter<T> {
 /// Currently only basic getting and setting is implemented at the bitfield level. More complex game
 /// logic (like checking move validity, etc) is implemented elsewhere and uses [Tile] structs. If
 /// performance was an issue we could look at moving some of that logic to the bitfield level.
-#[derive(Copy, Clone, Hash, Eq, PartialEq, Default)]
+#[derive(Copy, Clone, Hash, Eq, PartialEq, Default, Debug)]
 pub struct BitfieldBoardState<T: BitField> {
     attackers: T,
     defenders: T
@@ -209,10 +238,33 @@ pub type HugeBoardState = BitfieldBoardState<U512>;
 
 #[cfg(test)]
 mod tests {
-    use crate::board_state::BoardState;
+    use crate::board_state::{BoardState, LargeBoardState};
     use crate::Side::{Attacker, Defender};
     use crate::{hashset, BitfieldBoardState, MediumBoardState, Tile};
     use std::collections::HashSet;
+
+    #[test]
+    fn test_from_fen() {
+        let res = LargeBoardState::from_fen_with_side_len(
+            "3t3/3t3/3T3/ttTKTtt/3T3/3t3/3t3"
+        );
+        assert!(res.is_ok());
+        let (state, len) = res.unwrap();
+
+        let (bench_state, bench_len) = LargeBoardState::from_str_with_side_len(
+            &[
+                "...t...",
+                "...t...",
+                "...T...",
+                "ttTKTtt",
+                "...T...",
+                "...t...",
+                "...t..."
+            ].join("\n")
+        ).unwrap();
+        assert_eq!(state, bench_state);
+        assert_eq!(len, bench_len);
+    }
 
     #[test]
     fn test_iter_occupied() {

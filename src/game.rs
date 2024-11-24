@@ -785,6 +785,7 @@ mod tests {
     use crate::{hashset, HostilityRules, MediumBoardState, Piece, SmallBoardState};
     use std::collections::HashSet;
     use std::str::FromStr;
+    use crate::board_state::{BoardState, HugeBoardState, LargeBoardState};
 
     const TEST_RULES: Ruleset = Ruleset {
         slow_pieces: PieceSet::from_piece_type(King),
@@ -793,9 +794,8 @@ mod tests {
     };
     
 
-    #[test]
-    fn test_check_move_validity() {
-        let mut fb_game: Game<SmallBoardState> = Game::new(
+    fn generic_test_play_validity<T: BoardState>() {
+        let mut fb_game: Game<T> = Game::new(
             rules::BRANDUBH,
             "...t...\n...t...\n...T...\nttTKTtt\n...T...\n...t...\n...t..."
         ).unwrap();
@@ -871,7 +871,7 @@ mod tests {
             Valid
         );
         
-        let mut test_game: Game<SmallBoardState> = Game::new(
+        let mut test_game: Game<T> = Game::new(
             TEST_RULES,
             ".......\n.....Tt\n..T....\n..t..t.\nTt....T\n..t....\n..T..K."
         ).unwrap();
@@ -906,11 +906,16 @@ mod tests {
     }
 
     #[test]
-    fn test_check_play_outcome() {
-        
-        // TODO: Need to include separate test for checking game outcome now
-        
-        let test_game: Game<SmallBoardState> = Game::new(
+    fn test_play_validity() {
+        generic_test_play_validity::<SmallBoardState>();
+        generic_test_play_validity::<MediumBoardState>();
+        generic_test_play_validity::<LargeBoardState>();
+        generic_test_play_validity::<HugeBoardState>();
+    }
+
+    fn generic_test_play_outcome<T: BoardState>() {
+
+        let test_game: Game<T> = Game::new(
             TEST_RULES,
             "....t..\n.....Tt\n..T....\n..t..t.\nTt....T\n..t....\n..T..K."
         ).unwrap();
@@ -965,6 +970,14 @@ mod tests {
         );
         game.board.move_piece(play.to(), play.from);
         assert_eq!(game.do_move(play), Ok(Ongoing));
+    }
+
+    #[test]
+    fn test_play_outcome() {
+        generic_test_play_outcome::<SmallBoardState>();
+        generic_test_play_outcome::<MediumBoardState>();
+        generic_test_play_outcome::<LargeBoardState>();
+        generic_test_play_outcome::<HugeBoardState>();
     }
 
     #[test]
