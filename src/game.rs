@@ -797,7 +797,7 @@ mod tests {
     fn generic_test_play_validity<T: BoardState>() {
         let mut fb_game: Game<T> = Game::new(
             rules::BRANDUBH,
-            "...t...\n...t...\n...T...\nttTKTtt\n...T...\n...t...\n...t..."
+            boards::BRANDUBH
         ).unwrap();
 
         assert_eq!(
@@ -873,7 +873,7 @@ mod tests {
         
         let mut test_game: Game<T> = Game::new(
             TEST_RULES,
-            ".......\n.....Tt\n..T....\n..t..t.\nTt....T\n..t....\n..T..K."
+            "7/5Tt/2T4/2t2t1/Tt4T/2t4/2T2K1"
         ).unwrap();
         
         test_game.side_to_play = Defender;
@@ -917,7 +917,7 @@ mod tests {
 
         let test_game: Game<T> = Game::new(
             TEST_RULES,
-            "....t..\n.....Tt\n..T....\n..t..t.\nTt....T\n..t....\n..T..K."
+            "4t2/5Tt/2T4/2t2t1/Tt4T/2t4/2T2K1"
         ).unwrap();
 
         // First, move the piece on the board directly and check that it picks up the correct
@@ -999,72 +999,12 @@ mod tests {
             ..rules::COPENHAGEN
         };
 
-        let corner_sw = [
-            ".........",
-            ".........",
-            ".........",
-            ".........",
-            "......t..",
-            ".......tT",
-            ".......tT",
-            ".......tT",
-            ".........",
-        ].join("\n");
-        let regular_sw = [
-            ".........",
-            ".........",
-            ".........",
-            "......t..",
-            ".......tT",
-            ".......tT",
-            ".......tT",
-            "........t",
-            ".........",
-        ].join("\n");
-        let regular_sw_king = [
-            ".........",
-            ".........",
-            ".........",
-            "......t..",
-            ".......tT",
-            ".......tK",
-            ".......tT",
-            "........t",
-            ".........",
-        ].join("\n");
-        let no_sw_gap = [
-            ".........",
-            ".........",
-            ".........",
-            "......t..",
-            ".......tT",
-            "........T",
-            ".......tT",
-            "........t",
-            ".........",
-        ].join("\n");
-        let no_sw_friend = [
-            ".........",
-            ".........",
-            ".........",
-            "......t..",
-            ".......tT",
-            "......tTT",
-            ".......tT",
-            "........t",
-            ".........",
-        ].join("\n");
-        let no_sw_small = [
-            ".........",
-            ".........",
-            ".........",
-            "......t..",
-            ".......tT",
-            "........t",
-            ".........",
-            ".........",
-            ".........",
-        ].join("\n");
+        let corner_sw = "9/9/9/9/6t2/7tT/7tT/7tT/9";
+        let regular_sw = "9/9/9/6t2/7tT/7tT/7tT/8t/9";
+        let regular_sw_king = "9/9/9/6t2/7tT/7tK/7tT/8t/9";
+        let no_sw_gap = "9/9/9/6t2/7tT/8T/7tT/8t/9";
+        let no_sw_friend = "9/9/9/6t2/7tT/6tTT/7tT/8t/9";
+        let no_sw_small = "9/9/9/6t2/7tT/8t/9/9/9";
 
         let cm = Play::from_tiles(
             Tile::new(4, 6),
@@ -1115,34 +1055,10 @@ mod tests {
     
     #[test]
     fn test_encl_secure() {
-        let setup_1 = [
-            ".......",
-            "..ttt..",
-            ".t.K.t.",
-            "..ttt..",
-            "......."
-        ].join("\n");
-        let setup_2 = [
-            ".......",
-            ".tttt..",
-            ".t.K.t.",
-            "..tttt.",
-            "......."
-        ].join("\n");
-        let setup_3 = [
-            "..t.t..",
-            ".t.t.t.",
-            ".t.K.t.",
-            "..ttt..",
-            "......."
-        ].join("\n");
-        let setup_4 = [
-            "..t..t.",
-            ".t...t.",
-            ".t.K.t.",
-            "..ttt..",
-            "......."
-        ].join("\n");
+        let setup_1 = "7/2ttt2/1t1K1t1/2ttt2/7";
+        let setup_2 = "7/1tttt2/1t1K1t1/2tttt1/7";
+        let setup_3 = "2t1t2/1t1t1t1/1t1K1t1/2ttt2/7";
+        let setup_4 = "2t2t1/1t3t1/1t1K1t1/2ttt2/7";
         
         let safe_corners = Ruleset {
             hostility: HostilityRules {
@@ -1181,72 +1097,12 @@ mod tests {
     
     #[test]
     fn test_exit_forts() {
-        let exit_fort_flat = [
-            ".........",
-            ".........",
-            "........t",
-            ".......tT",
-            ".......T.",
-            "......tT.",
-            ".......TK",
-            ".......tT",
-            ".........",
-        ].join("\n");
-        let exit_fort_bulge = [
-            ".........",
-            ".........",
-            ".........",
-            ".........",
-            ".........",
-            ".....TTTT",
-            ".....T..K",
-            "......TTT",
-            ".........",
-        ].join("\n");
-        let no_fort_enemy = [
-            ".........",
-            ".........",
-            ".........",
-            "........T",
-            ".......Tt",
-            ".......T.",
-            ".......TK",
-            "........T",
-            ".........",
-        ].join("\n");
-        let no_fort_unfree = [
-            ".........",
-            ".........",
-            ".........",
-            "........T",
-            ".......TT",
-            ".......TT",
-            ".......TK",
-            "........T",
-            ".........",
-        ].join("\n");
-        let no_fort_gap = [
-            ".........",
-            ".........",
-            ".........",
-            "........T",
-            ".........",
-            "....t..T.",
-            ".......TK",
-            "........T",
-            ".........",
-        ].join("\n");
-        let no_fort_vuln = [
-            ".........",
-            ".........",
-            ".........",
-            ".........",
-            ".........",
-            "......TTT",
-            ".....T..K",
-            "......TTT",
-            ".........",
-        ].join("\n");
+        let exit_fort_flat = "9/9/8t/7tT/7T1/6tT1/7TK/7tT/9";
+        let exit_fort_bulge = "9/9/9/9/9/5TTTT/5T2K/6TTT/9";
+        let no_fort_enemy = "9/9/9/8T/7Tt/7T1/7TK/8T/9";
+        let no_fort_unfree = "9/9/9/8T/7TT/7TT/7TK/8T/9";
+        let no_fort_gap = "9/9/9/8T/9/4t2T1/7TK/8T/9";
+        let no_fort_vuln = "9/9/9/9/9/6TTT/5T2K/6TTT/9";
         for s in [exit_fort_flat, exit_fort_bulge] {
             let g: Game<MediumBoardState> = Game::new(rules::COPENHAGEN, &s).unwrap();
             assert!(g.detect_exit_fort());
@@ -1308,7 +1164,7 @@ mod tests {
         assert_eq!(king_iter.unwrap().collect::<HashSet<Play>>(), HashSet::new());
         let game: Game<SmallBoardState> = Game::new(
             rules::BRANDUBH,
-            ".T.....\n.......\n.......\n.t...K.\n.......\n.......\n......."
+            "1T5/7/7/1t3K1/7/7/7"
         ).unwrap();
 
         // Test moving through (but not onto) throne and blocking by piece
@@ -1334,13 +1190,13 @@ mod tests {
     fn test_can_play() {
         let game: Game<SmallBoardState> = Game::new(
             rules::BRANDUBH,
-            "..tt...\n.tTKt..\n..tt...\n.......\n.......\n.......\n......."
+            "2tt3/1tTKt2/2tt3/7/7/7/7"
         ).unwrap();
         assert!(game.side_can_play(Attacker));
         assert!(!game.side_can_play(Defender));
         let game: Game<SmallBoardState> = Game::new(
             rules::BRANDUBH,
-            "..tKt..\n...t...\n.......\n.......\n.......\n.......\n......."
+            "2tKt2/3t3/7/7/7/7/7"
         ).unwrap();
         assert!(game.side_can_play(Attacker));
         assert!(!game.side_can_play(Defender));

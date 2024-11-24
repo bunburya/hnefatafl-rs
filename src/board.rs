@@ -321,6 +321,33 @@ impl<T: BoardState> Board<T> {
     pub fn iter_tiles(&self) -> TileIterator {
         TileIterator::new(self.side_len)
     }
+
+    /// Generate the FEN string describing the current board state
+    pub fn to_fen(&self) -> String {
+        let mut s = String::new();
+        for row in 0..self.side_len {
+            let mut n_empty = 0;
+            for col in 0..self.side_len {
+                let t = Tile::new(row, col);
+                if let Some(piece) = self.get_piece(t) {
+                    if n_empty > 0 {
+                        s.push_str(n_empty.to_string().as_str());
+                        n_empty = 0;
+                    }
+                    s.push(piece.into());
+                } else {
+                    n_empty += 1;
+                }
+            }
+            if n_empty > 0 {
+                s.push_str(n_empty.to_string().as_str());
+            }
+            if row < self.side_len - 1 {
+                s.push('/');
+            }
+        }
+        s
+    }
     
 }
 
@@ -344,7 +371,7 @@ impl<T: BoardState> Display for Board<T> {
 impl<T: BoardState> FromStr for Board<T> {
     type Err = ParseError;
     fn from_str(value: &str) -> Result<Self, Self::Err> {
-        let (state, side_len) = T::from_str_with_side_len(value)?;
+        let (state, side_len) = T::from_fen_with_side_len(value)?;
         Ok(Self::with_state(state, side_len))
     }
 }
@@ -418,8 +445,8 @@ mod tests {
 
     #[test]
     fn test_board() {
-        let start_str = "...t...\n...t...\n...T...\nttTKTtt\n...T...\n...t...\n...t...";
-        let expected_str = "...tK..\n...t.t.\n...T...\nttT.Ttt\n.T.T...\n...t...\n...t...\n";
+        let start_str = "3t3/3t3/3T3/ttTKTtt/3T3/3t3/3t3";
+        let expected_str = "3tK2/3t1t1/3T3/ttT1Ttt/1T1T3/3t3/3t3";
         let board_result = Board::from_str(start_str);
         assert!(board_result.is_ok());
         let mut board: Board<SmallBoardState> = board_result.unwrap();
@@ -428,7 +455,7 @@ mod tests {
         board.place_piece(Tile::new(4, 1), Piece::defender(Soldier));
         board.move_piece(Tile::new(3, 3), Tile::new(0, 4));
         assert_eq!(board.get_king(), Tile::new(0, 4));
-        assert_eq!(format!("{board}"), expected_str);
+        assert_eq!(board.to_fen(), expected_str);
 
         let n = board.neighbors(Tile::new(0, 0));
         check_tile_vec(n, vec![
@@ -485,52 +512,12 @@ mod tests {
     
     #[test]
     fn test_enclosures() {
-        let full_enclosure = [
-            "..ttt..",
-            ".t.K.t.",
-            "..tttt.",
-            ".......",
-            ".......",
-            ".......",
-            ".......",
-        ].join("\n");
-        let encl_with_edge = [
-            "..t.t..",
-            ".t.K.t.",
-            "..tttt.",
-            ".......",
-            ".......",
-            ".......",
-            ".......",
-        ].join("\n");
-        let encl_with_corner = [
-            ".....t.",
-            "....tK.",
-            "....ttt",
-            ".......",
-            ".......",
-            ".......",
-            ".......",
-        ].join("\n");
-        let encl_with_soldier = [
-            "..ttt..",
-            ".t.KTt.",
-            "..tttt.",
-            ".......",
-            ".......",
-            ".......",
-            ".......",
-        ].join("\n");
-        let encl_edge_2 = [
-            ".t..t..",
-            ".t.K.t.",
-            "..tttt.",
-            ".......",
-            ".......",
-            ".......",
-            ".......",
-        ].join("\n");
-        let board: SmallBoard = Board::from_str(full_enclosure.as_str()).unwrap();
+        let full_enclosure = "2ttt2/1t1K1t1/2tttt1/7/7/7/7";
+        let encl_with_edge = "2t1t2/1t1K1t1/2tttt1/7/7/7/7";
+        let encl_with_corner = "5t1/4tK1/4ttt/7/7/7/7";
+        let encl_with_soldier = "2ttt2/1t1KTt1/2tttt1/7/7/7/7";
+        let encl_edge_2 = "1t2t2/1t1K1t1/2tttt1/7/7/7/7";
+        let board: SmallBoard = Board::from_str(full_enclosure).unwrap();
         let encl_res = board.find_enclosure(
             Tile::new(1, 3),
             PieceSet::from(King),
@@ -554,7 +541,7 @@ mod tests {
             ]
         );
 
-        let board: SmallBoard = Board::from_str(encl_with_edge.as_str()).unwrap();
+        let board: SmallBoard = Board::from_str(encl_with_edge).unwrap();
         let encl_res = board.find_enclosure(
             Tile::new(1, 3),
             PieceSet::from(King),
@@ -586,7 +573,7 @@ mod tests {
             ]
         );
         
-        let board: SmallBoard = Board::from_str(encl_with_corner.as_str()).unwrap();
+        let board: SmallBoard = Board::from_str(encl_with_corner).unwrap();
         let encl_res = board.find_enclosure(
             Tile::new(1, 3),
             PieceSet::from(King),
@@ -617,7 +604,7 @@ mod tests {
             ]
         );
 
-        let board: SmallBoard = Board::from_str(encl_with_soldier.as_str()).unwrap();
+        let board: SmallBoard = Board::from_str(encl_with_soldier).unwrap();
         let encl_res = board.find_enclosure(
             Tile::new(1, 3),
             PieceSet::from(King),
@@ -651,7 +638,7 @@ mod tests {
             ]
         );
 
-        let board: SmallBoard = Board::from_str(encl_edge_2.as_str()).unwrap();
+        let board: SmallBoard = Board::from_str(encl_edge_2).unwrap();
         let encl_res = board.find_enclosure(
             Tile::new(1, 3),
             PieceSet::from(King),
