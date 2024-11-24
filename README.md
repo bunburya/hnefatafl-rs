@@ -15,7 +15,7 @@ Currently the crate includes a number of structs, traits and enums to describe v
 - determining the outcome of a move.
 
 Many of the most popular rule variants can be constructed, including Copenhagen Hnefatafl, Tablut, Brandubh and Sea
-Battle.
+Battle.  Boards up to 21x21 are supported.
 
 A very basic demo (a terminal-based Brandubh game) is also implemented (run `cargo run --features demo` to play).
 
@@ -27,5 +27,3 @@ in future.
 There are many different variants of tafl, and this crate does not support all possible rules. In particular, the
 "berserk" rules are not yet implemented, nor are any of the other variants which involve extra pieces beyond soldiers
 and the king.
-
-Currently only boards up to 11x11 are supported (it is planned to add larger boards soon).

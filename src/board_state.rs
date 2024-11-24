@@ -80,7 +80,6 @@ pub trait BoardState: Default + Clone {
             if n_empty > 0 {
                 c += n_empty;
             }
-            println!("{line}, size {c}");
             if side_len == 0 {
                 side_len = c;
             } else if side_len != c {

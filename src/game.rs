@@ -24,6 +24,7 @@ use crate::{Axis, PieceSet};
 use std::cmp::PartialEq;
 use std::collections::HashSet;
 use std::str::FromStr;
+use crate::game_state::RepetitionTracker;
 
 #[derive(Eq, PartialEq, Debug, Copy, Clone)]
 pub enum WinReason {
@@ -96,6 +97,7 @@ pub struct Game<T: BoardState> {
     pub side_to_play: Side,
     pub play_history: Vec<PlayRecord>,
     pub status: GameStatus,
+    pub repetition_tracker: RepetitionTracker
 }
 
 impl<T: BoardState> Game<T> {
@@ -108,7 +110,8 @@ impl<T: BoardState> Game<T> {
             turn: 0,
             side_to_play: rules.starting_side,
             play_history: Vec::new(),
-            status: GameStatus::Ongoing
+            status: Ongoing,
+            repetition_tracker: RepetitionTracker::default(),
         })
     }
     
@@ -467,28 +470,6 @@ impl<T: BoardState> Game<T> {
         }
     }
 
-    /// Detect whether a play has been repeated `n` times. `last_play` is the last play that was
-    /// made (not yet saved to `Self::play_history`) and `side` is the side that made the play.
-    pub fn detect_repetition(&self, last_play: Play, playing_side: Side, n: usize) -> bool {
-        // NB: This function is called *before* `last_play` has been added to `self.play_history`
-        let n_plays = self.play_history.len();
-        if n_plays < (n - 1) * 4 {
-            // Not enough moves for there to have been n repetitions
-            return false
-        }
-        let mut chunks = self.play_history.rchunks(4);
-        // Get n chunks of four plays
-        if let Some(first_chunk) = chunks.next() {
-            // First play in last chunk is the same as the most recent play
-            return first_chunk[0].play == last_play
-                && first_chunk[0].side == playing_side
-                // All n chunks are identical
-                && chunks.take(n - 1).all(|chunk| 
-                    PlayRecord::slice_eq_ignore_outcome(chunk, first_chunk))
-        }
-        false
-    }
-
     /// Get the tiles containing pieces captured by the given play.
     pub fn get_captures(&self, play: Play, moving_piece: Piece) -> HashSet<Tile> {
         let mut captures: HashSet<Tile> = HashSet::new();
@@ -603,7 +584,7 @@ impl<T: BoardState> Game<T> {
         }
         
         if let Some(RepetitionRule { n_repetitions, is_loss }) = self.rules.repetition_rule {
-            if self.detect_repetition(play, self.side_to_play, n_repetitions) {
+            if self.repetition_tracker.get_repetitions(self.side_to_play) >= n_repetitions {
                 // Loss or draw as a result of repeated moves.
                 return if is_loss {
                     Some(Winner(WinReason::Repetition, self.side_to_play.other()))
@@ -636,6 +617,7 @@ impl<T: BoardState> Game<T> {
         for &c in &captures {
             self.board.remove_piece(c)
         }
+        self.repetition_tracker.track_play(self.side_to_play, play, !captures.is_empty());
         // Then assess the game outcome
         let game_outcome = self.get_game_outcome(play, moving_piece, &captures);
         
@@ -1208,7 +1190,7 @@ mod tests {
             rules::BRANDUBH,
             boards::BRANDUBH
         ).unwrap();
-        for _ in 0..2 {
+        for _ in 0..3 {
             game.do_move(Play::from_str("d6-f6").unwrap()).unwrap();
             game.do_move(Play::from_str("d5-f5").unwrap()).unwrap();
             game.do_move(Play::from_str("f6-d6").unwrap()).unwrap();
@@ -1216,6 +1198,7 @@ mod tests {
         }
         assert_eq!(game.status, Ongoing);
         game.do_move(Play::from_str("d6-f6").unwrap()).unwrap();
+
         assert_eq!(game.status, Over(Winner(Repetition, Defender)));
     }
 

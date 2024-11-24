@@ -47,9 +47,9 @@ fn test_real_games(rules: Ruleset, starting_posn: &str, fname: &str) {
             continue
         }
         let plays = cols[0].split(' ').collect::<Vec<&str>>();
-        //println!("{line}");
+        println!("{line}");
         for p_str in plays {
-            //println!("{p_str}");
+            println!("{p_str}");
             //println!("{}", g.board);
             if let Ok((p, c)) = play_captures_from_str(p_str) {
                 assert_eq!(g.check_play_validity(p), MoveValidity::Valid);

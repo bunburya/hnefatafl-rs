@@ -9,6 +9,7 @@ mod utils;
 mod board_state;
 pub mod play;
 pub mod preset;
+mod game_state;
 
 pub use crate::{
     game::{
