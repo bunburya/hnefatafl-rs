@@ -87,6 +87,19 @@ impl<T: Default + Copy, const N: usize> Default for FixedSizeQueue<T, N> {
 }
 
 #[cfg(test)]
+/// Assert that the given vector does not contain duplicates, and contains the same items as
+/// a comparison vector (ignoring order).
+pub(crate) fn check_tile_vec(actual: Vec<crate::Tile>, expected: Vec<crate::Tile>) {
+    let actual_set: HashSet<crate::Tile> = actual.iter().copied().collect();
+    assert_eq!(actual_set.len(), actual.len(), "Vec contains duplicates");
+    let mut actual_sorted = actual.clone();
+    actual_sorted.sort();
+    let mut expected_sorted = expected.clone();
+    expected_sorted.sort();
+    assert_eq!(actual_sorted, expected_sorted);
+}
+
+#[cfg(test)]
 mod tests {
     use crate::utils::FixedSizeQueue;
 

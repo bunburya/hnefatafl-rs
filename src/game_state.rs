@@ -1,5 +1,7 @@
 use std::cmp::PartialEq;
-use crate::{Play, Side};
+use crate::{GameStatus, ParseError, Play, Side};
+use crate::board_state::BoardState;
+use crate::GameStatus::Ongoing;
 use crate::play::PlayRecord;
 use crate::utils::FixedSizeQueue;
 
@@ -104,6 +106,38 @@ impl RepetitionTracker {
             }
         }
         self.recent_plays.push(Some(record));
+    }
+}
+
+/// This strict contains all state that can be used to evaluate play outcomes and board positions
+/// and that changes regularly. The idea is to keep this struct as small as possible to facilitate
+/// efficient play evaluation.
+#[derive(Debug, Copy, Clone)]
+pub struct GameState<T: BoardState> {
+    /// Board state, ie, the current pieces on the board.
+    pub board: T,
+    /// The side whose turn it is.
+    pub side_to_play: Side,
+    /// Tracker for repetitions.
+    pub repetitions: RepetitionTracker,
+    /// Number of plays since a piece was last captured.
+    pub plays_since_capture: usize,
+    /// Current status of the game.
+    pub status: GameStatus,
+    /// Number of plays that have been taken by either side.
+    pub turn: usize
+}
+
+impl <T: BoardState> GameState<T> {
+    pub(crate) fn new(fen_str: &str, side_to_play: Side) -> Result<Self, ParseError> {
+        Ok(Self {
+            board: T::from_fen(fen_str)?,
+            side_to_play,
+            repetitions: RepetitionTracker::default(),
+            plays_since_capture: 0,
+            status: Ongoing,
+            turn: 0
+        })
     }
 }
 

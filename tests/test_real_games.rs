@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use hnefatafl::{Game, GameOutcome, GameStatus, MediumBoardState, ParseError, Play, Ruleset, Side, Tile};
 use hnefatafl::game::MoveValidity;
+use hnefatafl::board_state::BoardState;
 use hnefatafl::ParseError::EmptyString;
 use hnefatafl::preset::{boards, rules};
 
@@ -47,19 +48,19 @@ fn test_real_games(rules: Ruleset, starting_posn: &str, fname: &str) {
             continue
         }
         let plays = cols[0].split(' ').collect::<Vec<&str>>();
-        println!("{line}");
+        //println!("{line}");
         for p_str in plays {
-            println!("{p_str}");
+            //println!("{p_str}");
             //println!("{}", g.board);
             if let Ok((p, c)) = play_captures_from_str(p_str) {
                 assert_eq!(g.check_play_validity(p), MoveValidity::Valid);
-                let piece = g.board.move_piece(p.from, p.to());
+                let piece = g.state.board.move_piece(p.from, p.to());
                 let captures = g.get_captures(p, piece);
-                g.board.move_piece(p.to(), p.from);
+                g.state.board.move_piece(p.to(), p.from);
                 if !c.is_empty() {
                     // Test data doesn't report capture of king as a capture using "x" notation
                     let without_king: HashSet<Tile> = captures.iter()
-                        .filter(|t| !g.board.is_king(**t))
+                        .filter(|t| !g.state.board.is_king(**t))
                         .map(|t| t.to_owned())
                         .collect();
                     assert_eq!(without_king, c);

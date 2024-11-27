@@ -1,30 +1,16 @@
-use crate::board::{Board, Enclosure};
 use crate::board_state::BoardState;
-use crate::error::InvalidPlay::{GameOver, WrongPlayer};
-use crate::error::{BoardError, InvalidPlay, ParseError};
-use crate::game::GameOutcome::Winner;
-use crate::game::GameStatus::{Ongoing, Over};
-use crate::game::InvalidPlay::{BlockedByPiece, MoveOntoBlockedTile, MoveThroughBlockedTile, NoCommonAxis, NoPiece, OutOfBounds, TooFar};
-use crate::game::MoveValidity::{Invalid, Valid};
-use crate::game::WinReason::{AllCaptured, Enclosed, ExitFort, KingCaptured, KingEscaped, NoMoves};
-use crate::pieces::PieceType::King;
-use crate::pieces::Side::{Attacker, Defender};
+use crate::error::{BoardError, InvalidPlay};
+use crate::game_logic::{Enclosure, GameLogic};
+use crate::game_state::GameState;
 use crate::pieces::{Piece, Side};
 use crate::play::{Play, PlayRecord};
-use crate::rules::EnclosureWinRules::WithoutEdgeAccess;
-use crate::rules::KingAttack::{Anvil, Armed, Hammer};
-use crate::rules::KingStrength::{Strong, StrongByThrone, Weak};
-use crate::rules::ThroneRule::{KingEntry, KingPass, NoEntry, NoPass, NoThrone};
-use crate::rules::{RepetitionRule, Ruleset, ShieldwallRules};
-use crate::tiles::{AxisOffset, Coords, RowColOffset, Tile};
-use crate::Axis::{Horizontal, Vertical};
-use crate::GameOutcome::Draw;
-use crate::PieceType::Soldier;
-use crate::{Axis, PieceSet};
+use crate::play_iter::PlayIterator;
+use crate::rules::Ruleset;
+use crate::tiles::{Coords, Tile};
+use crate::ParseError;
 use std::cmp::PartialEq;
 use std::collections::HashSet;
 use std::str::FromStr;
-use crate::game_state::RepetitionTracker;
 
 #[derive(Eq, PartialEq, Debug, Copy, Clone)]
 pub enum WinReason {
@@ -91,192 +77,67 @@ pub enum MoveValidity {
 /// rules) needed to play.
 #[derive(Clone)]
 pub struct Game<T: BoardState> {
-    pub board: Board<T>,
-    pub rules: Ruleset,
-    pub turn: u32,
-    pub side_to_play: Side,
+    pub logic: GameLogic,
+    pub state: GameState<T>,
     pub play_history: Vec<PlayRecord>,
-    pub status: GameStatus,
-    pub repetition_tracker: RepetitionTracker
 }
 
 impl<T: BoardState> Game<T> {
 
     /// Create a new [`Game`] from the given rules and starting positions.
     pub fn new(rules: Ruleset, starting_board: &str) -> Result<Self, ParseError> {
-        Ok(Self {
-            board: Board::from_str(starting_board)?,
-            rules,
-            turn: 0,
-            side_to_play: rules.starting_side,
-            play_history: Vec::new(),
-            status: Ongoing,
-            repetition_tracker: RepetitionTracker::default(),
-        })
+        let state: GameState<T> = GameState::new(starting_board, rules.starting_side)?;
+        let logic = GameLogic::new(rules, state.board.side_len());
+            
+        Ok(Self { state, logic, play_history: vec![] })
     }
     
     /// Determine whether the given tile is hostile specifically by reference to the rules regarding
     /// hostility of special tiles.
     pub fn special_tile_hostile(&self, tile: Tile, piece: Piece) -> bool {
-        (self.rules.hostility.throne.contains(piece) && tile == self.board.throne)
-            || (self.rules.hostility.corners.contains(piece)
-                && self.board.corners.contains(&tile))
-            || (self.rules.hostility.edge.contains(piece)
-                && !self.board.tile_in_bounds(tile))
+        self.logic.special_tile_hostile(tile, piece)
     }
 
     /// Determine whether the given tile is hostile to the given piece.
     pub fn tile_hostile(&self, tile: Tile, piece: Piece) -> bool {
-        if let Some(other_piece) = self.board.get_piece(tile) {
-            // Tile contains a piece. If the piece is of a different side, tile is hostile, unless
-            // that piece is an unarmed king.
-            (other_piece.side != piece.side) && (
-                other_piece.piece_type != King 
-                    || self.rules.king_attack == Armed
-                    || self.rules.king_attack == Anvil
-            )
-        } else {
-            // Tile is empty. So it is only hostile if it is a special tile/edge and the rules state
-            // that it is hostile to the given piece.
-            self.special_tile_hostile(tile, piece)
-        }
+        self.logic.tile_hostile(tile, piece, &self.state.board)
     }
     
     /// Determine whether the position at the given coordinates is hostile to the given piece,
     /// including whether the position is a hostile edge. 
     pub fn coords_hostile(&self, coords: Coords, piece: Piece) -> bool {
-        if self.board.coords_in_bounds(coords) {
-            self.tile_hostile(Tile::new(coords.row as u8, coords.col as u8), piece)
-        } else {
-            self.rules.hostility.edge.contains(piece)
-        }
+        self.logic.coords_hostile(coords, piece, &self.state.board)
     }
 
     /// Whether the given piece can occupy or pass the given tile according to the game rules and
     /// current board state. Returns a pair of `bool`s indicating whether the piece can occupy or
     /// pass, respectively.
     pub fn can_occupy_or_pass(&self, play: Play, piece: Piece) -> (bool, bool) {
-        let validity = self.check_play_validity_for_side(play, piece.side);
-        match validity {
-            Valid => (true, true),
-            Invalid(MoveOntoBlockedTile) => {
-                // Generally, the only way you could be unable to move onto a tile but be able to
-                // move past it is if the tile is a throne and the rules permit passing through, but
-                // not occupying, the throne. Of course, this will differ for knights and commanders
-                // when implemented.
-                if play.to() == self.board.throne {
-                    match self.rules.throne_movement {
-                        NoThrone => (true, true),
-                        NoPass => (false, false),
-                        NoEntry => (false, true),
-                        KingPass => {
-                            let is_king = piece.piece_type == King;
-                            (is_king, is_king)
-                        },
-                        KingEntry => (piece.piece_type == King, true),
-                    }
-                } else {
-                    // If special tile is not a throne, it must be a corner, so cannot be passed.
-                    (false, false)
-                }
-            },
-            _ => {
-                (false, false)
-            }
-        }
+        self.logic.can_occupy_or_pass(play, piece, &self.state)
     }
 
     /// Check whether a play is valid for the given side.
     pub fn check_play_validity_for_side(&self, play: Play, side: Side) -> MoveValidity {
-        if self.status != Ongoing {
-            return Invalid(GameOver)
-        }
-        let from = play.from;
-        let to = play.to();
-        let maybe_piece = self.board.get_piece(from);
-        match maybe_piece {
-            None => Invalid(NoPiece),
-            Some(piece) => {
-                if piece.side != side {
-                    return Invalid(WrongPlayer);
-                }
-                if !(self.board.tile_in_bounds(from) && self.board.tile_in_bounds(to)) {
-                    return Invalid(OutOfBounds)
-                }
-                if (from.row != to.row) && (from.col != to.col) {
-                    return Invalid(NoCommonAxis)
-                }
-                if self.board.tile_occupied(to) {
-                    return Invalid(BlockedByPiece)
-                }
-                let between = self.board.tiles_between(from, to);
-                if between.iter().any(|t| self.board.tile_occupied(*t)) {
-                    return Invalid(BlockedByPiece)
-                }
-                if !self.rules.may_enter_corners.contains(piece) &&
-                    self.board.corners.contains(&to) {
-                    return Invalid(MoveOntoBlockedTile)
-                }
-                if (
-                    (self.rules.throne_movement == NoPass)
-                        || ((self.rules.throne_movement == KingPass)
-                        && piece.piece_type != King)
-                ) && between.contains(&self.board.throne) {
-                    return Invalid(MoveThroughBlockedTile)
-                }
-                if ((self.rules.throne_movement == NoEntry)
-                    || ((self.rules.throne_movement == KingEntry)
-                    && piece.piece_type != King)
-                ) && (to == self.board.throne) {
-                    return Invalid(MoveOntoBlockedTile)
-                }
-                if self.rules.slow_pieces.contains(piece) && play.distance() > 1 {
-                    // Slow piece can't move more than one space at a time
-                    return Invalid(TooFar)
-                }
-                Valid
-
-            }
-        }
+        self.logic.check_play_validity_for_side(play, side, &self.state)
     }
 
     /// Check whether a move is valid.
     pub fn check_play_validity(&self, play: Play) -> MoveValidity {
-        self.check_play_validity_for_side(play, self.side_to_play)
+        self.logic.check_play_validity(play, &self.state)
     }
 
     /// Check whether the king is *currently* strong (must be surrounded on all four sides to be
     /// captured), considering the game rules and the king's current position (for example, the
     /// rules may provide that the king is only strong on or beside the throne). 
     pub fn king_is_strong(&self) -> bool {
-        match self.rules.king_strength {
-            Strong => true,
-            Weak => false,
-            StrongByThrone => {
-                let k = self.board.get_king();
-                self.board.corners.contains(&k) || self.board.throne == k
-            }
-        }
+        self.logic.king_is_strong(&self.state.board)
     }
 
     /// Whether the tile (if any) at the given [`Coords`] can theoretically be occupied by the given
     /// piece according to the rules of the game. Does not take account of whether the tile is
     /// already occupied or actually accessible.
     pub fn coords_occupiable(&self, coords: Coords, piece: Piece) -> bool {
-        if !self.board.coords_in_bounds(coords) {
-            return false
-        }
-        let t = Tile::new(coords.row as u8, coords.col as u8);
-        if self.board.throne == t && (
-            (self.rules.throne_movement == NoEntry)
-                || (self.rules.throne_movement == KingEntry && piece.piece_type != King)
-        ) {
-            return false
-        }
-        if !self.rules.may_enter_corners.contains(piece) && self.board.corners.contains(&t) {
-            return false
-        }
-        true
+        self.logic.coords_occupiable(coords, piece)
     }
 
     /// Check whether the given [`Enclosure`] is "secure", ie, no piece on its boundary is
@@ -285,255 +146,25 @@ impl<T: BoardState> Game<T> {
     /// `true`, then any square not inside the enclosure is considered not to be threatening to a
     /// boundary piece.
     pub fn enclosure_secure(&self, encl: &Enclosure, inside_safe: bool, outside_safe: bool) -> bool {
-        if inside_safe && outside_safe {
-            // If both inside and outside the enclosure are safe, then the enclosure must be secure.
-            return true
-        }
-        for t in &encl.boundary {
-            let piece = self.board.get_piece(*t)
-                .expect("Boundary should not include empty tiles.");
-            // It would be more efficient to just find the hostile piece once, and would usually
-            // work the same. But technically a boundary could consist of pieces of different sides
-            // (though I'm not sure why that would ever be necessary).
-            let hostile_soldier = Piece::new(Soldier, piece.side.other());
-            
-            // Tile is unprotected along an axis if each neighbouring tile along that axis is not
-            // deemed safe and either (a) is hostile; or (b) can be occupied by a hostile soldier
-            // and is currently unoccupied.
-            'axisloop: for axis in [Vertical, Horizontal] {
-                for d in [-1, 1] {
-                    let n_coords = Play::new(*t, AxisOffset::new(axis, d)).to_coords();
-                    if let Ok(n_tile) = self.board.coords_to_tile(n_coords) {
-                        let is_inside = encl.contains(&n_tile);
-                        if (inside_safe && is_inside) || (outside_safe && !is_inside) {
-                            // Tile is on a side of the boundary that is known to be safe (ie, no
-                            // enemies). Therefore, it is safe unless it is a hostile tile.
-                            if !self.special_tile_hostile(n_tile, piece) {
-                                continue 'axisloop;
-                            }
-                        }
-                        if (!self.tile_hostile(n_tile, piece)) && (
-                            self.board.tile_occupied(n_tile)
-                                || !self.coords_occupiable(n_coords, hostile_soldier)
-                        ) {
-                            // Tile is not hostile, AND is either occupied (by a friendly piece) or
-                            // is not occupiable by a hostile piece according to the game rules
-                            continue 'axisloop;
-                        }
-                    } else {
-                        // Coords are out of bounds
-                        if !self.rules.hostility.edge.contains(piece) {
-                            // Piece is at edge and edge is not hostile
-                            continue 'axisloop;
-                        }
-                    }
-                }
-                return false
-            }
-        }
-        true
+        self.logic.enclosure_secure(encl, inside_safe, outside_safe, &self.state.board)
     }
     
     
-    /// A method used internally by [`Game::detect_shieldwall`]. This method searches in one
-    /// direction (along the relevant edge) to find a valid shieldwall. Returns `None` if no
-    /// shieldwall found or, otherwise, a set of all tiles caught in the shieldwall (**not** 
-    /// necessarily all tiles *captured* by the shieldwall, as some tiles may be occupied by pieces
-    /// that cannot be captured in a shieldwall).
-    fn dir_sw_search(
-        &self,
-        play: Play,
-        sw_rule: ShieldwallRules,
-        axis: Axis,
-        away_from_edge: i8,
-        dir: i8
-    ) -> Option<HashSet<Tile>> {
-        let mut t = play.to();
-        // Key is an occupied tile at edge of the board (which is threatened with capture);
-        // value is the tile, on the opposite side to the edge, occupied by the opposing piece.
-        let mut wall: HashSet<Tile> = HashSet::new();
-        loop {
-            let step = Play::new(t, AxisOffset::new(axis, dir));
-            // Move one tile along the edge
-            t = step.to();
-            if !self.board.tile_in_bounds(t) {
-                // We have reached the edge of the board without finding a closing piece.
-                // No shieldwall.
-                return None
-            }
-            if !(
-                self.board.tile_occupied(t) 
-                    || sw_rule.corners_may_close 
-                    && self.board.corners.contains(&t)
-            ) {
-                // We have encountered a tile that is not occupied and is not a corner that may
-                // close. No shieldwall.
-                return None
-            }
-            let piece_opt = self.board.get_piece(t);
-            if piece_opt.is_none() {
-                // We have already broken out of this loop if the tile is unoccupied, unless it
-                // is a closing corner. Therefore, if `piece` is `None`, we must be at a
-                // closing corner.
-                return if wall.len() < 2 { None } else { Some(wall) };
-            }
-            let piece = piece_opt.expect("Tile should be occupied.");
-            if piece.side == self.side_to_play.other() {
-                let pin = Play::new(t, AxisOffset::new(axis.other(), away_from_edge)).to();
-                if let Some(p) = self.board.get_piece(pin) {
-                    if p.side == self.side_to_play {
-                        wall.insert(t);
-                    } else {
-                        // Piece is pinned against edge by friendly piece (no shieldwall)
-                        return None
-                    }
-                } else {
-                    // Piece isn't pinned against the wall by any piece (no shieldwall)
-                    return None
-                }
-            }
-            if (piece.side == self.side_to_play) ||
-                (self.board.corners.contains(&t) && sw_rule.corners_may_close) {
-                // We've found a friendly piece or a corner that may close.
-                return if wall.len() < 2 { None } else { Some(wall) };
-            }
-        }
-    }
-
     /// Detect whether the given move has created a shieldwall according to the applicable rules.
     /// Returns `None` if no shieldwall is detected; otherwise returns a set of tiles that have been
     /// captured in the shieldwall.
     fn detect_shieldwall(&self, play: Play) -> Option<HashSet<Tile>> {
-        let sw_rule = self.rules.shieldwall?;
-        let to = play.to();
-        let (axis, away_from_edge) = if to.row == 0 {
-            (Horizontal, 1i8)
-        } else if to.row == self.board.side_len - 1 {
-            (Horizontal, -1)
-        } else if to.col == 0 {
-            (Vertical, 1)
-        } else if to.col == self.board.side_len - 1 {
-            (Vertical, -1)
-        } else {
-            // The move that leads to a shieldwall capture must be flanking the shieldwall,
-            // therefore must be a move to the edge.
-            return None
-        };
-        let mut wall = self.dir_sw_search(play, sw_rule, axis, away_from_edge, -1);
-        if wall.is_none() {
-            wall = self.dir_sw_search(play, sw_rule, axis, away_from_edge, 1);
-        }
-        if let Some(w) = wall {
-            if w.len() < 2 {
-                // Can't capture 0 or 1 pieces with a shieldwall
-                return None
-            }
-            // We've found a shieldwall. Filter out tiles which contain pieces which cannot
-            // be captured in a shieldwall.
-            Some(w.into_iter().filter(|t| sw_rule.captures.contains(
-                self.board.get_piece(*t)
-                    .expect("Tile in shieldwall should be occupied."))
-            ).collect())
-        } else {
-            None
-        }
+        self.logic.detect_shieldwall(play, &self.state)
     }
     
     /// Detect whether the king is in an exit fort.
     pub fn detect_exit_fort(&self) -> bool {
-        let king_tile = self.board.get_king();
-        
-        // King is at edge
-        if !self.board.tile_at_edge(king_tile) {
-            return false
-        }
-        
-        // Check king is enclosed by his own pieces
-        if let Some(encl) = self.board.find_enclosure(
-            king_tile,
-            PieceSet::from(King),
-            PieceSet::from(Defender),
-            false,
-            true
-        ) {
-            // King has space to move
-            if !self.board.neighbors(king_tile).iter().any(|t| !self.board.tile_occupied(*t)) {
-                return false
-            }
-            // Check enclosing pieces are all themselves safe
-            if !self.enclosure_secure(&encl, true, false) {
-                return false
-            }
-            true
-        } else {
-            false
-        }
+        self.logic.detect_exit_fort(&self.state.board)
     }
 
     /// Get the tiles containing pieces captured by the given play.
     pub fn get_captures(&self, play: Play, moving_piece: Piece) -> HashSet<Tile> {
-        let mut captures: HashSet<Tile> = HashSet::new();
-        let to = play.to();
-        
-        // Detect normal captures
-        if moving_piece.piece_type != King 
-            || self.rules.king_attack == Armed 
-            || self.rules.king_attack == Hammer {
-            for n in self.board.neighbors(to) {
-                if let Some(other_piece) = self.board.get_piece(n) {
-                    if other_piece.side == moving_piece.side {
-                        // Friendly neighbour so no possibility for capture
-                        continue
-                    }
-                    let signed_to_row = to.row as i8;
-                    let signed_to_col = to.col as i8;
-                    let signed_n_row = n.row as i8;
-                    let signed_n_col = n.col as i8;
-                    let signed_far_row = signed_to_row + ((signed_n_row - signed_to_row) * 2);
-                    let signed_far_col = signed_to_col + ((signed_n_col - signed_to_col) * 2);
-                    let far_coords = Coords { row: signed_far_row, col: signed_far_col };
-                    // Check if the tile on the other side of the neighbour is a hostile tile, or if
-                    // the neighbour is on the edge and the edge is treated as hostile to that piece
-                    if self.coords_hostile(far_coords, other_piece) {
-                        // We know that the neighbouring opposing piece is surrounded by the
-                        // moving piece and another hostile tile. So it is captured, *unless* it
-                        // is a strong king.
-                        if (other_piece.piece_type == King) && self.king_is_strong() {
-                            // Get the tiles surrounding `n` on the perpendicular axis.
-                            let n_coords = Coords::from(n);
-                            let perp_hostile= if to.row == n.row {
-                                self.coords_hostile(
-                                    n_coords + RowColOffset::new(1, 0),
-                                    other_piece
-                                ) && self.coords_hostile(
-                                    n_coords + RowColOffset::new(-1, 0),
-                                    other_piece
-                                )
-                            } else {
-                                self.coords_hostile(
-                                    n_coords + RowColOffset::new(0, 1),
-                                    other_piece
-                                ) && self.coords_hostile( 
-                                    n_coords + RowColOffset::new(0, -1),
-                                    other_piece
-                                )
-                            };
-                            if !perp_hostile {
-                                continue
-                            }
-                        }
-                        captures.insert(n);
-                    }
-                }
-            }
-
-        }
-
-        // Detect shieldwall captures
-        if let Some(walled) = self.detect_shieldwall(play) {
-            captures.extend(walled);
-        }
-        captures
+        self.logic.get_captures(play, moving_piece, &self.state)
 
     }
 
@@ -544,204 +175,34 @@ impl<T: BoardState> Game<T> {
         moving_piece: Piece,
         caps: &HashSet<Tile>
     ) -> Option<GameOutcome> {
-        if self.board.state.count_pieces(self.side_to_play.other()) == 0 {
-            // All opposing pieces have been captured.
-            return Some(Winner(AllCaptured, self.side_to_play))
-        }
-        if self.side_to_play == Attacker {
-            // This test relies on the fact that even once the king has been removed from the board,
-            // the bits at the end that encode its position remain set.
-            if caps.contains(&self.board.state.get_king()) {
-                // Attacker has captured the king.
-                return Some(Winner(KingCaptured, Attacker))
-            }
-            if let Some(encl_win) = self.rules.enclosure_win {
-                if let Some(encl) = self.board.find_enclosure(
-                    self.board.get_king(),
-                    PieceSet::from(Defender),
-                    PieceSet::from(Attacker),
-                    encl_win == WithoutEdgeAccess,
-                    true
-                ) {
-                    if encl.occupied.len() == self.board.state.count_pieces(Defender) as usize
-                        && self.enclosure_secure(&encl, false, true) {
-                        return Some(Winner(Enclosed, Attacker))
-                    }
-                }
-            }
-        } else {
-            if moving_piece.piece_type == King && (
-                (self.rules.edge_escape && self.board.tile_at_edge(play.to()))
-                    || (!self.rules.edge_escape && self.board.corners.contains(&play.to()))
-            ) {
-                // King has escaped.
-                return Some(Winner(KingEscaped, Defender))
-            }
-            if self.rules.exit_fort && self.detect_exit_fort() {
-                // King has escaped through exit fort.
-                return Some(Winner(ExitFort, Defender))
-            }
-        }
-        
-        if let Some(RepetitionRule { n_repetitions, is_loss }) = self.rules.repetition_rule {
-            if self.repetition_tracker.get_repetitions(self.side_to_play) >= n_repetitions {
-                // Loss or draw as a result of repeated moves.
-                return if is_loss {
-                    Some(Winner(WinReason::Repetition, self.side_to_play.other()))
-                } else {
-                    Some(Draw(DrawReason::Repetition))
-                }
-            } 
-        }
-        
-        if !self.side_can_play(self.side_to_play.other()) {
-            // Other side has no playable moves.
-            return Some(Winner(NoMoves, self.side_to_play))
-        } 
-        
-        None
+        self.logic.get_game_outcome(play, moving_piece, caps, &self.state)
     }
 
 
     /// Actually "do" a move, checking validity, getting outcome, applying outcome to board state,
     /// switching side to play and returning a description of the game status following the move.
     pub fn do_move(&mut self, play: Play) -> Result<GameStatus, InvalidPlay> {
-        if let Invalid(v) = self.check_play_validity(play) {
-            return Err(v)
-        };
-        
-        // First move the piece on the board
-        let moving_piece = self.board.move_piece(play.from, play.to());
-        // Then remove captured pieces
-        let captures = self.get_captures(play, moving_piece);
-        for &c in &captures {
-            self.board.remove_piece(c)
-        }
-        self.repetition_tracker.track_play(self.side_to_play, play, !captures.is_empty());
-        // Then assess the game outcome
-        let game_outcome = self.get_game_outcome(play, moving_piece, &captures);
-        
-        self.turn += 1;
-        let game_status = match game_outcome {
-            Some(game_outcome) => Over(game_outcome),
-            None => Ongoing
-        };
-        let record = PlayRecord {
-            side: self.side_to_play,
-            play,
-            outcome: PlayOutcome { captures, game_outcome },
-        };
-        
-        self.side_to_play = self.side_to_play.other();
-        self.play_history.push(record);
-        self.status = game_status;
-        Ok(game_status)
+        let (state, play_record) = self.logic.do_move(play, self.state)?;
+        self.state = state;
+        self.play_history.push(play_record);
+        Ok(self.state.status)
     }
 
     /// Iterate over the possible plays that can be made by the piece at the given tile. Returns an
     /// error if there is no piece at the given tile. Order of iteration is not guaranteed.
     pub fn iter_plays(&self, tile: Tile) -> Result<PlayIterator<T>, BoardError> {
-        PlayIterator::new(self, tile)
+        PlayIterator::new(&self.logic, &self.state, tile)
     }
     
     /// Whether the given side could make any play given the current board.
     pub fn side_can_play(&self, side: Side) -> bool {
-        for tile in self.board.state.iter_occupied(side) {
-            if self.iter_plays(tile).expect("Tile must not be empty.").next().is_some() {
-                return true
-            }
-        }
-        false
-    }
-}
-
-/// An iterator over the possible plays that can be made by the piece at the given tile. Note that
-/// because this struct holds a reference to the [`Game`], the game may not be mutated while the
-/// iterator exists. Order of iteration is not guaranteed.
-pub struct PlayIterator<'a, T: BoardState> {
-    game: &'a Game<T>,
-    start_tile: Tile,
-    piece: Piece,
-    movement: AxisOffset,
-}
-
-impl<'a, T: BoardState> PlayIterator<'a, T> {
-
-    pub fn new(game: &'a Game<T>, tile: Tile) -> Result<Self, BoardError> {
-        if let Some(piece) = game.board.get_piece(tile) {
-            Ok(Self {
-                game,
-                start_tile: tile,
-                piece,
-                movement: AxisOffset { axis: Vertical, displacement: 1 }
-            })
-        } else {
-            Err(BoardError::NoPiece)
-        }
-    }
-
-    /// Get the next direction by rotating the current direction 90 degrees. If the rotation would
-    /// bring us back to the start, return `None` instead as we have been through all rotations.
-    fn next_direction(&self) -> Option<AxisOffset> {
-        match self.movement.axis {
-            Vertical => {
-                if self.movement.displacement > 0 {
-                    Some(AxisOffset { axis: Vertical, displacement: -1 })
-                } else {
-                    Some(AxisOffset { axis: Horizontal, displacement: 1 })
-                }
-            },
-            Horizontal => {
-                if self.movement.displacement > 0 {
-                    Some(AxisOffset { axis: Horizontal, displacement: -1 })
-                } else {
-                    None
-                }
-            }
-        }
-    }
-}
-
-impl<'a, T: BoardState> Iterator for PlayIterator<'a, T> {
-    type Item = Play;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            //let dest_coords = Coords::from(self.current_tile) + self.direction;
-            let play = Play::new(self.start_tile, self.movement);
-            if let Ok(dest_tile) = self.game.board.coords_to_tile(play.to_coords()) {
-                // New tile is in bounds
-
-                // Increase the step for the next iteration.
-                self.movement.displacement +=
-                    if self.movement.displacement.is_positive() { 1 } else { -1 };
-                let (can_occupy, can_pass) = self.game.can_occupy_or_pass(play, self.piece);
-                if can_occupy {
-                    // We found a tile we can occupy, so return that
-                    return Some(Play::from_tiles(self.start_tile, dest_tile)
-                        .expect("Tiles should be on same axis."))
-                } else if can_pass {
-                    // We can't occupy this tile, but we can pass it, so go back to the start of the
-                    // loop to continue in the same direction
-                    continue
-                } else {
-                    // We can neither occupy nor pass this tile so move on to trying the next
-                    // direction. If we have already tried all the directions, there are no more
-                    // plays available so return `None`.
-                    self.movement = self.next_direction()?;
-                    continue
-                }
-            } else {
-                // New tile would be out of bounds so move on to trying the next direction.
-                self.movement = self.next_direction()?;
-                continue
-            }
-        }
+        self.logic.side_can_play(side, &self.state)
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::board_state::{BoardState, HugeBoardState, LargeBoardState};
     use crate::game::Game;
     use crate::game::GameOutcome::Winner;
     use crate::game::InvalidPlay::{
@@ -767,7 +228,6 @@ mod tests {
     use crate::{hashset, HostilityRules, MediumBoardState, Piece, SmallBoardState};
     use std::collections::HashSet;
     use std::str::FromStr;
-    use crate::board_state::{BoardState, HugeBoardState, LargeBoardState};
 
     const TEST_RULES: Ruleset = Ruleset {
         slow_pieces: PieceSet::from_piece_type(King),
@@ -834,8 +294,11 @@ mod tests {
             Invalid(BlockedByPiece)
         );
 
-        fb_game.board.move_piece(Tile::new(3, 2), Tile::new(4, 2));
-        fb_game.board.move_piece(Tile::new(3, 3), Tile::new(3, 2));
+        
+        //println!("{}", fb_game.state.board);
+        fb_game.state.board.move_piece(Tile::new(3, 2), Tile::new(4, 2));
+        fb_game.state.board.move_piece(Tile::new(3, 3), Tile::new(3, 2));
+        //println!("{}", fb_game.state.board);
 
         assert_eq!(
             fb_game.check_play_validity(Play::from_tiles(
@@ -858,7 +321,7 @@ mod tests {
             "7/5Tt/2T4/2t2t1/Tt4T/2t4/2T2K1"
         ).unwrap();
         
-        test_game.side_to_play = Defender;
+        test_game.state.side_to_play = Defender;
         
         assert_eq!(
             test_game.check_play_validity(Play::from_tiles(
@@ -876,7 +339,7 @@ mod tests {
             Valid
         );
         
-        test_game.side_to_play = Attacker;
+        test_game.state.side_to_play = Attacker;
         
         assert_eq!(
             test_game.check_play_validity(Play::from_tiles(
@@ -908,18 +371,18 @@ mod tests {
 
         let mut game = test_game.clone();
         let play = Play::from_tiles(Tile::new(0, 4), Tile::new(6, 4)).unwrap();
-        let piece = game.board.move_piece(play.from, play.to());
+        let piece = game.state.board.move_piece(play.from, play.to());
         assert_eq!(
             game.get_captures(play, piece),
             [Tile::new(6, 5)].into()
         );
-        game.board.move_piece(play.to(), play.from);
+        game.state.board.move_piece(play.to(), play.from);
         assert_eq!(game.do_move(play), Ok(Over(Winner(KingCaptured, Attacker))));
 
         let mut game = test_game.clone();
-        game.side_to_play = Defender;
+        game.state.side_to_play = Defender;
         let play = Play::from_tiles(Tile::new(4, 6), Tile::new(4, 2)).unwrap();
-        let piece = game.board.move_piece(play.from, play.to());
+        let piece = game.state.board.move_piece(play.from, play.to());
         assert_eq!(
             game.get_captures(play, piece),
             [
@@ -928,29 +391,29 @@ mod tests {
                 Tile::new(5, 2),
             ].into()
         );
-        game.board.move_piece(play.to(), play.from);
+        game.state.board.move_piece(play.to(), play.from);
         assert_eq!(game.do_move(play), Ok(Ongoing));
 
         let mut game = test_game.clone();
-        game.side_to_play = Defender;
+        game.state.side_to_play = Defender;
         let play = Play::from_tiles(Tile::new(6, 5), Tile::new(6, 6)).unwrap();
-        let piece = game.board.move_piece(play.from, play.to());
+        let piece = game.state.board.move_piece(play.from, play.to());
         assert_eq!(
             game.get_captures(play, piece),
             [].into(),
         );
-        game.board.move_piece(play.to(), play.from);
+        game.state.board.move_piece(play.to(), play.from);
         assert_eq!(game.do_move(play), Ok(Over(Winner(KingEscaped, Defender))));
 
         let mut game = test_game.clone();
-        game.side_to_play = Defender;
+        game.state.side_to_play = Defender;
         let play = Play::from_tiles(Tile::new(6, 5), Tile::new(5, 5)).unwrap();
-        let piece = game.board.move_piece(play.from, play.to());
+        let piece = game.state.board.move_piece(play.from, play.to());
         assert_eq!(
             game.get_captures(play, piece),
             [].into()
         );
-        game.board.move_piece(play.to(), play.from);
+        game.state.board.move_piece(play.to(), play.from);
         assert_eq!(game.do_move(play), Ok(Ongoing));
     }
 
@@ -1064,11 +527,12 @@ mod tests {
         ];
         for (string, inside_safe, outside_safe, is_secure, rules) in candidates {
             let g: Game<MediumBoardState> = Game::new(rules, string).unwrap();
-            let encl_opt = g.board.find_enclosure(
+            let encl_opt = g.logic.find_enclosure(
                 Tile::new(2, 3),
                 PieceSet::from(King),
                 PieceSet::from(Piece::new(Soldier, Attacker)),
-                false, false
+                false, false,
+                &g.state.board,
             );
             assert!(encl_opt.is_some());
             let encl = encl_opt.unwrap();
@@ -1196,10 +660,10 @@ mod tests {
             game.do_move(Play::from_str("f6-d6").unwrap()).unwrap();
             game.do_move(Play::from_str("f5-d5").unwrap()).unwrap();
         }
-        assert_eq!(game.status, Ongoing);
+        assert_eq!(game.state.status, Ongoing);
         game.do_move(Play::from_str("d6-f6").unwrap()).unwrap();
 
-        assert_eq!(game.status, Over(Winner(Repetition, Defender)));
+        assert_eq!(game.state.status, Over(Winner(Repetition, Defender)));
     }
 
 }

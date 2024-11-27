@@ -1,15 +1,19 @@
 mod rules;
 mod pieces;
-mod board;
+//mod board;
 mod error;
 pub mod game;
 mod tiles;
 mod bitfield;
 mod utils;
-mod board_state;
+pub mod board_state;
 pub mod play;
 pub mod preset;
 mod game_state;
+mod game_logic;
+mod board_geo;
+mod play_iter;
+mod tile_iter;
 
 pub use crate::{
     game::{
@@ -17,11 +21,6 @@ pub use crate::{
         GameStatus,
         GameOutcome,
         PlayOutcome,
-    },
-    board::{
-        Board,
-        SmallBoard,
-        MediumBoard,
     },
     board_state::{
         BitfieldBoardState,

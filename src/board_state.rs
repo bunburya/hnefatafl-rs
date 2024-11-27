@@ -3,10 +3,11 @@ use crate::PieceType::{King, Soldier};
 use crate::Side::{Attacker, Defender};
 use crate::{BitField, ParseError, Piece, Side, Tile};
 use primitive_types::{U256, U512};
+use std::fmt::{Display, Formatter};
+use std::str::FromStr;
 
-
-/// Store information on the current board state (ie, pieces). 
-pub trait BoardState: Default + Clone {
+/// Store information on the current board state (ie, pieces).
+pub trait BoardState: Default + Clone + Copy + Display + FromStr {
     
     type Iter: Iterator<Item=Tile>;
 
@@ -37,58 +38,32 @@ pub trait BoardState: Default + Clone {
     /// defenders.
     fn count_pieces(&self, side: Side) -> u8;
 
-    /// Iterate over all occupied tiles on the board. Order of iteration is not guaranteed.
+    /// Return an iterator over the tiles that are occupied by pieces of the given side. Order of
+    /// iteration is not guaranteed.
     fn iter_occupied(&self, side: Side) -> Self::Iter;
-    
-    /// Parse board state from a string, returning the state and the length of the board's side.
-    fn from_str_with_side_len(value: &str) -> Result<(Self, u8), ParseError> {
-        let s = value.trim();
-        let mut side_len = 0u8;
-        let mut state = Self::default();
-        for (r, line) in s.lines().enumerate() {
-            let line_len = line.len() as u8;
-            if side_len == 0 {
-                side_len = line_len
-            } else if line_len != side_len {
-                return Err(BadLineLen(line.len()))
-            }
-            for (c, chr) in line.chars().enumerate() {
-                if chr != '.' {
-                    state.place_piece(Tile::new(r as u8, c as u8), Piece::try_from(chr)?)
-                }
-            }
-        }
-        Ok((state, side_len))
-    }
 
-    fn from_fen_with_side_len(value: &str) -> Result<(Self, u8), ParseError> {
-        let mut side_len = 0u8;
-        let mut state = Self::default();
-        for (r, line) in value.split('/').enumerate() {
-            let mut n_empty = 0;
-            let mut c = 0u8;
-            for chr in line.chars() {
-                if chr.is_digit(10) {
-                    n_empty = (n_empty * 10) + (chr as u8 - '0' as u8);
-                } else {
-                    c += n_empty;
-                    n_empty = 0;
-                    state.place_piece(Tile::new(r as u8, c), Piece::try_from(chr)?);
-                    c += 1;
-                }
-            }
-            if n_empty > 0 {
-                c += n_empty;
-            }
-            if side_len == 0 {
-                side_len = c;
-            } else if side_len != c {
-                return Err(BadLineLen(c as usize))
-            }
-        }
-        Ok((state, side_len))
-    }
+    /// Move a piece from one position to another. This does not check whether a move is valid; it
+    /// just unsets the bit at `from` and sets the bit at `to`. Returns the piece that was moved.
+    /// Panics if there is no piece at `from`.
+    fn move_piece(&mut self, from: Tile, to: Tile) -> Piece;
+
+    /// Parse board state from (the relevant part of) a string in FEN format.
+    fn from_fen(s: &str) -> Result<Self, ParseError>;
+
+    /// Parse board state from a string in the format output by [`Self::to_display_str`].
+    fn from_display_str(s: &str) -> Result<Self, ParseError>;
+
+    /// Return a string in FEN format representing the board state.
+    fn to_fen(&self) -> String;
+
+    /// Return a string representing the board state, in a format suitable for printing.
+    fn to_display_str(&self) -> String;
+    
+    /// Return the length of the board's side.
+    fn side_len(&self) -> u8;
+    
 }
+
 
 pub struct BitfieldIter<T: BitField> {
     /// Bitfield representing board state.
@@ -125,14 +100,14 @@ impl<T: BitField> Iterator for BitfieldIter<T> {
 #[derive(Copy, Clone, Hash, Eq, PartialEq, Default, Debug)]
 pub struct BitfieldBoardState<T: BitField> {
     attackers: T,
-    defenders: T
+    defenders: T,
+    side_len: u8
 }
 
 impl<T: BitField> BoardState for BitfieldBoardState<T> {
     
     type Iter = BitfieldIter<T>;
 
-    /// Get the tile occupied by the king.
     fn get_king(&self) -> Tile {
         let row = (self.defenders.to_be_bytes().as_ref()[0] & 0b1111_0000) >> 4;
         let col = (self.attackers.to_be_bytes().as_ref()[0] & 0b1111_0000) >> 4;
@@ -155,7 +130,6 @@ impl<T: BitField> BoardState for BitfieldBoardState<T> {
         self.attackers = T::from_be_bytes_slice(att_bytes_slice);
     }
 
-    /// Place a piece representing the given side at the given position by setting the relevant bit.
     fn place_piece(&mut self, t: Tile, piece: Piece) {
         let mask = T::tile_mask(t);
         match piece.side {
@@ -167,14 +141,12 @@ impl<T: BitField> BoardState for BitfieldBoardState<T> {
         }
     }
 
-    /// Clear a tile by unsetting the relevant bit.
     fn clear_tile(&mut self, t: Tile) {
         let mask = !T::tile_mask(t);
         self.attackers &= mask;
         self.defenders &= mask;
     }
 
-    /// Get the piece, if any, that occupies the given tile.
     fn get_piece(&self, t: Tile) -> Option<Piece> {
         let mask = T::tile_mask(t);
         if (self.defenders & mask) > 0.into() {
@@ -191,14 +163,12 @@ impl<T: BitField> BoardState for BitfieldBoardState<T> {
 
     }
 
-    /// Check whether the given tile is occupied by any piece.
     fn tile_occupied(&self, t: Tile) -> bool {
         let all_pieces = self.defenders | self.attackers;
         let mask = T::tile_mask(t);
         (all_pieces & mask) > 0.into()
     }
 
-    /// Return the number of pieces of the given side on the board.
     fn count_pieces(&self, side: Side) -> u8 {
         match side {
             Attacker => self.attackers,
@@ -206,7 +176,6 @@ impl<T: BitField> BoardState for BitfieldBoardState<T> {
         }.count_ones() as u8
     }
 
-    /// Return an iterator over the tiles that are occupied by pieces of the given side.
     fn iter_occupied(&self, side: Side) -> Self::Iter {
         let state_with_king = match side {
             Attacker => self.attackers,
@@ -221,6 +190,121 @@ impl<T: BitField> BoardState for BitfieldBoardState<T> {
             state,
             i: 0
         }
+    }
+
+    fn move_piece(&mut self, from: Tile, to: Tile) -> Piece {
+        let piece = self.get_piece(from).expect("No piece to move.");
+        if piece.piece_type == King {
+            self.set_king(to)
+        }
+        self.place_piece(to, piece);
+        self.clear_tile(from);
+        piece
+    }
+
+    fn from_fen(fen: &str) -> Result<Self, ParseError> {
+        let mut state = Self::default();
+        for (r, line) in fen.split('/').enumerate() {
+            let mut n_empty = 0;
+            let mut c = 0u8;
+            for chr in line.chars() {
+                if chr.is_digit(10) {
+                    n_empty = (n_empty * 10) + (chr as u8 - '0' as u8);
+                } else {
+                    c += n_empty;
+                    n_empty = 0;
+                    state.place_piece(Tile::new(r as u8, c), Piece::try_from(chr)?);
+                    c += 1;
+                }
+            }
+            if n_empty > 0 {
+                c += n_empty;
+            }
+            if state.side_len == 0 {
+                state.side_len = c;
+            } else if state.side_len != c {
+                return Err(BadLineLen(c as usize))
+            }
+        }
+        Ok(state)
+    }
+
+    fn from_display_str(display_str: &str) -> Result<Self, ParseError> {
+        let s = display_str.trim();
+        let mut state = Self::default();
+        for (r, line) in s.lines().enumerate() {
+            let line_len = line.len() as u8;
+            if state.side_len == 0 {
+                state.side_len = line_len
+            } else if line_len != state.side_len {
+                return Err(BadLineLen(line.len()))
+            }
+            for (c, chr) in line.chars().enumerate() {
+                if chr != '.' {
+                    state.place_piece(Tile::new(r as u8, c as u8), Piece::try_from(chr)?)
+                }
+            }
+        }
+        Ok(state)
+    }
+
+    fn to_fen(&self) -> String {
+        let mut s = String::new();
+        for row in 0..self.side_len {
+            let mut n_empty = 0;
+            for col in 0..self.side_len {
+                let t = Tile::new(row, col);
+                if let Some(piece) = self.get_piece(t) {
+                    if n_empty > 0 {
+                        s.push_str(n_empty.to_string().as_str());
+                        n_empty = 0;
+                    }
+                    s.push(piece.into());
+                } else {
+                    n_empty += 1;
+                }
+            }
+            if n_empty > 0 {
+                s.push_str(n_empty.to_string().as_str());
+            }
+            if row < self.side_len - 1 {
+                s.push('/');
+            }
+        }
+        s
+    }
+
+    fn to_display_str(&self) -> String {
+        let mut s = String::new();
+        for r in 0..self.side_len {
+            for c in 0..self.side_len {
+                let t = Tile::new(r, c);
+                let p = self.get_piece(t);
+                match p {
+                    Some(piece) => s.push(piece.into()),
+                    None => s.push('.'),
+                }
+            }
+            s.push('\n');
+        }
+        s
+    }
+
+    fn side_len(&self) -> u8 {
+        self.side_len
+    }
+}
+
+impl<T: BitField> FromStr for BitfieldBoardState<T> {
+    type Err = ParseError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::from_fen(s)
+    }
+}
+
+impl <T: BitField> Display for BitfieldBoardState<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.to_display_str())
     }
 }
 
@@ -237,20 +321,18 @@ pub type HugeBoardState = BitfieldBoardState<U512>;
 
 #[cfg(test)]
 mod tests {
-    use crate::board_state::{BoardState, LargeBoardState};
+    use crate::board_state::BoardState;
+    use crate::PieceType::Soldier;
     use crate::Side::{Attacker, Defender};
-    use crate::{hashset, BitfieldBoardState, MediumBoardState, Tile};
+    use crate::{hashset, Piece, SmallBoardState, Tile};
     use std::collections::HashSet;
+    use std::str::FromStr;
 
-    #[test]
-    fn test_from_fen() {
-        let res = LargeBoardState::from_fen_with_side_len(
+    fn test_from_str() {
+        let from_fen = SmallBoardState::from_fen(
             "3t3/3t3/3T3/ttTKTtt/3T3/3t3/3t3"
         );
-        assert!(res.is_ok());
-        let (state, len) = res.unwrap();
-
-        let (bench_state, bench_len) = LargeBoardState::from_str_with_side_len(
+        let from_display_str = SmallBoardState::from_display_str(
             &[
                 "...t...",
                 "...t...",
@@ -260,25 +342,47 @@ mod tests {
                 "...t...",
                 "...t..."
             ].join("\n")
-        ).unwrap();
-        assert_eq!(state, bench_state);
-        assert_eq!(len, bench_len);
+        );
+        assert_eq!(from_fen, from_display_str);
     }
 
     #[test]
+    fn test_piece_movement() {
+        let start_str = "3t3/3t3/3T3/ttTKTtt/3T3/3t3/3t3";
+        let expected_str = "3tK2/3t1t1/3T3/ttT1Ttt/1T1T3/3t3/3t3";
+        let res = SmallBoardState::from_str(start_str);
+        assert!(res.is_ok());
+        let mut state = res.unwrap();
+        assert_eq!(state.get_king(), Tile::new(3, 3));
+        state.place_piece(Tile::new(1, 5), Piece::attacker(Soldier));
+        state.place_piece(Tile::new(4, 1), Piece::defender(Soldier));
+        state.move_piece(Tile::new(3, 3), Tile::new(0, 4));
+        assert_eq!(state.get_king(), Tile::new(0, 4));
+        assert_eq!(state.to_fen(), expected_str);
+    
+        let occupied = [
+            Tile::new(0, 3),
+            Tile::new(2, 3),
+            Tile::new(0, 4)
+        ];
+        for t in occupied {
+            assert!(state.tile_occupied(t));
+        }
+        let empty = [
+            Tile::new(3, 3),
+            Tile::new(5, 4),
+            Tile::new(1, 1)
+        ];
+        for t in empty {
+            assert!(!state.tile_occupied(t));
+        }
+    }
+
+
+    #[test]
     fn test_iter_occupied() {
-        let state_str = [
-            "...t...",
-            "...t...",
-            "...T...",
-            "ttTKTtt",
-            "...T...",
-            "...t...",
-            "...t..."
-        ].join("\n");
-        let (board_state, _): (MediumBoardState, u8) 
-            = BitfieldBoardState::from_str_with_side_len(&state_str).unwrap();
-        let attackers: HashSet<Tile> = board_state.iter_occupied(Attacker).collect();
+        let state = SmallBoardState::from_str("3t3/3t3/3T3/ttTKTtt/3T3/3t3/3t3").unwrap();
+        let attackers: HashSet<Tile> = state.iter_occupied(Attacker).collect();
         let expected = hashset!(
             Tile::new(0, 3),
             Tile::new(1, 3),
@@ -290,7 +394,7 @@ mod tests {
             Tile::new(3, 6)
         );
         assert_eq!(attackers, expected);
-        let defenders: HashSet<Tile> = board_state.iter_occupied(Defender).collect();
+        let defenders: HashSet<Tile> = state.iter_occupied(Defender).collect();
         let expected = hashset!(
             Tile::new(2, 3),
             Tile::new(3, 3),

@@ -1,11 +1,11 @@
 #![cfg(feature = "demo")]
 
+use hnefatafl::preset;
+use hnefatafl::GameOutcome::{Draw, Winner};
+use hnefatafl::GameStatus::Over;
+use hnefatafl::{Game, Play, SmallBoardState};
 use std::io::stdin;
 use std::str::FromStr;
-use hnefatafl::{Game, Play, SmallBoardState};
-use hnefatafl::GameStatus::Over;
-use hnefatafl::GameOutcome::{Draw, Winner};
-use hnefatafl::preset;
 
 fn input(prompt: &str) -> std::io::Result<String> {
     println!("{prompt}");
@@ -36,19 +36,19 @@ fn main() {
     ).expect("Could not create game.");
     loop {
         println!("Board:");
-        println!("{}", game.board);
-        println!("{:?} to play.", game.side_to_play);
+        println!("{}", game.state.board);
+        println!("{:?} to play.", game.state.side_to_play);
 
         let play = get_play();
         match game.do_move(play) {
             Ok(status) => {
                 if let Over(outcome) = status {
                     match outcome {
-                        Draw => println!("Game over. Draw."),
-                        Winner(side) => println!("Game over. Winner is {side:?}."),
+                        Draw(reason) => println!("Game over. Draw {reason:?}."),
+                        Winner(reason, side) => println!("Game over. Winner is {side:?} ({reason:?})."),
                     }
                     println!("Final board:");
-                    println!("{}", game.board);
+                    println!("{}", game.state.board);
                     return
                 }
             },

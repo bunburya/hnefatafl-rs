@@ -23,7 +23,7 @@ impl Side {
 }
 
 /// The different types of pieces that can occupy a board.
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum PieceType {
     King =      0b0000_0001,
     Soldier =   0b0000_0010,
