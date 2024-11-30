@@ -40,7 +40,7 @@ fn main() {
         println!("{:?} to play.", game.state.side_to_play);
 
         let play = get_play();
-        match game.do_move(play) {
+        match game.do_play(play) {
             Ok(status) => {
                 if let Over(outcome) = status {
                     match outcome {

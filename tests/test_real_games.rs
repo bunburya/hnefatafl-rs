@@ -53,9 +53,9 @@ fn test_real_games(rules: Ruleset, starting_posn: &str, fname: &str) {
             //println!("{p_str}");
             //println!("{}", g.board);
             if let Ok((p, c)) = play_captures_from_str(p_str) {
-                assert_eq!(g.check_play_validity(p), MoveValidity::Valid);
+                assert_eq!(g.logic.check_play_validity(p, &g.state), MoveValidity::Valid);
                 let piece = g.state.board.move_piece(p.from, p.to());
-                let captures = g.get_captures(p, piece);
+                let captures = g.logic.get_captures(p, piece, &g.state);
                 g.state.board.move_piece(p.to(), p.from);
                 if !c.is_empty() {
                     // Test data doesn't report capture of king as a capture using "x" notation
@@ -66,7 +66,7 @@ fn test_real_games(rules: Ruleset, starting_posn: &str, fname: &str) {
                     assert_eq!(without_king, c);
                 }
 
-                let game_status_res = g.do_move(p);
+                let game_status_res = g.do_play(p);
                 assert!(game_status_res.is_ok());
                 last_game_status = game_status_res.unwrap();
             } else {

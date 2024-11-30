@@ -34,7 +34,7 @@ impl From<&PlayRecord> for ShortPlayRecord {
 /// To explain (3), for example, if a player moves (`a1-b1`, `b1-a1`, `a1-b1`, `b1-a1`), the second
 /// `a1-b1` would count as a repetition but the second `b1-a1` would not (but would not force
 /// a reset of the repetition counter).
-#[derive(Copy, Clone, Debug, Default)]
+#[derive(Copy, Clone, Debug, Default, PartialEq)]
 pub struct RepetitionTracker {
     attacker_reps: usize,
     defender_reps: usize,
@@ -112,7 +112,7 @@ impl RepetitionTracker {
 /// This strict contains all state that can be used to evaluate play outcomes and board positions
 /// and that changes regularly. The idea is to keep this struct as small as possible to facilitate
 /// efficient play evaluation.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub struct GameState<T: BoardState> {
     /// Board state, ie, the current pieces on the board.
     pub board: T,

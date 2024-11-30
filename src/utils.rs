@@ -1,11 +1,10 @@
-use std::collections::HashSet;
 use std::hash::Hash;
 
 /// Creates a [`HashSet`] containing the arguments, similar to [`vec!`].
 #[macro_export] macro_rules! hashset {
     ($( $x: expr ),* ) => {
         {
-            let mut tmp = HashSet::new();
+            let mut tmp = std::collections::HashSet::new();
             $(
                 tmp.insert($x);
             )*
@@ -19,7 +18,7 @@ use std::hash::Hash;
 #[derive(Default)]
 pub(crate) struct UniqueStack<T: Hash + Eq + Copy> {
     stack: Vec<T>,
-    added: HashSet<T>
+    added: std::collections::HashSet<T>
 }
 
 impl<T: Hash + Eq + Copy> UniqueStack<T> {
@@ -37,7 +36,7 @@ impl<T: Hash + Eq + Copy> UniqueStack<T> {
 
 /// A double-ended queue of a fixed size. Pushing a new value to the end of the queue drops the
 /// first item in the queue.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub(crate) struct FixedSizeQueue<T, const N: usize> {
     queue: [T; N],
     first_i: usize
@@ -90,7 +89,7 @@ impl<T: Default + Copy, const N: usize> Default for FixedSizeQueue<T, N> {
 /// Assert that the given vector does not contain duplicates, and contains the same items as
 /// a comparison vector (ignoring order).
 pub(crate) fn check_tile_vec(actual: Vec<crate::Tile>, expected: Vec<crate::Tile>) {
-    let actual_set: HashSet<crate::Tile> = actual.iter().copied().collect();
+    let actual_set: std::collections::HashSet<crate::Tile> = actual.iter().copied().collect();
     assert_eq!(actual_set.len(), actual.len(), "Vec contains duplicates");
     let mut actual_sorted = actual.clone();
     actual_sorted.sort();

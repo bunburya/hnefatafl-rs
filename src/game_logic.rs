@@ -46,7 +46,7 @@ impl Enclosure {
 /// The information stored in this struct is not expected to change over the course of a game. It
 /// does not contain the current game state (piece placement, number of repetitions, etc), but
 /// rather, its methods take references to such state where necessary.
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct GameLogic {
     pub rules: Ruleset,
     pub board_geo: BoardGeometry
@@ -717,18 +717,21 @@ impl GameLogic {
         None
     }
 
+    /// Execute a known valid play. Gets the outcome of the move, applies the outcome (captures,
+    /// etc) to a copy of the current game state, checks for any game end conditions, and returns
+    /// the modified copy of the game state plus a record of the play (including its effects).
+    /// 
+    /// **NOTE**: This method assumes that the given play is valid, and should only ever be called
+    /// with a known valid play. Providing an invalid play to this method may result in panics or
+    /// difficult to debug errors. If in any doubt as to the validity of a play, call
+    /// [`Self::check_play_validity`] first or use [`Self::do_play`] instead (which performs that
+    /// check).
 
-    /// Actually "do" a move, checking validity, getting outcome, applying outcome to board state,
-    /// switching side to play and returning a description of the game status following the move.
-    pub fn do_move<T: BoardState>(
+    pub fn do_valid_play<T: BoardState>(
         &self,
         play: Play,
         mut state: GameState<T>
-    ) -> Result<(GameState<T>, PlayRecord), InvalidPlay> {
-        if let Invalid(v) = self.check_play_validity(play, &state) {
-            return Err(v)
-        };
-        
+    ) -> (GameState<T>, PlayRecord) {
         // First move the piece on the board
         let moving_piece = state.board.move_piece(play.from, play.to());
         // Then remove captured pieces
@@ -757,16 +760,27 @@ impl GameLogic {
 
         state.side_to_play = state.side_to_play.other();
         state.status = game_status;
-        
-        Ok((state, record))
+
+        (state, record)
+
     }
 
-    /// Iterate over the possible plays that can be made by the piece at the given tile. Returns an
-    /// error if there is no piece at the given tile. Order of iteration is not guaranteed.
-    pub fn iter_plays<'logic, 'state, T: BoardState>(&'logic self, tile: Tile, state: &'state GameState<T>) -> Result<PlayIterator<'logic, 'state, T>, BoardError> {
-        PlayIterator::new(self, state, tile)
-    }
 
+    /// Execute a play. Checks the play is valid, gets the outcome of the move, applies the outcome
+    /// (captures, etc) to a copy of the current game state, checks for any game end conditions, and
+    /// returns the modified copy of the game state plus a record of the play (including its
+    /// effects).
+    pub fn do_play<T: BoardState>(
+        &self,
+        play: Play,
+        state: GameState<T>
+    ) -> Result<(GameState<T>, PlayRecord), InvalidPlay> {
+        if let Invalid(v) = self.check_play_validity(play, &state) {
+            return Err(v)
+        };
+        Ok(self.do_valid_play(play, state))
+    }
+    
     /// Whether the given side could make any play given the current board.
     pub fn side_can_play<T: BoardState>(&self, side: Side, state: &GameState<T>) -> bool {
         for tile in state.board.iter_occupied(side) {
@@ -776,18 +790,374 @@ impl GameLogic {
         }
         false
     }
+
+    /// Iterate over the possible plays that can be made by the piece at the given tile. Returns an
+    /// error if there is no piece at the given tile. Order of iteration is not guaranteed.
+    pub fn iter_plays<'logic, 'state, T: BoardState>(
+        &'logic self,
+        tile: Tile,
+        state: &'state GameState<T>
+    ) -> Result<PlayIterator<'logic, 'state, T>, BoardError> {
+        PlayIterator::new(self, state, tile)
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::board_state::BoardState;
-    use crate::game_logic::GameLogic;
-    use crate::preset::rules;
+    use crate::board_state::{BoardState, HugeBoardState, LargeBoardState};
+    use crate::preset::{boards, rules};
     use crate::utils::check_tile_vec;
     use crate::PieceType::{King, Soldier};
     use crate::Side::{Attacker, Defender};
-    use crate::{Piece, PieceSet, SmallBoardState, Tile};
+    use crate::{hashset, Game, HostilityRules, MediumBoardState, Piece, PieceSet, Play, Ruleset, SmallBoardState, Tile};
     use std::str::FromStr;
+    use crate::game::MoveValidity::{Invalid, Valid};
+    use crate::game::WinReason::{KingCaptured, KingEscaped, Repetition};
+    use crate::game_logic::GameLogic;
+    use crate::game_state::GameState;
+    use crate::GameOutcome::Winner;
+    use crate::GameStatus::{Ongoing, Over};
+    use crate::InvalidPlay::{BlockedByPiece, MoveOntoBlockedTile, MoveThroughBlockedTile, NoPiece, OutOfBounds, TooFar};
+    use crate::rules::ShieldwallRules;
+    use crate::ThroneRule::NoPass;
+
+    const TEST_RULES: Ruleset = Ruleset {
+        slow_pieces: PieceSet::from_piece_type(King),
+        throne_movement: NoPass,
+        ..rules::BRANDUBH
+    };
+
+    fn generic_test_play_validity<T: BoardState>() {
+
+
+        let logic = GameLogic::new(rules::BRANDUBH, 7);
+        let mut state: GameState<T> = GameState::new(boards::BRANDUBH, logic.rules.starting_side)
+            .expect("Could not initiate game state.");
+
+        assert_eq!(
+            logic.check_play_validity(Play::from_tiles(
+                Tile::new(3, 1),
+                Tile::new(4, 1)
+            ).unwrap(), &state),
+            Valid
+        );
+        assert_eq!(
+            logic.check_play_validity(Play::from_tiles(
+                Tile::new(0, 3),
+                Tile::new(0, 0)
+            ).unwrap(), &state),
+            Invalid(MoveOntoBlockedTile)
+        );
+        assert_eq!(
+            logic.check_play_validity(Play::from_tiles(
+                Tile::new(1, 1),
+                Tile::new(2, 1)
+            ).unwrap(), &state),
+            Invalid(NoPiece)
+        );
+
+        assert_eq!(
+            logic.check_play_validity(Play::from_tiles(
+                Tile::new(0, 3),
+                Tile::new(0, 7)
+            ).unwrap(), &state),
+            Invalid(OutOfBounds)
+        );
+
+        assert_eq!(
+            logic.check_play_validity(Play::from_tiles(
+                Tile::new(0, 3),
+                Tile::new(2, 3)
+            ).unwrap(), &state),
+            Invalid(BlockedByPiece)
+        );
+
+        state = logic.do_play(
+            Play::from_tiles(
+                Tile::new(3, 1),
+                Tile::new(4, 1)
+            ).unwrap(),
+            state
+        ).unwrap().0;
+
+        let play = Play::from_tiles(
+            Tile::new(3, 3),
+            Tile::new(3, 2)
+        ).unwrap();
+        assert_eq!(
+            logic.check_play_validity(play, &state),
+            Invalid(BlockedByPiece)
+        );
+
+        //println!("{}", fb_game.state.board);
+        state.board.move_piece(Tile::new(3, 2), Tile::new(4, 2));
+        state.board.move_piece(Tile::new(3, 3), Tile::new(3, 2));
+        //println!("{}", fb_game.state.board);
+
+        assert_eq!(
+            logic.check_play_validity(Play::from_tiles(
+                Tile::new(2, 3),
+                Tile::new(3, 3)
+            ).unwrap(), &state),
+            Invalid(MoveOntoBlockedTile)
+        );
+
+        assert_eq!(
+            logic.check_play_validity(Play::from_tiles(
+                Tile::new(3, 2),
+                Tile::new(3, 3)
+            ).unwrap(), &state),
+            Valid
+        );
+
+        let logic: GameLogic = GameLogic::new(TEST_RULES, 7);
+        let mut state: GameState<T> = GameState::new("7/5Tt/2T4/2t2t1/Tt4T/2t4/2T2K1", Defender)
+            .expect("Could not initiate game state.");
+
+        assert_eq!(
+            logic.check_play_validity(Play::from_tiles(
+                Tile::new(6, 5),
+                Tile::new(6, 3)
+            ).unwrap(), &state),
+            Invalid(TooFar)
+        );
+
+        assert_eq!(
+            logic.check_play_validity(Play::from_tiles(
+                Tile::new(6, 5),
+                Tile::new(6, 4)
+            ).unwrap(), &state),
+            Valid
+        );
+
+        state.side_to_play = Attacker;
+
+        assert_eq!(
+            logic.check_play_validity(Play::from_tiles(
+                Tile::new(3, 2),
+                Tile::new(3, 4)
+            ).unwrap(), &state),
+            Invalid(MoveThroughBlockedTile)
+        );
+    }
+
+    #[test]
+    fn test_play_validity() {
+        generic_test_play_validity::<SmallBoardState>();
+        generic_test_play_validity::<MediumBoardState>();
+        generic_test_play_validity::<LargeBoardState>();
+        generic_test_play_validity::<HugeBoardState>();
+    }
+
+    fn generic_test_play_outcome<T: BoardState>() {
+
+        let test_game: Game<T> = Game::new(
+            TEST_RULES,
+            "4t2/5Tt/2T4/2t2t1/Tt4T/2t4/2T2K1"
+        ).unwrap();
+
+        // First, move the piece on the board directly and check that it picks up the correct
+        // captures. Then, reverse the move, and call `do_move` to check that the correct game
+        // outcome is detected.
+
+        let proto: (GameLogic, GameState<T>) = (
+            GameLogic::new(TEST_RULES, 7),
+            GameState::new("4t2/5Tt/2T4/2t2t1/Tt4T/2t4/2T2K1", TEST_RULES.starting_side).unwrap()
+        );
+        let (logic, mut state) = proto.clone();
+        let play = Play::from_tiles(Tile::new(0, 4), Tile::new(6, 4)).unwrap();
+        let piece = state.board.move_piece(play.from, play.to());
+        assert_eq!(
+            logic.get_captures(play, piece, &state),
+            [Tile::new(6, 5)].into()
+        );
+        state.board.move_piece(play.to(), play.from);
+        assert_eq!(logic.do_play(play, state).unwrap().0.status, Over(Winner(KingCaptured, Attacker)));
+
+        let (logic, mut state) = proto.clone();
+        state.side_to_play = Defender;
+        let play = Play::from_tiles(Tile::new(4, 6), Tile::new(4, 2)).unwrap();
+        let piece = state.board.move_piece(play.from, play.to());
+        assert_eq!(
+            logic.get_captures(play, piece, &state),
+            [
+                Tile::new(4, 1),
+                Tile::new(3, 2),
+                Tile::new(5, 2),
+            ].into()
+        );
+        state.board.move_piece(play.to(), play.from);
+        assert_eq!(logic.do_play(play, state).unwrap().0.status, Ongoing);
+
+        let (logic, mut state) = proto.clone();
+        state.side_to_play = Defender;
+        let play = Play::from_tiles(Tile::new(6, 5), Tile::new(6, 6)).unwrap();
+        let piece = state.board.move_piece(play.from, play.to());
+        assert_eq!(
+            logic.get_captures(play, piece, &state),
+            [].into(),
+        );
+        state.board.move_piece(play.to(), play.from);
+        assert_eq!(logic.do_play(play, state).unwrap().0.status, Over(Winner(KingEscaped, Defender)));
+
+        let (logic, mut state) = proto.clone();
+        state.side_to_play = Defender;
+        let play = Play::from_tiles(Tile::new(6, 5), Tile::new(5, 5)).unwrap();
+        let piece = state.board.move_piece(play.from, play.to());
+        assert_eq!(
+            logic.get_captures(play, piece, &state),
+            [].into()
+        );
+        state.board.move_piece(play.to(), play.from);
+        assert_eq!(logic.do_play(play, state).unwrap().0.status, Ongoing);
+    }
+
+    #[test]
+    fn test_play_outcome() {
+        generic_test_play_outcome::<SmallBoardState>();
+        generic_test_play_outcome::<MediumBoardState>();
+        generic_test_play_outcome::<LargeBoardState>();
+        generic_test_play_outcome::<HugeBoardState>();
+    }
+
+    #[test]
+    fn test_shieldwalls() {
+
+        let no_corner_rules = Ruleset{
+            shieldwall: Some(ShieldwallRules{
+                corners_may_close: false,
+                captures: PieceSet::from(Soldier)
+            }),
+            ..rules::COPENHAGEN
+        };
+
+        let king_capture_rules = Ruleset{
+            shieldwall: Some(ShieldwallRules{
+                corners_may_close: false,
+                captures: PieceSet::all()
+            }),
+            ..rules::COPENHAGEN
+        };
+
+        let corner_sw = "9/9/9/9/6t2/7tT/7tT/7tT/9";
+        let regular_sw = "9/9/9/6t2/7tT/7tT/7tT/8t/9";
+        let regular_sw_king = "9/9/9/6t2/7tT/7tK/7tT/8t/9";
+        let no_sw_gap = "9/9/9/6t2/7tT/8T/7tT/8t/9";
+        let no_sw_friend = "9/9/9/6t2/7tT/6tTT/7tT/8t/9";
+        let no_sw_small = "9/9/9/6t2/7tT/8t/9/9/9";
+
+        let cm = Play::from_tiles(
+            Tile::new(4, 6),
+            Tile::new(4, 8)
+        ).unwrap();
+        let m = Play::from_tiles(
+            Tile::new(3, 6),
+            Tile::new(3, 8)
+        ).unwrap();
+        let n = Play::from_tiles(
+            Tile::new(3, 6),
+            Tile::new(3, 7)
+        ).unwrap();
+
+        let corner_logic: GameLogic = GameLogic::new(rules::COPENHAGEN, 9);
+        let corner_state: GameState<MediumBoardState> = GameState::new(corner_sw, Attacker).unwrap();
+        assert_eq!(corner_logic.detect_shieldwall(n, &corner_state), None);
+        assert_eq!(corner_logic.detect_shieldwall(cm, &corner_state), Some(hashset!(
+            Tile::new(5, 8),
+            Tile::new(6, 8),
+            Tile::new(7, 8)
+        )));
+
+        let no_corner_logic = GameLogic::new(no_corner_rules, 9);
+        assert_eq!(no_corner_logic.detect_shieldwall(m, &corner_state), None);
+
+        let regular_logic = GameLogic::new(no_corner_rules, 9);
+        let regular_state: GameState<MediumBoardState> = GameState::new(regular_sw, Attacker).unwrap();
+        assert_eq!(regular_logic.detect_shieldwall(m, &regular_state), Some(hashset!(
+            Tile::new(4, 8),
+            Tile::new(5, 8),
+            Tile::new(6, 8)
+        )));
+
+        let king_state: GameState<MediumBoardState> = GameState::new(regular_sw_king, Attacker).unwrap();
+        assert_eq!(regular_logic.detect_shieldwall(m, &king_state), Some(hashset!(
+            Tile::new(4, 8),
+            Tile::new(6, 8)
+        )));
+
+        let gap_state: GameState<MediumBoardState> = GameState::new(no_sw_gap, Attacker).unwrap();
+        assert_eq!(regular_logic.detect_shieldwall(m, &gap_state), None);
+
+        let friend_state: GameState<MediumBoardState> = GameState::new(no_sw_gap, Attacker).unwrap();
+        assert_eq!(regular_logic.detect_shieldwall(m, &friend_state), None);
+
+        let small_state: GameState<MediumBoardState> = GameState::new(no_sw_small, Attacker).unwrap();
+        assert_eq!(regular_logic.detect_shieldwall(m, &small_state), None);
+    }
+
+    #[test]
+    fn test_encl_secure() {
+        let setup_1 = "7/2ttt2/1t1K1t1/2ttt2/7";
+        let setup_2 = "7/1tttt2/1t1K1t1/2tttt1/7";
+        let setup_3 = "2t1t2/1t1t1t1/1t1K1t1/2ttt2/7";
+        let setup_4 = "2t2t1/1t3t1/1t1K1t1/2ttt2/7";
+
+        let safe_corners = Ruleset {
+            hostility: HostilityRules {
+                corners: PieceSet::none(),
+                edge: PieceSet::none(),
+                throne: PieceSet::none()
+            },
+            ..rules::COPENHAGEN
+        };
+
+        let candidates = [
+            // string, inside_safe, outside_safe, is_secure, rules
+            (&setup_1, false, true, true, rules::COPENHAGEN),
+            (&setup_1, false, false, false, rules::COPENHAGEN),
+            (&setup_2, false, true, true, rules::COPENHAGEN),
+            (&setup_2, true, false, true, rules::COPENHAGEN),
+            (&setup_3, false, true, false, rules::COPENHAGEN),
+            (&setup_4, false, true, false, rules::COPENHAGEN),
+            (&setup_4, false, true, true, safe_corners),
+            (&setup_4, true, false, true, rules::COPENHAGEN),
+        ];
+        for (string, inside_safe, outside_safe, is_secure, rules) in candidates {
+            let logic = GameLogic::new(rules, 7);
+            let state: GameState<SmallBoardState> = GameState::new(string, rules.starting_side).unwrap();
+            let encl_opt = logic.find_enclosure(
+                Tile::new(2, 3),
+                PieceSet::from(King),
+                PieceSet::from(Piece::new(Soldier, Attacker)),
+                false, false,
+                &state.board,
+            );
+            assert!(encl_opt.is_some());
+            let encl = encl_opt.unwrap();
+            assert_eq!(logic.enclosure_secure(&encl, inside_safe, outside_safe, &state.board), is_secure)
+        }
+
+    }
+
+    #[test]
+    fn test_exit_forts() {
+        let exit_fort_flat = "9/9/8t/7tT/7T1/6tT1/7TK/7tT/9";
+        let exit_fort_bulge = "9/9/9/9/9/5TTTT/5T2K/6TTT/9";
+        let no_fort_enemy = "9/9/9/8T/7Tt/7T1/7TK/8T/9";
+        let no_fort_unfree = "9/9/9/8T/7TT/7TT/7TK/8T/9";
+        let no_fort_gap = "9/9/9/8T/9/4t2T1/7TK/8T/9";
+        let no_fort_vuln = "9/9/9/9/9/6TTT/5T2K/6TTT/9";
+        for s in [exit_fort_flat, exit_fort_bulge] {
+            let logic = GameLogic::new(rules::COPENHAGEN, 9);
+            let state: GameState<MediumBoardState> = GameState::new(s, logic.rules.starting_side).unwrap();
+            assert!(logic.detect_exit_fort(&state.board));
+        }
+        for s in [no_fort_enemy, no_fort_unfree, no_fort_gap, no_fort_vuln] {
+            let logic = GameLogic::new(rules::COPENHAGEN, 9);
+            let state: GameState<MediumBoardState> = GameState::new(s, logic.rules.starting_side).unwrap();
+            assert!(!logic.detect_exit_fort(&state.board));
+        }
+    }
 
     #[test]
     fn test_enclosures() {
@@ -940,4 +1310,41 @@ mod tests {
         );
         assert!(encl_res.is_some());
     }
+
+    #[test]
+    fn test_can_play() {
+        let logic = GameLogic::new(rules::BRANDUBH, 7);
+        let state: GameState<SmallBoardState> = GameState::new(
+            "2tt3/1tTKt2/2tt3/7/7/7/7",
+            logic.rules.starting_side
+        ).unwrap();
+        assert!(logic.side_can_play(Attacker, &state));
+        assert!(!logic.side_can_play(Defender, &state));
+
+        let state: GameState<SmallBoardState> = GameState::new(
+            "2tKt2/3t3/7/7/7/7/7",
+            logic.rules.starting_side
+        ).unwrap();
+        assert!(logic.side_can_play(Attacker, &state));
+        assert!(!logic.side_can_play(Defender, &state));
+    }
+
+    #[test]
+    fn test_repetitions() {
+        let mut game: Game<SmallBoardState> = Game::new(
+            rules::BRANDUBH,
+            boards::BRANDUBH
+        ).unwrap();
+        for _ in 0..3 {
+            game.do_play(Play::from_str("d6-f6").unwrap()).unwrap();
+            game.do_play(Play::from_str("d5-f5").unwrap()).unwrap();
+            game.do_play(Play::from_str("f6-d6").unwrap()).unwrap();
+            game.do_play(Play::from_str("f5-d5").unwrap()).unwrap();
+        }
+        assert_eq!(game.state.status, Ongoing);
+        game.do_play(Play::from_str("d6-f6").unwrap()).unwrap();
+
+        assert_eq!(game.state.status, Over(Winner(Repetition, Defender)));
+    }
+
 }

@@ -1,7 +1,7 @@
 mod rules;
 mod pieces;
 //mod board;
-mod error;
+pub mod error;
 pub mod game;
 mod tiles;
 mod bitfield;
@@ -9,9 +9,9 @@ mod utils;
 pub mod board_state;
 pub mod play;
 pub mod preset;
-mod game_state;
-mod game_logic;
-mod board_geo;
+pub mod game_state;
+pub mod game_logic;
+pub mod board_geo;
 mod play_iter;
 mod tile_iter;
 
