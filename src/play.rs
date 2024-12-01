@@ -2,7 +2,7 @@ use crate::tiles::{AxisOffset, Coords};
 use crate::Axis::{Horizontal, Vertical};
 use crate::ParseError::{BadPlay, BadString};
 use crate::PlayError::DisjointTiles;
-use crate::{Axis, ParseError, Piece, PlayError, PlayOutcome, Side, Tile};
+use crate::{Axis, ParseError, PlayError, PlayOutcome, Side, Tile};
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
@@ -85,11 +85,6 @@ impl Display for Play {
     }
 }
 
-/// A struct representing a capture of a single piece.
-pub struct Capture {
-    tile: Tile,
-    piece: Piece
-}
 
 /// A record of a single play.
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -103,11 +98,6 @@ pub struct PlayRecord {
 }
 
 impl PlayRecord {
-    
-    /// Compare two slices of records, ignoring the outcome of each record.
-    pub(crate) fn slice_eq_ignore_outcome(slice1: &[PlayRecord], slice2: &[PlayRecord]) -> bool {
-        slice1.iter().zip(slice2.iter()).all(|(a, b)| a.eq_ignore_outcome(b))
-    }
     
     /// Whether these two records are equal, ignoring the outcomes of the moves.
     pub fn eq_ignore_outcome(&self, other: &Self) -> bool {

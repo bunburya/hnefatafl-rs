@@ -36,8 +36,8 @@ impl From<&PlayRecord> for ShortPlayRecord {
 /// a reset of the repetition counter).
 #[derive(Copy, Clone, Debug, Default, PartialEq)]
 pub struct RepetitionTracker {
-    attacker_reps: usize,
-    defender_reps: usize,
+    pub(crate) attacker_reps: usize,
+    pub(crate) defender_reps: usize,
     attacker_mid_pair: bool,
     defender_mid_pair: bool,
     recent_plays: FixedSizeQueue<Option<ShortPlayRecord>, 4>

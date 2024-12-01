@@ -2,7 +2,7 @@ use crate::board_state::BoardState;
 use crate::error::{BoardError, InvalidPlay};
 use crate::game_logic::GameLogic;
 use crate::game_state::GameState;
-use crate::pieces::Side;
+use crate::pieces::{PlacedPiece, Side};
 use crate::play::{Play, PlayRecord};
 use crate::play_iter::PlayIterator;
 use crate::rules::Ruleset;
@@ -50,7 +50,7 @@ pub enum GameOutcome {
 #[derive(Eq, PartialEq, Debug, Default, Clone)]
 pub struct PlayOutcome {
     /// Tiles containing pieces that have been captured by the move.
-    pub captures: HashSet<Tile>,
+    pub captures: HashSet<PlacedPiece>,
     /// The outcome of the game, if the move has brought the game to an end.
     pub game_outcome: Option<GameOutcome>
 }
@@ -80,6 +80,7 @@ pub struct Game<T: BoardState> {
     pub logic: GameLogic,
     pub state: GameState<T>,
     pub play_history: Vec<PlayRecord>,
+    pub state_history: Vec<GameState<T>>
 }
 
 impl<T: BoardState> Game<T> {
@@ -89,16 +90,24 @@ impl<T: BoardState> Game<T> {
         let state: GameState<T> = GameState::new(starting_board, rules.starting_side)?;
         let logic = GameLogic::new(rules, state.board.side_len());
             
-        Ok(Self { state, logic, play_history: vec![] })
+        Ok(Self { state, logic, play_history: vec![], state_history: vec![state] })
     }
     
     /// Actually "do" a play, checking validity, getting outcome, applying outcome to board state,
     /// switching side to play and returning a description of the game status following the move.
     pub fn do_play(&mut self, play: Play) -> Result<GameStatus, InvalidPlay> {
         let (state, play_record) = self.logic.do_play(play, self.state)?;
+        self.state_history.push(self.state);
         self.state = state;
         self.play_history.push(play_record);
         Ok(self.state.status)
+    }
+    
+    pub fn undo_last_play(&mut self) {
+        if let Some(state) = self.state_history.pop() {
+            self.state = state;
+            self.play_history.pop();
+        }
     }
 
     /// Iterate over the possible plays that can be made by the piece at the given tile. Returns an
@@ -190,6 +199,30 @@ mod tests {
                 Play::from_tiles(test_tile, Tile::new(3, 4)).unwrap()
             )
         )
+    }
+    
+    #[test]
+    fn test_undo() {
+        let mut g: Game<SmallBoardState> = Game::new(rules::BRANDUBH, boards::BRANDUBH).unwrap();
+        let state_0 = g.state.clone();
+        g.do_play(Play::from_tiles(Tile::new(0, 3), Tile::new(0, 2)).unwrap());
+        let state_1 = g.state.clone();
+        assert_ne!(state_0, state_1);
+        g.do_play(Play::from_tiles(Tile::new(2, 3), Tile::new(2, 1)).unwrap());
+        let state_2 = g.state.clone();
+        assert_ne!(state_0, state_2);
+        g.do_play(Play::from_tiles(Tile::new(1, 3), Tile::new(1, 1)).unwrap());
+        let state_3 = g.state.clone();
+        assert_ne!(state_0, state_3);
+        g.undo_last_play();
+        assert_eq!(g.state, state_2);
+        g.undo_last_play();
+        assert_eq!(g.state, state_1);
+        g.undo_last_play();
+        assert_eq!(g.state, state_0);
+        g.undo_last_play();
+        assert_eq!(g.state, state_0);
+
     }
     
 

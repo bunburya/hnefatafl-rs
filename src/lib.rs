@@ -1,3 +1,5 @@
+extern crate core;
+
 mod rules;
 mod pieces;
 //mod board;

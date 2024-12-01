@@ -20,6 +20,7 @@ use crate::Side::{Attacker, Defender};
 use crate::ThroneRule::{KingEntry, KingPass, NoEntry, NoPass};
 use crate::{error, Axis, Coords, GameOutcome, InvalidPlay, KingStrength, Piece, PieceSet, Play, PlayOutcome, Ruleset, Side, ThroneRule, Tile};
 use std::collections::HashSet;
+use crate::pieces::PlacedPiece;
 use crate::play::PlayRecord;
 
 /// A space on the board that is enclosed by pieces.
@@ -580,8 +581,8 @@ impl GameLogic {
     }
 
     /// Get the tiles containing pieces captured by the given play.
-    pub fn get_captures<T: BoardState>(&self, play: Play, moving_piece: Piece, state: &GameState<T>) -> HashSet<Tile> {
-        let mut captures: HashSet<Tile> = HashSet::new();
+    pub fn get_captures<T: BoardState>(&self, play: Play, moving_piece: Piece, state: &GameState<T>) -> HashSet<PlacedPiece> {
+        let mut captures: HashSet<PlacedPiece> = HashSet::new();
         let to = play.to();
 
         // Detect normal captures
@@ -635,7 +636,7 @@ impl GameLogic {
                                 continue
                             }
                         }
-                        captures.insert(n);
+                        captures.insert(PlacedPiece { tile: n, piece: other_piece });
                     }
                 }
             }
@@ -644,7 +645,10 @@ impl GameLogic {
 
         // Detect shieldwall captures
         if let Some(walled) = self.detect_shieldwall(play, state) {
-            captures.extend(walled);
+            captures.extend(walled.iter().map(|t| 
+                PlacedPiece { tile: *t, piece: state.board.get_piece(*t)
+                    .expect("No piece found on captured tile.") }
+            ));
         }
         captures
 
@@ -655,7 +659,7 @@ impl GameLogic {
         &self,
         play: Play,
         moving_piece: Piece,
-        caps: &HashSet<Tile>,
+        caps: &HashSet<PlacedPiece>,
         state: &GameState<T>,
     ) -> Option<GameOutcome> {
         if state.board.count_pieces(state.side_to_play.other()) == 0 {
@@ -665,7 +669,7 @@ impl GameLogic {
         if state.side_to_play == Attacker {
             // This test relies on the fact that even once the king has been removed from the board,
             // the bits at the end that encode its position remain set.
-            if caps.contains(&state.board.get_king()) {
+            if caps.iter().any(|c| state.board.is_king(c.tile)) {
                 // Attacker has captured the king.
                 return Some(Winner(KingCaptured, Attacker))
             }
@@ -737,7 +741,7 @@ impl GameLogic {
         // Then remove captured pieces
         let captures = self.get_captures(play, moving_piece, &state);
         for &c in &captures {
-            state.board.clear_tile(c)
+            state.board.clear_tile(c.tile)
         }
         // Update records of repetitions and non-capturing plays
         state.repetitions.track_play(state.side_to_play, play, !captures.is_empty());
@@ -818,6 +822,7 @@ mod tests {
     use crate::GameOutcome::Winner;
     use crate::GameStatus::{Ongoing, Over};
     use crate::InvalidPlay::{BlockedByPiece, MoveOntoBlockedTile, MoveThroughBlockedTile, NoPiece, OutOfBounds, TooFar};
+    use crate::pieces::PlacedPiece;
     use crate::rules::ShieldwallRules;
     use crate::ThroneRule::NoPass;
 
@@ -969,7 +974,7 @@ mod tests {
         let piece = state.board.move_piece(play.from, play.to());
         assert_eq!(
             logic.get_captures(play, piece, &state),
-            [Tile::new(6, 5)].into()
+            [PlacedPiece::new(Tile::new(6, 5), Piece::new(King, Defender))].into()
         );
         state.board.move_piece(play.to(), play.from);
         assert_eq!(logic.do_play(play, state).unwrap().0.status, Over(Winner(KingCaptured, Attacker)));
@@ -981,9 +986,9 @@ mod tests {
         assert_eq!(
             logic.get_captures(play, piece, &state),
             [
-                Tile::new(4, 1),
-                Tile::new(3, 2),
-                Tile::new(5, 2),
+                PlacedPiece::new(Tile::new(4, 1), Piece::new(Soldier, Attacker)),
+                PlacedPiece::new(Tile::new(3, 2), Piece::new(Soldier, Attacker)),
+                PlacedPiece::new(Tile::new(5, 2), Piece::new(Soldier, Attacker)),
             ].into()
         );
         state.board.move_piece(play.to(), play.from);

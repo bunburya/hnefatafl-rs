@@ -3,9 +3,10 @@ use crate::error::ParseError;
 use crate::error::ParseError::BadChar;
 use crate::pieces::PieceType::{Commander, Guard, King, Knight, Mercenary, Soldier};
 use crate::pieces::Side::{Attacker, Defender};
+use crate::Tile;
 
 /// The two sides of the game (attacker and defender).
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub enum Side {
     Attacker = 0,
     Defender = 8
@@ -23,7 +24,7 @@ impl Side {
 }
 
 /// The different types of pieces that can occupy a board.
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub enum PieceType {
     King =      0b0000_0001,
     Soldier =   0b0000_0010,
@@ -55,7 +56,7 @@ impl BitOr<PieceType> for u16 {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
 /// A piece belonging to a particular side.
 pub struct Piece {
     pub piece_type: PieceType,
@@ -136,6 +137,18 @@ impl TryFrom<char> for Piece {
     }
 }
 
+/// A struct representing a combination of a tile and a piece.
+#[derive(Debug, Eq, PartialEq, Clone, Copy, Hash)]
+pub struct PlacedPiece {
+    pub tile: Tile,
+    pub piece: Piece
+}
+
+impl PlacedPiece {
+    pub fn new(tile: Tile, piece: Piece) -> Self {
+        Self { tile, piece }
+    }
+}
 
 #[derive(Copy, Clone, Debug)]
 pub struct PieceSet(u16);

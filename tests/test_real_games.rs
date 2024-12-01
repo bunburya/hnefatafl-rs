@@ -60,8 +60,8 @@ fn test_real_games(rules: Ruleset, starting_posn: &str, fname: &str) {
                 if !c.is_empty() {
                     // Test data doesn't report capture of king as a capture using "x" notation
                     let without_king: HashSet<Tile> = captures.iter()
-                        .filter(|t| !g.state.board.is_king(**t))
-                        .map(|t| t.to_owned())
+                        .map(|c| c.tile)
+                        .filter(|t| !g.state.board.is_king(*t))
                         .collect();
                     assert_eq!(without_king, c);
                 }
