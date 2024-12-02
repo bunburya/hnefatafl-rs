@@ -1,8 +1,10 @@
 use std::cmp::PartialEq;
-use crate::{GameStatus, ParseError, Play, Side};
 use crate::board_state::BoardState;
-use crate::GameStatus::Ongoing;
-use crate::play::PlayRecord;
+use crate::error::ParseError;
+use crate::game::GameStatus;
+use crate::game::GameStatus::Ongoing;
+use crate::pieces::Side;
+use crate::play::{Play, PlayRecord};
 use crate::utils::FixedSizeQueue;
 
 /// A short (fixed-size) record of the relevant information about a play we need to figure out
@@ -145,7 +147,9 @@ impl <T: BoardState> GameState<T> {
 mod tests {
     use std::str::FromStr;
     use crate::game_state::RepetitionTracker;
-    use crate::{Play, Side};
+    use crate::pieces::Side;
+    use crate::play::Play;
+
     #[test]
     fn test_repetition_tracker() {
         let mut tracker = RepetitionTracker::default();

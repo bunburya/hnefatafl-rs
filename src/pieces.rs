@@ -3,7 +3,7 @@ use crate::error::ParseError;
 use crate::error::ParseError::BadChar;
 use crate::pieces::PieceType::{Commander, Guard, King, Knight, Mercenary, Soldier};
 use crate::pieces::Side::{Attacker, Defender};
-use crate::Tile;
+use crate::tiles::Tile;
 
 /// The two sides of the game (attacker and defender).
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
@@ -271,10 +271,9 @@ impl PieceSet {
 
 #[cfg(test)]
 mod tests {
-    use crate::Piece;
-    use crate::pieces::PieceSet;
+    use crate::pieces::{Piece, PieceSet};
     use crate::pieces::PieceType::{Commander, Guard, King, Knight, Mercenary, Soldier};
-    use crate::Side::{Attacker, Defender};
+    use crate::pieces::Side::{Attacker, Defender};
 
     #[test]
     fn test_piece_set() {

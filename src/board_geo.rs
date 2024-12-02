@@ -1,7 +1,7 @@
 use crate::board_state::BoardState;
 use crate::error::BoardError;
-use crate::{Coords, Tile};
 use crate::tile_iter::TileIterator;
+use crate::tiles::{Coords, Tile};
 
 const NEIGHBOR_OFFSETS: [[i8; 2]; 4] = [[-1, 0], [1, 0], [0, -1], [0, 1]];
 
@@ -157,8 +157,8 @@ impl BoardGeometry {
 #[cfg(test)]
 mod tests {
     use crate::board_geo::BoardGeometry;
+    use crate::tiles::Tile;
     use crate::utils::check_tile_vec;
-    use crate::Tile;
 
     #[test]
     fn test_neighbors() {

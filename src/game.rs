@@ -1,5 +1,5 @@
 use crate::board_state::BoardState;
-use crate::error::{BoardError, InvalidPlay};
+use crate::error::{BoardError, InvalidPlay, ParseError};
 use crate::game_logic::GameLogic;
 use crate::game_state::GameState;
 use crate::pieces::{PlacedPiece, Side};
@@ -7,7 +7,6 @@ use crate::play::{Play, PlayRecord};
 use crate::play_iter::PlayIterator;
 use crate::rules::Ruleset;
 use crate::tiles::Tile;
-use crate::ParseError;
 use std::cmp::PartialEq;
 use std::collections::HashSet;
 use std::str::FromStr;
@@ -124,9 +123,9 @@ mod tests {
     use crate::play::Play;
     use crate::preset::{boards, rules};
     use crate::tiles::Tile;
-    use crate::{hashset, SmallBoardState};
+    use crate::hashset;
     use std::collections::HashSet;
-
+    use crate::board_state::SmallBoardState;
 
     #[test]
     fn test_iter_plays() {

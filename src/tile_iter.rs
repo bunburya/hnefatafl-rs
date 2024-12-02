@@ -1,4 +1,4 @@
-use crate::Tile;
+use crate::tiles::Tile;
 
 /// Iterator over all tiles on a board.
 pub struct TileIterator {

@@ -1,4 +1,5 @@
 use std::hash::Hash;
+use crate::tiles::Tile;
 
 /// Creates a [`HashSet`] containing the arguments, similar to [`vec!`].
 #[macro_export] macro_rules! hashset {
@@ -88,8 +89,8 @@ impl<T: Default + Copy, const N: usize> Default for FixedSizeQueue<T, N> {
 #[cfg(test)]
 /// Assert that the given vector does not contain duplicates, and contains the same items as
 /// a comparison vector (ignoring order).
-pub(crate) fn check_tile_vec(actual: Vec<crate::Tile>, expected: Vec<crate::Tile>) {
-    let actual_set: std::collections::HashSet<crate::Tile> = actual.iter().copied().collect();
+pub(crate) fn check_tile_vec(actual: Vec<Tile>, expected: Vec<Tile>) {
+    let actual_set: std::collections::HashSet<Tile> = actual.iter().copied().collect();
     assert_eq!(actual_set.len(), actual.len(), "Vec contains duplicates");
     let mut actual_sorted = actual.clone();
     actual_sorted.sort();

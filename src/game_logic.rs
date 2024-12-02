@@ -1,27 +1,27 @@
 use crate::board_geo::BoardGeometry;
 use crate::board_state::BoardState;
-use crate::error::BoardError;
+use crate::error::{BoardError, InvalidPlay};
 use crate::game::MoveValidity::{Invalid, Valid};
 use crate::game::WinReason::{AllCaptured, Enclosed, ExitFort, KingCaptured, KingEscaped, NoMoves};
-use crate::game::{DrawReason, MoveValidity, WinReason};
+use crate::game::{DrawReason, GameOutcome, MoveValidity, PlayOutcome, WinReason};
 use crate::game_state::GameState;
 use crate::play_iter::PlayIterator;
 use crate::rules::EnclosureWinRules::WithoutEdgeAccess;
 use crate::rules::KingAttack::{Anvil, Armed, Hammer};
-use crate::rules::{RepetitionRule, ShieldwallRules};
-use crate::tiles::{AxisOffset, RowColOffset};
+use crate::rules::{KingStrength, RepetitionRule, ShieldwallRules, ThroneRule};
+use crate::tiles::{Axis, AxisOffset, Coords, RowColOffset, Tile};
 use crate::utils::UniqueStack;
-use crate::Axis::{Horizontal, Vertical};
-use crate::GameOutcome::{Draw, Winner};
-use crate::GameStatus::{Ongoing, Over};
-use crate::InvalidPlay::{BlockedByPiece, GameOver, MoveOntoBlockedTile, MoveThroughBlockedTile, NoCommonAxis, NoPiece, OutOfBounds, TooFar, WrongPlayer};
-use crate::PieceType::{King, Soldier};
-use crate::Side::{Attacker, Defender};
-use crate::ThroneRule::{KingEntry, KingPass, NoEntry, NoPass};
-use crate::{error, Axis, Coords, GameOutcome, InvalidPlay, KingStrength, Piece, PieceSet, Play, PlayOutcome, Ruleset, Side, ThroneRule, Tile};
 use std::collections::HashSet;
-use crate::pieces::PlacedPiece;
-use crate::play::PlayRecord;
+use crate::pieces::{Piece, PieceSet, PlacedPiece, Side};
+use crate::pieces::PieceType::{King, Soldier};
+use crate::play::{Play, PlayRecord};
+use crate::{error, Ruleset};
+use crate::error::InvalidPlay::{BlockedByPiece, GameOver, MoveOntoBlockedTile, MoveThroughBlockedTile, NoCommonAxis, NoPiece, OutOfBounds, TooFar, WrongPlayer};
+use crate::game::GameOutcome::{Draw, Winner};
+use crate::game::GameStatus::{Ongoing, Over};
+use crate::pieces::Side::{Attacker, Defender};
+use crate::rules::ThroneRule::{KingEntry, KingPass, NoEntry, NoPass};
+use crate::tiles::Axis::{Horizontal, Vertical};
 
 /// A space on the board that is enclosed by pieces.
 #[derive(Debug, Default)]
@@ -184,10 +184,6 @@ impl GameLogic {
                 ) && between.contains(&self.board_geo.special_tiles.throne) {
                     return Invalid(MoveThroughBlockedTile)
                 }
-                // println!("throne_movement: {:?}", self.rules.throne_movement);
-                // println!("piece_type: {:?}", piece.piece_type);
-                // println!("to: {to}");
-                // println!("throne: {}", self.board_geo.special_tiles.throne);
                 if ((self.rules.throne_movement == NoEntry)
                     || ((self.rules.throne_movement == KingEntry)
                     && piece.piece_type != King)
@@ -808,23 +804,25 @@ impl GameLogic {
 
 #[cfg(test)]
 mod tests {
-    use crate::board_state::{BoardState, HugeBoardState, LargeBoardState};
+    use crate::board_state::{BoardState, HugeBoardState, LargeBoardState, MediumBoardState, SmallBoardState};
     use crate::preset::{boards, rules};
     use crate::utils::check_tile_vec;
-    use crate::PieceType::{King, Soldier};
-    use crate::Side::{Attacker, Defender};
-    use crate::{hashset, Game, HostilityRules, MediumBoardState, Piece, PieceSet, Play, Ruleset, SmallBoardState, Tile};
     use std::str::FromStr;
+    use crate::error::InvalidPlay::{BlockedByPiece, MoveOntoBlockedTile, MoveThroughBlockedTile, NoPiece, OutOfBounds, TooFar};
     use crate::game::MoveValidity::{Invalid, Valid};
     use crate::game::WinReason::{KingCaptured, KingEscaped, Repetition};
     use crate::game_logic::GameLogic;
     use crate::game_state::GameState;
-    use crate::GameOutcome::Winner;
-    use crate::GameStatus::{Ongoing, Over};
-    use crate::InvalidPlay::{BlockedByPiece, MoveOntoBlockedTile, MoveThroughBlockedTile, NoPiece, OutOfBounds, TooFar};
-    use crate::pieces::PlacedPiece;
-    use crate::rules::ShieldwallRules;
-    use crate::ThroneRule::NoPass;
+    use crate::pieces::{Piece, PieceSet, PlacedPiece};
+    use crate::pieces::PieceType::{King, Soldier};
+    use crate::pieces::Side::{Attacker, Defender};
+    use crate::play::Play;
+    use crate::rules::{HostilityRules, ShieldwallRules};
+    use crate::rules::ThroneRule::NoPass;
+    use crate::{hashset, Game, Ruleset};
+    use crate::game::GameOutcome::Winner;
+    use crate::game::GameStatus::{Ongoing, Over};
+    use crate::tiles::Tile;
 
     const TEST_RULES: Ruleset = Ruleset {
         slow_pieces: PieceSet::from_piece_type(King),

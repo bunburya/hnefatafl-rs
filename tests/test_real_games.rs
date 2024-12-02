@@ -2,11 +2,16 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
 use std::str::FromStr;
-use hnefatafl::{Game, GameOutcome, GameStatus, MediumBoardState, ParseError, Play, Ruleset, Side, Tile};
-use hnefatafl::game::MoveValidity;
-use hnefatafl::board_state::BoardState;
-use hnefatafl::ParseError::EmptyString;
+use hnefatafl::game::{GameOutcome, GameStatus, MoveValidity};
+use hnefatafl::board_state::{BoardState, MediumBoardState};
+use hnefatafl::error::ParseError;
+use hnefatafl::error::ParseError::EmptyString;
+use hnefatafl::play::Play;
 use hnefatafl::preset::{boards, rules};
+use hnefatafl::game::Game;
+use hnefatafl::rules::Ruleset;
+use hnefatafl::pieces::Side;
+use hnefatafl::tiles::Tile;
 
 fn play_captures_from_str(s: &str) -> Result<(Play, HashSet<Tile>), ParseError> {
     if s.is_empty() {

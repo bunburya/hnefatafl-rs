@@ -2,9 +2,10 @@ use crate::board_state::BoardState;
 use crate::error::BoardError;
 use crate::game_logic::GameLogic;
 use crate::game_state::GameState;
-use crate::tiles::AxisOffset;
-use crate::Axis::{Horizontal, Vertical};
-use crate::{Piece, Play, Tile};
+use crate::pieces::Piece;
+use crate::play::Play;
+use crate::tiles::{AxisOffset, Tile};
+use crate::tiles::Axis::{Horizontal, Vertical};
 
 /// An iterator over the possible plays that can be made by the piece at the given tile. Note that
 /// because this struct holds a reference to the [`GameLogic`] and [`GameState`], neither may be

@@ -1,6 +1,5 @@
-use crate::pieces::PieceSet;
+use crate::pieces::{PieceSet, Side};
 use std::cmp::PartialEq;
-use crate::Side;
 
 /// Rules relating to who may occupy/pass through the throne.
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]

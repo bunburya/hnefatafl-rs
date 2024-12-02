@@ -1,10 +1,12 @@
-use crate::ParseError::BadLineLen;
-use crate::PieceType::{King, Soldier};
-use crate::Side::{Attacker, Defender};
-use crate::{BitField, ParseError, Piece, Side, Tile};
 use primitive_types::{U256, U512};
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
+use crate::bitfield::BitField;
+use crate::error::ParseError;
+use crate::error::ParseError::BadLineLen;
+use crate::pieces::{Piece, Side};
+use crate::pieces::PieceType::{King, Soldier};
+use crate::tiles::Tile;
 
 /// Store information on the current board state (ie, pieces).
 pub trait BoardState: Default + Clone + Copy + Display + FromStr {
@@ -133,8 +135,8 @@ impl<T: BitField> BoardState for BitfieldBoardState<T> {
     fn place_piece(&mut self, t: Tile, piece: Piece) {
         let mask = T::tile_mask(t);
         match piece.side {
-            Attacker => self.attackers |= mask,
-            Defender => self.defenders |= mask
+            Side::Attacker => self.attackers |= mask,
+            Side::Defender => self.defenders |= mask
         }
         if piece.piece_type == King {
             self.set_king(t)
@@ -171,15 +173,15 @@ impl<T: BitField> BoardState for BitfieldBoardState<T> {
 
     fn count_pieces(&self, side: Side) -> u8 {
         match side {
-            Attacker => self.attackers,
-            Defender => self.defenders
+            Side::Attacker => self.attackers,
+            Side::Defender => self.defenders
         }.count_ones() as u8
     }
 
     fn iter_occupied(&self, side: Side) -> Self::Iter {
         let state_with_king = match side {
-            Attacker => self.attackers,
-            Defender => self.defenders
+            Side::Attacker => self.attackers,
+            Side::Defender => self.defenders
         };
         // unset bits which encode the position of the king
         let mut state_bytes = state_with_king.to_be_bytes();
@@ -321,12 +323,14 @@ pub type HugeBoardState = BitfieldBoardState<U512>;
 
 #[cfg(test)]
 mod tests {
-    use crate::board_state::BoardState;
-    use crate::PieceType::Soldier;
-    use crate::Side::{Attacker, Defender};
-    use crate::{hashset, Piece, SmallBoardState, Tile};
+    use crate::board_state::{BoardState, SmallBoardState};
     use std::collections::HashSet;
     use std::str::FromStr;
+    use crate::hashset;
+    use crate::pieces::Piece;
+    use crate::pieces::PieceType::Soldier;
+    use crate::pieces::Side::{Attacker, Defender};
+    use crate::tiles::Tile;
 
     fn test_from_str() {
         let from_fen = SmallBoardState::from_fen(
