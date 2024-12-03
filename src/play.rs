@@ -107,6 +107,18 @@ impl PlayRecord {
     }
 }
 
+impl Display for PlayRecord {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.play)?;
+        if !self.outcome.captures.is_empty() {
+            write!(f, "x{}", 
+                self.outcome.captures.iter().map(|p| 
+                    p.tile.to_string()).collect::<Vec<_>>().join("/"))?;
+        }
+        Ok(())
+    }
+}
+
 /// A record of all past plays in a game.
 #[derive(Debug, Default)]
 pub struct PlayHistory {
