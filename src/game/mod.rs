@@ -1,7 +1,7 @@
-use crate::board_state::BoardState;
+pub mod logic;
+pub mod state;
+
 use crate::error::{BoardError, InvalidPlay, ParseError};
-use crate::game_logic::GameLogic;
-use crate::game_state::GameState;
 use crate::pieces::{PlacedPiece, Side};
 use crate::play::{Play, PlayRecord};
 use crate::play_iter::PlayIterator;
@@ -10,8 +10,11 @@ use crate::tiles::Tile;
 use std::cmp::PartialEq;
 use std::collections::HashSet;
 use std::str::FromStr;
+use crate::board::state::{BoardState, HugeBasicBoardState, LargeBasicBoardState, MediumBasicBoardState, SmallBasicBoardState};
+use crate::game::logic::GameLogic;
+use crate::game::state::GameState;
 
-#[derive(Eq, PartialEq, Debug, Copy, Clone)]
+#[derive(Eq, PartialEq, Debug, Copy, Clone, Hash)]
 pub enum WinReason {
     /// King has escaped in the "normal" way, ie, by reaching an edge or corner.
     KingEscaped,
@@ -30,14 +33,14 @@ pub enum WinReason {
     Repetition
 }
 
-#[derive(Eq, PartialEq, Debug, Copy, Clone)]
+#[derive(Eq, PartialEq, Debug, Copy, Clone, Hash)]
 pub enum DrawReason {
     /// A move has been repeated too many times.
     Repetition
 }
 
 /// The outcome of a single game.
-#[derive(Eq, PartialEq, Debug, Copy, Clone)]
+#[derive(Eq, PartialEq, Debug, Copy, Clone, Hash)]
 pub enum GameOutcome {
     /// Game has been won by the specified side.
     Winner(WinReason, Side),
@@ -55,7 +58,7 @@ pub struct PlayOutcome {
 }
 
 /// The current status of the game.
-#[derive(Eq, PartialEq, Debug, Copy, Clone)]
+#[derive(Eq, PartialEq, Debug, Copy, Clone, Hash)]
 pub enum GameStatus {
     /// Game is still ongoing.
     Ongoing,
@@ -117,19 +120,29 @@ impl<T: BoardState> Game<T> {
     
 }
 
+
+/// Game supporting basic pieces (soldier and king), suitable for boards up to 7x7.
+pub type SmallBasicGame = Game<SmallBasicBoardState>;
+/// Game supporting basic pieces (soldier and king), suitable for boards up to 11x11.
+pub type MediumBasicGame = Game<MediumBasicBoardState>;
+/// Game supporting basic pieces (soldier and king), suitable for boards up to 15x15.
+pub type LargeBasicGame = Game<LargeBasicBoardState>;
+/// Game supporting basic pieces (soldier and king), suitable for boards up to 21x21.
+pub type HugeBasicGame = Game<HugeBasicBoardState>;
+
 #[cfg(test)]
 mod tests {
     use crate::game::Game;
+    use crate::hashset;
     use crate::play::Play;
     use crate::preset::{boards, rules};
     use crate::tiles::Tile;
-    use crate::hashset;
     use std::collections::HashSet;
-    use crate::board_state::SmallBoardState;
+    use crate::board::state::SmallBasicBoardState;
 
     #[test]
     fn test_iter_plays() {
-        let game: Game<SmallBoardState> = Game::new(rules::BRANDUBH, boards::BRANDUBH).unwrap();
+        let game: Game<SmallBasicBoardState> = Game::new(rules::BRANDUBH, boards::BRANDUBH).unwrap();
         assert!(game.iter_plays(Tile::new(0, 0)).is_err());
         assert!(game.iter_plays(Tile::new(1, 0)).is_err());
         let outer_att_tile = Tile::new(0, 3);
@@ -176,7 +189,7 @@ mod tests {
         let king_iter = game.iter_plays(king_tile);
         assert!(king_iter.is_ok());
         assert_eq!(king_iter.unwrap().collect::<HashSet<Play>>(), HashSet::new());
-        let game: Game<SmallBoardState> = Game::new(
+        let game: Game<SmallBasicBoardState> = Game::new(
             rules::BRANDUBH,
             "1T5/7/7/1t3K1/7/7/7"
         ).unwrap();
@@ -202,7 +215,7 @@ mod tests {
     
     #[test]
     fn test_undo() {
-        let mut g: Game<SmallBoardState> = Game::new(rules::BRANDUBH, boards::BRANDUBH).unwrap();
+        let mut g: Game<SmallBasicBoardState> = Game::new(rules::BRANDUBH, boards::BRANDUBH).unwrap();
         let state_0 = g.state.clone();
         g.do_play(Play::from_tiles(Tile::new(0, 3), Tile::new(0, 2)).unwrap());
         let state_1 = g.state.clone();

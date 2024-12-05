@@ -1,4 +1,4 @@
-use crate::board_state::BoardState;
+use crate::board::state::BoardState;
 use crate::error::BoardError;
 use crate::tile_iter::TileIterator;
 use crate::tiles::{Coords, Tile};
@@ -156,7 +156,7 @@ impl BoardGeometry {
 
 #[cfg(test)]
 mod tests {
-    use crate::board_geo::BoardGeometry;
+    use crate::board::geometry::BoardGeometry;
     use crate::tiles::Tile;
     use crate::utils::check_tile_vec;
 

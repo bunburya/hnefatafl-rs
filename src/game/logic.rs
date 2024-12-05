@@ -1,27 +1,26 @@
-use crate::board_geo::BoardGeometry;
-use crate::board_state::BoardState;
 use crate::error::{BoardError, InvalidPlay};
 use crate::game::MoveValidity::{Invalid, Valid};
 use crate::game::WinReason::{AllCaptured, Enclosed, ExitFort, KingCaptured, KingEscaped, NoMoves};
 use crate::game::{DrawReason, GameOutcome, MoveValidity, PlayOutcome, WinReason};
-use crate::game_state::GameState;
 use crate::play_iter::PlayIterator;
 use crate::rules::EnclosureWinRules::WithoutEdgeAccess;
 use crate::rules::KingAttack::{Anvil, Armed, Hammer};
-use crate::rules::{KingStrength, RepetitionRule, ShieldwallRules, ThroneRule};
+use crate::rules::{KingStrength, RepetitionRule, Ruleset, ShieldwallRules};
 use crate::tiles::{Axis, AxisOffset, Coords, RowColOffset, Tile};
 use crate::utils::UniqueStack;
-use std::collections::HashSet;
 use crate::pieces::{Piece, PieceSet, PlacedPiece, Side};
 use crate::pieces::PieceType::{King, Soldier};
 use crate::play::{Play, PlayRecord};
-use crate::{error, Ruleset};
 use crate::error::InvalidPlay::{BlockedByPiece, GameOver, MoveOntoBlockedTile, MoveThroughBlockedTile, NoCommonAxis, NoPiece, OutOfBounds, TooFar, WrongPlayer};
 use crate::game::GameOutcome::{Draw, Winner};
 use crate::game::GameStatus::{Ongoing, Over};
+use crate::game::state::GameState;
 use crate::pieces::Side::{Attacker, Defender};
-use crate::rules::ThroneRule::{KingEntry, KingPass, NoEntry, NoPass};
+use crate::rules::ThroneRule::{KingEntry, KingPass, NoEntry, NoPass, NoThrone};
 use crate::tiles::Axis::{Horizontal, Vertical};
+use std::collections::HashSet;
+use crate::board::geometry::BoardGeometry;
+use crate::board::state::BoardState;
 
 /// A space on the board that is enclosed by pieces.
 #[derive(Debug, Default)]
@@ -55,7 +54,7 @@ pub struct GameLogic {
 
 impl GameLogic {
 
-    /// Create a new [`Game`] from the given rules and starting positions.
+    /// Create a new [`GameLogic`] struct from the given rules and starting positions.
     pub fn new(rules: Ruleset, board_length: u8) -> Self {
         Self { rules, board_geo: BoardGeometry::new(board_length) }
     }
@@ -114,21 +113,21 @@ impl GameLogic {
         let validity = self.check_play_validity_for_side(play, piece.side, state);
         match validity {
             Valid => (true, true),
-            Invalid(error::InvalidPlay::MoveOntoBlockedTile) => {
+            Invalid(MoveOntoBlockedTile) => {
                 // Generally, the only way you could be unable to move onto a tile but be able to
                 // move past it is if the tile is a throne and the rules permit passing through, but
                 // not occupying, the throne. Of course, this will differ for knights and commanders
                 // when implemented.
                 if play.to() == self.board_geo.special_tiles.throne {
                     match self.rules.throne_movement {
-                        ThroneRule::NoThrone => (true, true),
-                        ThroneRule::NoPass => (false, false),
-                        ThroneRule::NoEntry => (false, true),
-                        ThroneRule::KingPass => {
+                        NoThrone => (true, true),
+                        NoPass => (false, false),
+                        NoEntry => (false, true),
+                        KingPass => {
                             let is_king = piece.piece_type == King;
                             (is_king, is_king)
                         },
-                        ThroneRule::KingEntry => (piece.piece_type == King, true),
+                        KingEntry => (piece.piece_type == King, true),
                     }
                 } else {
                     // If special tile is not a throne, it must be a corner, so cannot be passed.
@@ -281,7 +280,7 @@ impl GameLogic {
     /// `enclosed_pieces`. If `abort_on_edge` or `abort_on_corner` is `true` and an edge or corner,
     /// respectively, is encountered, no enclosure is found.
     ///
-    /// Uses a flood fill algorithm based on https://en.wikipedia.org/wiki/Flood_fill#Span_filling
+    /// Uses a flood fill algorithm based on <https://en.wikipedia.org/wiki/Flood_fill#Span_filling>
     pub fn find_enclosure<T: BoardState>(
         &self,
         tile: Tile,
@@ -804,24 +803,25 @@ impl GameLogic {
 
 #[cfg(test)]
 mod tests {
-    use crate::board_state::{BoardState, HugeBoardState, LargeBoardState, MediumBoardState, SmallBoardState};
     use crate::preset::{boards, rules};
     use crate::utils::check_tile_vec;
     use std::str::FromStr;
+    use crate::board::state::{BoardState, HugeBasicBoardState, LargeBasicBoardState, MediumBasicBoardState, SmallBasicBoardState};
     use crate::error::InvalidPlay::{BlockedByPiece, MoveOntoBlockedTile, MoveThroughBlockedTile, NoPiece, OutOfBounds, TooFar};
+    use crate::game::Game;
     use crate::game::MoveValidity::{Invalid, Valid};
     use crate::game::WinReason::{KingCaptured, KingEscaped, Repetition};
-    use crate::game_logic::GameLogic;
-    use crate::game_state::GameState;
     use crate::pieces::{Piece, PieceSet, PlacedPiece};
     use crate::pieces::PieceType::{King, Soldier};
     use crate::pieces::Side::{Attacker, Defender};
     use crate::play::Play;
-    use crate::rules::{HostilityRules, ShieldwallRules};
+    use crate::rules::{HostilityRules, Ruleset, ShieldwallRules};
     use crate::rules::ThroneRule::NoPass;
-    use crate::{hashset, Game, Ruleset};
     use crate::game::GameOutcome::Winner;
     use crate::game::GameStatus::{Ongoing, Over};
+    use crate::game::logic::GameLogic;
+    use crate::game::state::GameState;
+    use crate::hashset;
     use crate::tiles::Tile;
 
     const TEST_RULES: Ruleset = Ruleset {
@@ -946,10 +946,10 @@ mod tests {
 
     #[test]
     fn test_play_validity() {
-        generic_test_play_validity::<SmallBoardState>();
-        generic_test_play_validity::<MediumBoardState>();
-        generic_test_play_validity::<LargeBoardState>();
-        generic_test_play_validity::<HugeBoardState>();
+        generic_test_play_validity::<SmallBasicBoardState>();
+        generic_test_play_validity::<MediumBasicBoardState>();
+        generic_test_play_validity::<LargeBasicBoardState>();
+        generic_test_play_validity::<HugeBasicBoardState>();
     }
 
     fn generic_test_play_outcome<T: BoardState>() {
@@ -1017,10 +1017,10 @@ mod tests {
 
     #[test]
     fn test_play_outcome() {
-        generic_test_play_outcome::<SmallBoardState>();
-        generic_test_play_outcome::<MediumBoardState>();
-        generic_test_play_outcome::<LargeBoardState>();
-        generic_test_play_outcome::<HugeBoardState>();
+        generic_test_play_outcome::<SmallBasicBoardState>();
+        generic_test_play_outcome::<MediumBasicBoardState>();
+        generic_test_play_outcome::<LargeBasicBoardState>();
+        generic_test_play_outcome::<HugeBasicBoardState>();
     }
 
     #[test]
@@ -1063,7 +1063,7 @@ mod tests {
         ).unwrap();
 
         let corner_logic: GameLogic = GameLogic::new(rules::COPENHAGEN, 9);
-        let corner_state: GameState<MediumBoardState> = GameState::new(corner_sw, Attacker).unwrap();
+        let corner_state: GameState<MediumBasicBoardState> = GameState::new(corner_sw, Attacker).unwrap();
         assert_eq!(corner_logic.detect_shieldwall(n, &corner_state), None);
         assert_eq!(corner_logic.detect_shieldwall(cm, &corner_state), Some(hashset!(
             Tile::new(5, 8),
@@ -1075,26 +1075,26 @@ mod tests {
         assert_eq!(no_corner_logic.detect_shieldwall(m, &corner_state), None);
 
         let regular_logic = GameLogic::new(no_corner_rules, 9);
-        let regular_state: GameState<MediumBoardState> = GameState::new(regular_sw, Attacker).unwrap();
+        let regular_state: GameState<MediumBasicBoardState> = GameState::new(regular_sw, Attacker).unwrap();
         assert_eq!(regular_logic.detect_shieldwall(m, &regular_state), Some(hashset!(
             Tile::new(4, 8),
             Tile::new(5, 8),
             Tile::new(6, 8)
         )));
 
-        let king_state: GameState<MediumBoardState> = GameState::new(regular_sw_king, Attacker).unwrap();
+        let king_state: GameState<MediumBasicBoardState> = GameState::new(regular_sw_king, Attacker).unwrap();
         assert_eq!(regular_logic.detect_shieldwall(m, &king_state), Some(hashset!(
             Tile::new(4, 8),
             Tile::new(6, 8)
         )));
 
-        let gap_state: GameState<MediumBoardState> = GameState::new(no_sw_gap, Attacker).unwrap();
+        let gap_state: GameState<MediumBasicBoardState> = GameState::new(no_sw_gap, Attacker).unwrap();
         assert_eq!(regular_logic.detect_shieldwall(m, &gap_state), None);
 
-        let friend_state: GameState<MediumBoardState> = GameState::new(no_sw_gap, Attacker).unwrap();
+        let friend_state: GameState<MediumBasicBoardState> = GameState::new(no_sw_gap, Attacker).unwrap();
         assert_eq!(regular_logic.detect_shieldwall(m, &friend_state), None);
 
-        let small_state: GameState<MediumBoardState> = GameState::new(no_sw_small, Attacker).unwrap();
+        let small_state: GameState<MediumBasicBoardState> = GameState::new(no_sw_small, Attacker).unwrap();
         assert_eq!(regular_logic.detect_shieldwall(m, &small_state), None);
     }
 
@@ -1127,7 +1127,7 @@ mod tests {
         ];
         for (string, inside_safe, outside_safe, is_secure, rules) in candidates {
             let logic = GameLogic::new(rules, 7);
-            let state: GameState<SmallBoardState> = GameState::new(string, rules.starting_side).unwrap();
+            let state: GameState<SmallBasicBoardState> = GameState::new(string, rules.starting_side).unwrap();
             let encl_opt = logic.find_enclosure(
                 Tile::new(2, 3),
                 PieceSet::from(King),
@@ -1152,12 +1152,12 @@ mod tests {
         let no_fort_vuln = "9/9/9/9/9/6TTT/5T2K/6TTT/9";
         for s in [exit_fort_flat, exit_fort_bulge] {
             let logic = GameLogic::new(rules::COPENHAGEN, 9);
-            let state: GameState<MediumBoardState> = GameState::new(s, logic.rules.starting_side).unwrap();
+            let state: GameState<MediumBasicBoardState> = GameState::new(s, logic.rules.starting_side).unwrap();
             assert!(logic.detect_exit_fort(&state.board));
         }
         for s in [no_fort_enemy, no_fort_unfree, no_fort_gap, no_fort_vuln] {
             let logic = GameLogic::new(rules::COPENHAGEN, 9);
-            let state: GameState<MediumBoardState> = GameState::new(s, logic.rules.starting_side).unwrap();
+            let state: GameState<MediumBasicBoardState> = GameState::new(s, logic.rules.starting_side).unwrap();
             assert!(!logic.detect_exit_fort(&state.board));
         }
     }
@@ -1169,7 +1169,7 @@ mod tests {
         let encl_with_corner = "5t1/4tK1/4ttt/7/7/7/7";
         let encl_with_soldier = "2ttt2/1t1KTt1/2tttt1/7/7/7/7";
         let encl_edge_2 = "1t2t2/1t1K1t1/2tttt1/7/7/7/7";
-        let state = SmallBoardState::from_str(full_enclosure).unwrap();
+        let state = SmallBasicBoardState::from_str(full_enclosure).unwrap();
         let game_logic = GameLogic::new(rules::BRANDUBH, state.side_len());
         let encl_res = game_logic.find_enclosure(
             Tile::new(1, 3),
@@ -1195,7 +1195,7 @@ mod tests {
             ]
         );
 
-        let state = SmallBoardState::from_str(encl_with_edge).unwrap();
+        let state = SmallBasicBoardState::from_str(encl_with_edge).unwrap();
         let game_logic = GameLogic::new(rules::BRANDUBH, state.side_len());
         let encl_res = game_logic.find_enclosure(
             Tile::new(1, 3),
@@ -1230,7 +1230,7 @@ mod tests {
             ]
         );
 
-        let state = SmallBoardState::from_str(encl_with_corner).unwrap();
+        let state = SmallBasicBoardState::from_str(encl_with_corner).unwrap();
         let game_logic = GameLogic::new(rules::BRANDUBH, state.side_len());
         let encl_res = game_logic.find_enclosure(
             Tile::new(1, 3),
@@ -1264,7 +1264,7 @@ mod tests {
             ]
         );
 
-        let state = SmallBoardState::from_str(encl_with_soldier).unwrap();
+        let state = SmallBasicBoardState::from_str(encl_with_soldier).unwrap();
         let game_logic = GameLogic::new(rules::BRANDUBH, state.side_len());
         let encl_res = game_logic.find_enclosure(
             Tile::new(1, 3),
@@ -1301,7 +1301,7 @@ mod tests {
             ]
         );
 
-        let state = SmallBoardState::from_str(encl_edge_2).unwrap();
+        let state = SmallBasicBoardState::from_str(encl_edge_2).unwrap();
         let game_logic = GameLogic::new(rules::BRANDUBH, state.side_len());
         let encl_res = game_logic.find_enclosure(
             Tile::new(1, 3),
@@ -1317,14 +1317,14 @@ mod tests {
     #[test]
     fn test_can_play() {
         let logic = GameLogic::new(rules::BRANDUBH, 7);
-        let state: GameState<SmallBoardState> = GameState::new(
+        let state: GameState<SmallBasicBoardState> = GameState::new(
             "2tt3/1tTKt2/2tt3/7/7/7/7",
             logic.rules.starting_side
         ).unwrap();
         assert!(logic.side_can_play(Attacker, &state));
         assert!(!logic.side_can_play(Defender, &state));
 
-        let state: GameState<SmallBoardState> = GameState::new(
+        let state: GameState<SmallBasicBoardState> = GameState::new(
             "2tKt2/3t3/7/7/7/7/7",
             logic.rules.starting_side
         ).unwrap();
@@ -1334,7 +1334,7 @@ mod tests {
 
     #[test]
     fn test_repetitions() {
-        let mut game: Game<SmallBoardState> = Game::new(
+        let mut game: Game<SmallBasicBoardState> = Game::new(
             rules::BRANDUBH,
             boards::BRANDUBH
         ).unwrap();

@@ -2,8 +2,8 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
 use std::str::FromStr;
+use hnefatafl::board::state::{BoardState, MediumBasicBoardState};
 use hnefatafl::game::{GameOutcome, GameStatus, MoveValidity};
-use hnefatafl::board_state::{BoardState, MediumBoardState};
 use hnefatafl::error::ParseError;
 use hnefatafl::error::ParseError::EmptyString;
 use hnefatafl::play::Play;
@@ -43,7 +43,7 @@ fn test_real_games(rules: Ruleset, starting_posn: &str, fname: &str) {
         if line.starts_with('#') {
             continue
         }
-        let mut g: Game<MediumBoardState> = Game::new(
+        let mut g: Game<MediumBasicBoardState> = Game::new(
             rules,
             starting_posn
         ).unwrap();

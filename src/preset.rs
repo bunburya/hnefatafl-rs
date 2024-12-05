@@ -3,11 +3,10 @@ pub mod rules {
     use crate::pieces::PieceType::{King, Soldier};
     use crate::pieces::Side::Attacker;
     use crate::rules::KingAttack::Armed;
-    use crate::rules::{HostilityRules, RepetitionRule, ShieldwallRules};
+    use crate::rules::{HostilityRules, RepetitionRule, Ruleset, ShieldwallRules};
     use crate::rules::EnclosureWinRules::WithoutEdgeAccess;
     use crate::rules::KingStrength::{Strong, StrongByThrone};
     use crate::rules::ThroneRule::KingEntry;
-    use crate::Ruleset;
 
     /// Rules for Copenhagen Hnefatafl.
     pub const COPENHAGEN: Ruleset = Ruleset {

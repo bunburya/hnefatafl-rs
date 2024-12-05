@@ -1,5 +1,5 @@
 use std::cmp::PartialEq;
-use crate::board_state::BoardState;
+use crate::board::state::{BoardState, HugeBasicBoardState, LargeBasicBoardState, MediumBasicBoardState, SmallBasicBoardState};
 use crate::error::ParseError;
 use crate::game::GameStatus;
 use crate::game::GameStatus::Ongoing;
@@ -10,6 +10,8 @@ use crate::utils::FixedSizeQueue;
 /// A short (fixed-size) record of the relevant information about a play we need to figure out
 /// if it is a repetition of a previous play.
 #[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Eq)]
+#[derive(Hash)]
 struct ShortPlayRecord {
     side: Side,
     play: Play,
@@ -36,7 +38,7 @@ impl From<&PlayRecord> for ShortPlayRecord {
 /// To explain (3), for example, if a player moves (`a1-b1`, `b1-a1`, `a1-b1`, `b1-a1`), the second
 /// `a1-b1` would count as a repetition but the second `b1-a1` would not (but would not force
 /// a reset of the repetition counter).
-#[derive(Copy, Clone, Debug, Default, PartialEq)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct RepetitionTracker {
     pub(crate) attacker_reps: usize,
     pub(crate) defender_reps: usize,
@@ -114,7 +116,7 @@ impl RepetitionTracker {
 /// This strict contains all state that can be used to evaluate play outcomes and board positions
 /// and that changes regularly. The idea is to keep this struct as small as possible to facilitate
 /// efficient play evaluation.
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct GameState<T: BoardState> {
     /// Board state, ie, the current pieces on the board.
     pub board: T,
@@ -143,10 +145,19 @@ impl <T: BoardState> GameState<T> {
     }
 }
 
+/// Game state supporting basic pieces (soldier and king), suitable for boards up to 7x7.
+pub type SmallBasicGameState = GameState<SmallBasicBoardState>;
+/// Game state supporting basic pieces (soldier and king), suitable for boards up to 11x11.
+pub type MediumBasicGameState = GameState<MediumBasicBoardState>;
+/// Game state supporting basic pieces (soldier and king), suitable for boards up to 15x15.
+pub type LargeBasicGameState = GameState<LargeBasicBoardState>;
+/// Game state supporting basic pieces (soldier and king), suitable for boards up to 21x21.
+pub type HugeBasicGameState = GameState<HugeBasicBoardState>;
+
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
-    use crate::game_state::RepetitionTracker;
+    use crate::game::state::RepetitionTracker;
     use crate::pieces::Side;
     use crate::play::Play;
 

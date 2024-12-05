@@ -1,7 +1,7 @@
 use std::hash::Hash;
 use crate::tiles::Tile;
 
-/// Creates a [`HashSet`] containing the arguments, similar to [`vec!`].
+/// Creates a [`std::collections::HashSet`] containing the arguments, similar to [`vec!`].
 #[macro_export] macro_rules! hashset {
     ($( $x: expr ),* ) => {
         {
@@ -37,7 +37,7 @@ impl<T: Hash + Eq + Copy> UniqueStack<T> {
 
 /// A double-ended queue of a fixed size. Pushing a new value to the end of the queue drops the
 /// first item in the queue.
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct FixedSizeQueue<T, const N: usize> {
     queue: [T; N],
     first_i: usize

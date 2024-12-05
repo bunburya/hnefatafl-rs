@@ -25,7 +25,7 @@ pub trait BoardState: Default + Clone + Copy + Display + FromStr {
     }
 
     /// Place a piece representing the given side at the given position.
-    fn place_piece(&mut self, t: Tile, piece: Piece);
+    fn set_piece(&mut self, t: Tile, piece: Piece);
 
     /// Clear a tile.
     fn clear_tile(&mut self, t: Tile);
@@ -63,6 +63,19 @@ pub trait BoardState: Default + Clone + Copy + Display + FromStr {
     
     /// Return the length of the board's side.
     fn side_len(&self) -> u8;
+
+    /// Swap the pieces at two positions.
+    fn swap_pieces(&mut self, t1: Tile, t2: Tile) {
+        let p1 = self.get_piece(t1);
+        let p2 = self.get_piece(t2);
+        for (occupant, tile) in [(p2, t1), (p1, t2)] {
+            if let Some(p) = occupant {
+                self.set_piece(tile, p);
+            } else {
+                self.clear_tile(tile);
+            }
+        }
+    }
     
 }
 
@@ -132,11 +145,18 @@ impl<T: BitField> BoardState for BitfieldBoardState<T> {
         self.attackers = T::from_be_bytes_slice(att_bytes_slice);
     }
 
-    fn place_piece(&mut self, t: Tile, piece: Piece) {
+    fn set_piece(&mut self, t: Tile, piece: Piece) {
         let mask = T::tile_mask(t);
+        let imask = !mask;
         match piece.side {
-            Side::Attacker => self.attackers |= mask,
-            Side::Defender => self.defenders |= mask
+            Side::Attacker => {
+                self.attackers |= mask;
+                self.defenders &= imask;
+            },
+            Side::Defender => {
+                self.defenders |= mask;
+                self.attackers &= !mask;
+            }
         }
         if piece.piece_type == King {
             self.set_king(t)
@@ -196,10 +216,7 @@ impl<T: BitField> BoardState for BitfieldBoardState<T> {
 
     fn move_piece(&mut self, from: Tile, to: Tile) -> Piece {
         let piece = self.get_piece(from).expect("No piece to move.");
-        if piece.piece_type == King {
-            self.set_king(to)
-        }
-        self.place_piece(to, piece);
+        self.set_piece(to, piece);
         self.clear_tile(from);
         piece
     }
@@ -215,7 +232,7 @@ impl<T: BitField> BoardState for BitfieldBoardState<T> {
                 } else {
                     c += n_empty;
                     n_empty = 0;
-                    state.place_piece(Tile::new(r as u8, c), Piece::try_from(chr)?);
+                    state.set_piece(Tile::new(r as u8, c), Piece::try_from(chr)?);
                     c += 1;
                 }
             }
@@ -243,7 +260,7 @@ impl<T: BitField> BoardState for BitfieldBoardState<T> {
             }
             for (c, chr) in line.chars().enumerate() {
                 if chr != '.' {
-                    state.place_piece(Tile::new(r as u8, c as u8), Piece::try_from(chr)?)
+                    state.set_piece(Tile::new(r as u8, c as u8), Piece::try_from(chr)?)
                 }
             }
         }
@@ -310,33 +327,33 @@ impl <T: BitField> Display for BitfieldBoardState<T> {
     }
 }
 
-/// Board state suitable for boards up to 7x7.
-pub type SmallBoardState = BitfieldBoardState<u64>;
-/// Board state suitable for boards up to 11x11.
-pub type MediumBoardState = BitfieldBoardState<u128>;
+/// Board state supporting basic pieces (soldier and king), suitable for boards up to 7x7.
+pub type SmallBasicBoardState = BitfieldBoardState<u64>;
+/// Board state supporting basic pieces (soldier and king), suitable for boards up to 11x11.
+pub type MediumBasicBoardState = BitfieldBoardState<u128>;
 
-/// Board state suitable for boards up to 15x15.
-pub type LargeBoardState = BitfieldBoardState<U256>;
+/// Board state supporting basic pieces (soldier and king), suitable for boards up to 15x15.
+pub type LargeBasicBoardState = BitfieldBoardState<U256>;
 
-/// Board state suitable for boards up to 21x21.
-pub type HugeBoardState = BitfieldBoardState<U512>;
+/// Board state supporting basic pieces (soldier and king), suitable for boards up to 21x21.
+pub type HugeBasicBoardState = BitfieldBoardState<U512>;
 
 #[cfg(test)]
 mod tests {
-    use crate::board_state::{BoardState, SmallBoardState};
     use std::collections::HashSet;
     use std::str::FromStr;
+    use crate::board::state::{BoardState, SmallBasicBoardState};
     use crate::hashset;
     use crate::pieces::Piece;
-    use crate::pieces::PieceType::Soldier;
+    use crate::pieces::PieceType::{King, Soldier};
     use crate::pieces::Side::{Attacker, Defender};
     use crate::tiles::Tile;
 
     fn test_from_str() {
-        let from_fen = SmallBoardState::from_fen(
+        let from_fen = SmallBasicBoardState::from_fen(
             "3t3/3t3/3T3/ttTKTtt/3T3/3t3/3t3"
         );
-        let from_display_str = SmallBoardState::from_display_str(
+        let from_display_str = SmallBasicBoardState::from_display_str(
             &[
                 "...t...",
                 "...t...",
@@ -354,12 +371,12 @@ mod tests {
     fn test_piece_movement() {
         let start_str = "3t3/3t3/3T3/ttTKTtt/3T3/3t3/3t3";
         let expected_str = "3tK2/3t1t1/3T3/ttT1Ttt/1T1T3/3t3/3t3";
-        let res = SmallBoardState::from_str(start_str);
+        let res = SmallBasicBoardState::from_str(start_str);
         assert!(res.is_ok());
         let mut state = res.unwrap();
         assert_eq!(state.get_king(), Tile::new(3, 3));
-        state.place_piece(Tile::new(1, 5), Piece::attacker(Soldier));
-        state.place_piece(Tile::new(4, 1), Piece::defender(Soldier));
+        state.set_piece(Tile::new(1, 5), Piece::attacker(Soldier));
+        state.set_piece(Tile::new(4, 1), Piece::defender(Soldier));
         state.move_piece(Tile::new(3, 3), Tile::new(0, 4));
         assert_eq!(state.get_king(), Tile::new(0, 4));
         assert_eq!(state.to_fen(), expected_str);
@@ -385,7 +402,7 @@ mod tests {
 
     #[test]
     fn test_iter_occupied() {
-        let state = SmallBoardState::from_str("3t3/3t3/3T3/ttTKTtt/3T3/3t3/3t3").unwrap();
+        let state = SmallBasicBoardState::from_str("3t3/3t3/3T3/ttTKTtt/3T3/3t3/3t3").unwrap();
         let attackers: HashSet<Tile> = state.iter_occupied(Attacker).collect();
         let expected = hashset!(
             Tile::new(0, 3),
@@ -407,5 +424,18 @@ mod tests {
             Tile::new(3, 4)
         );
         assert_eq!(defenders, expected);
+    }
+
+    #[test]
+    fn test_swap_pieces() {
+        let mut board = SmallBasicBoardState::from_str("5/1K3/5/5/3t1").unwrap();
+        assert_eq!(board.get_piece(Tile::new(1, 1)), Some(Piece::new(King, Defender)));
+        assert_eq!(board.get_piece(Tile::new(4, 3)), Some(Piece::new(Soldier, Attacker)));
+        assert_eq!(board.get_king(), Tile::new(1, 1));
+        board.swap_pieces(Tile::new(1, 1), Tile::new(4, 3));
+        assert_eq!(board.get_piece(Tile::new(4, 3)), Some(Piece::new(King, Defender)));
+        assert_eq!(board.get_piece(Tile::new(1, 1)), Some(Piece::new(Soldier, Attacker)));
+        assert_eq!(board.get_king(), Tile::new(4, 3));
+
     }
 }

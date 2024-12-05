@@ -1,7 +1,7 @@
-use crate::board_state::BoardState;
+use crate::board::state::BoardState;
 use crate::error::BoardError;
-use crate::game_logic::GameLogic;
-use crate::game_state::GameState;
+use crate::game::logic::GameLogic;
+use crate::game::state::GameState;
 use crate::pieces::Piece;
 use crate::play::Play;
 use crate::tiles::{AxisOffset, Tile};

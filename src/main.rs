@@ -1,11 +1,12 @@
 #![cfg(feature = "demo")]
 
 use hnefatafl::preset;
-use hnefatafl::GameOutcome::{Draw, Winner};
-use hnefatafl::GameStatus::Over;
-use hnefatafl::{Game, Play, SmallBoardState};
 use std::io::stdin;
 use std::str::FromStr;
+use hnefatafl::game::GameOutcome::{Draw, Winner};
+use hnefatafl::game::GameStatus::Over;
+use hnefatafl::game::{Game, SmallBasicGame};
+use hnefatafl::play::Play;
 
 fn input(prompt: &str) -> std::io::Result<String> {
     println!("{prompt}");
@@ -30,7 +31,7 @@ fn get_play() -> Play {
 
 fn main() {
     println!("hnefatafl-rs demo");
-    let mut game: Game<SmallBoardState> = Game::new(
+    let mut game: SmallBasicGame = Game::new(
         preset::rules::BRANDUBH, 
         preset::boards::BRANDUBH,
     ).expect("Could not create game.");
