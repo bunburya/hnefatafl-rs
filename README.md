@@ -2,7 +2,8 @@
 
 `hnefatafl` is a Rust crate intended to provide functionality for creating software related to the [tafl](https://en.wikipedia.org/wiki/Tafl_games) family
 of board games. It's an early WIP but the idea is that it will eventually provide structs and traits that encapsulate
-game data and logic, hopefully helping to build games, AIs, etc.
+game data and logic, hopefully helping to build games, AIs, etc. It is not a goal of this crate to provide any concrete
+implementations of game clients or AIs.
 
 ## What is implemented
 

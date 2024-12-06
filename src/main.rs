@@ -3,7 +3,7 @@
 use hnefatafl::preset;
 use std::io::stdin;
 use std::str::FromStr;
-use hnefatafl::game::GameOutcome::{Draw, Winner};
+use hnefatafl::game::GameOutcome::{Draw, Win};
 use hnefatafl::game::GameStatus::Over;
 use hnefatafl::game::{Game, SmallBasicGame};
 use hnefatafl::play::Play;
@@ -46,7 +46,7 @@ fn main() {
                 if let Over(outcome) = status {
                     match outcome {
                         Draw(reason) => println!("Game over. Draw {reason:?}."),
-                        Winner(reason, side) => println!("Game over. Winner is {side:?} ({reason:?})."),
+                        Win(reason, side) => println!("Game over. Winner is {side:?} ({reason:?})."),
                     }
                     println!("Final board:");
                     println!("{}", game.state.board);

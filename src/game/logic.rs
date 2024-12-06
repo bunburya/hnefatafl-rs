@@ -11,7 +11,7 @@ use crate::pieces::{Piece, PieceSet, PlacedPiece, Side};
 use crate::pieces::PieceType::{King, Soldier};
 use crate::play::{Play, PlayRecord, PlayIterator};
 use crate::error::InvalidPlay::{BlockedByPiece, GameOver, MoveOntoBlockedTile, MoveThroughBlockedTile, NoCommonAxis, NoPiece, OutOfBounds, TooFar, WrongPlayer};
-use crate::game::GameOutcome::{Draw, Winner};
+use crate::game::GameOutcome::{Draw, Win};
 use crate::game::GameStatus::{Ongoing, Over};
 use crate::game::state::GameState;
 use crate::pieces::Side::{Attacker, Defender};
@@ -658,14 +658,14 @@ impl GameLogic {
     ) -> Option<GameOutcome> {
         if state.board.count_pieces(state.side_to_play.other()) == 0 {
             // All opposing pieces have been captured.
-            return Some(Winner(AllCaptured, state.side_to_play))
+            return Some(Win(AllCaptured, state.side_to_play))
         }
         if state.side_to_play == Attacker {
             // This test relies on the fact that even once the king has been removed from the board,
             // the bits at the end that encode its position remain set.
             if caps.iter().any(|c| state.board.is_king(c.tile)) {
                 // Attacker has captured the king.
-                return Some(Winner(KingCaptured, Attacker))
+                return Some(Win(KingCaptured, Attacker))
             }
             if let Some(encl_win) = self.rules.enclosure_win {
                 if let Some(encl) = self.find_enclosure(
@@ -678,7 +678,7 @@ impl GameLogic {
                 ) {
                     if encl.occupied.len() == state.board.count_pieces(Defender) as usize
                         && self.enclosure_secure(&encl, false, true, &state.board) {
-                        return Some(Winner(Enclosed, Attacker))
+                        return Some(Win(Enclosed, Attacker))
                     }
                 }
             }
@@ -688,11 +688,11 @@ impl GameLogic {
                     || (!self.rules.edge_escape && self.board_geo.special_tiles.corners.contains(&play.to()))
             ) {
                 // King has escaped.
-                return Some(Winner(KingEscaped, Defender))
+                return Some(Win(KingEscaped, Defender))
             }
             if self.rules.exit_fort && self.detect_exit_fort(&state.board) {
                 // King has escaped through exit fort.
-                return Some(Winner(ExitFort, Defender))
+                return Some(Win(ExitFort, Defender))
             }
         }
 
@@ -700,7 +700,7 @@ impl GameLogic {
             if state.repetitions.get_repetitions(state.side_to_play) >= n_repetitions {
                 // Loss or draw as a result of repeated moves.
                 return if is_loss {
-                    Some(Winner(WinReason::Repetition, state.side_to_play.other()))
+                    Some(Win(WinReason::Repetition, state.side_to_play.other()))
                 } else {
                     Some(Draw(DrawReason::Repetition))
                 }
@@ -709,7 +709,7 @@ impl GameLogic {
 
         if !self.side_can_play(state.side_to_play.other(), state) {
             // Other side has no playable moves.
-            return Some(Winner(NoMoves, state.side_to_play))
+            return Some(Win(NoMoves, state.side_to_play))
         }
 
         None
@@ -816,7 +816,7 @@ mod tests {
     use crate::play::Play;
     use crate::rules::{HostilityRules, Ruleset, ShieldwallRules};
     use crate::rules::ThroneRule::NoPass;
-    use crate::game::GameOutcome::Winner;
+    use crate::game::GameOutcome::Win;
     use crate::game::GameStatus::{Ongoing, Over};
     use crate::game::logic::GameLogic;
     use crate::game::state::GameState;
@@ -973,7 +973,7 @@ mod tests {
             [PlacedPiece::new(Tile::new(6, 5), Piece::new(King, Defender))].into()
         );
         state.board.move_piece(play.to(), play.from);
-        assert_eq!(logic.do_play(play, state).unwrap().0.status, Over(Winner(KingCaptured, Attacker)));
+        assert_eq!(logic.do_play(play, state).unwrap().0.status, Over(Win(KingCaptured, Attacker)));
 
         let (logic, mut state) = proto.clone();
         state.side_to_play = Defender;
@@ -999,7 +999,7 @@ mod tests {
             [].into(),
         );
         state.board.move_piece(play.to(), play.from);
-        assert_eq!(logic.do_play(play, state).unwrap().0.status, Over(Winner(KingEscaped, Defender)));
+        assert_eq!(logic.do_play(play, state).unwrap().0.status, Over(Win(KingEscaped, Defender)));
 
         let (logic, mut state) = proto.clone();
         state.side_to_play = Defender;
@@ -1345,7 +1345,7 @@ mod tests {
         assert_eq!(game.state.status, Ongoing);
         game.do_play(Play::from_str("d6-f6").unwrap()).unwrap();
 
-        assert_eq!(game.state.status, Over(Winner(Repetition, Defender)));
+        assert_eq!(game.state.status, Over(Win(Repetition, Defender)));
     }
 
 }

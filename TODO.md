@@ -7,7 +7,7 @@
 - [X] Iterate possible moves for a piece.
 - [X] Advanced win conditions (enclosures, repetition rule)
 - [ ] Ensure everything is documented, including overview of project, what is/is not supported and assumptions.
-- [ ] Clean up `lib.rs` to expose clean public interface.
+- [X] Clean up `lib.rs` to expose clean public interface.
 - [X] Larger boards.
 - [ ] Review against https://rust-lang.github.io/api-guidelines/.
 - [X] Refactor to allow more efficient tree generation.

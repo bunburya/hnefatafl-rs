@@ -43,7 +43,7 @@ pub enum DrawReason {
 #[derive(Eq, PartialEq, Debug, Copy, Clone, Hash)]
 pub enum GameOutcome {
     /// Game has been won by the specified side.
-    Winner(WinReason, Side),
+    Win(WinReason, Side),
     /// Game has ended in a draw.
     Draw(DrawReason)
 }
