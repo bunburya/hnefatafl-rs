@@ -3,17 +3,16 @@ pub mod state;
 
 use crate::error::{BoardError, InvalidPlay, ParseError};
 use crate::pieces::{PlacedPiece, Side};
-use crate::play::{Play, PlayRecord};
-use crate::play_iter::PlayIterator;
+use crate::play::{Play, PlayRecord, PlayIterator};
 use crate::rules::Ruleset;
 use crate::tiles::Tile;
 use std::cmp::PartialEq;
 use std::collections::HashSet;
-use std::str::FromStr;
 use crate::board::state::{BoardState, HugeBasicBoardState, LargeBasicBoardState, MediumBasicBoardState, SmallBasicBoardState};
 use crate::game::logic::GameLogic;
 use crate::game::state::GameState;
 
+/// The reason why a game has been won.
 #[derive(Eq, PartialEq, Debug, Copy, Clone, Hash)]
 pub enum WinReason {
     /// King has escaped in the "normal" way, ie, by reaching an edge or corner.
@@ -33,6 +32,7 @@ pub enum WinReason {
     Repetition
 }
 
+/// The reason why a game has been drawn.
 #[derive(Eq, PartialEq, Debug, Copy, Clone, Hash)]
 pub enum DrawReason {
     /// A move has been repeated too many times.
@@ -48,7 +48,8 @@ pub enum GameOutcome {
     Draw(DrawReason)
 }
 
-/// A struct describing the outcome of a single move.
+/// The outcome of a single play, including captures and the game outcome caused by the play, if
+/// any.
 #[derive(Eq, PartialEq, Debug, Default, Clone)]
 pub struct PlayOutcome {
     /// Tiles containing pieces that have been captured by the move.
@@ -66,17 +67,18 @@ pub enum GameStatus {
     Over(GameOutcome)
 }
 
-/// Whether a move is valid.
+/// Whether a play is valid.
 #[derive(Eq, PartialEq, Debug)]
-pub enum MoveValidity {
-    /// Move is valid.
+pub enum PlayValidity {
+    /// Play is valid.
     Valid,
-    /// Move is invalid, for the given reason.
+    /// Play is invalid, for the given reason.
     Invalid(InvalidPlay)
 }
 
 /// A struct representing a single game, including all state and associated information (such as
-/// rules) needed to play.
+/// rules) needed to play. This struct also keeps a record of all previous plays and the game state
+/// after each turn (to allow undoing plays).
 #[derive(Clone)]
 pub struct Game<T: BoardState> {
     pub logic: GameLogic,
@@ -133,7 +135,6 @@ pub type HugeBasicGame = Game<HugeBasicBoardState>;
 #[cfg(test)]
 mod tests {
     use crate::game::Game;
-    use crate::hashset;
     use crate::play::Play;
     use crate::preset::{boards, rules};
     use crate::tiles::Tile;

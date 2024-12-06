@@ -343,7 +343,6 @@ mod tests {
     use std::collections::HashSet;
     use std::str::FromStr;
     use crate::board::state::{BoardState, SmallBasicBoardState};
-    use crate::hashset;
     use crate::pieces::Piece;
     use crate::pieces::PieceType::{King, Soldier};
     use crate::pieces::Side::{Attacker, Defender};

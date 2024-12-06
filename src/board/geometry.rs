@@ -1,7 +1,6 @@
 use crate::board::state::BoardState;
 use crate::error::BoardError;
-use crate::tile_iter::TileIterator;
-use crate::tiles::{Coords, Tile};
+use crate::tiles::{Coords, Tile, TileIterator};
 
 const NEIGHBOR_OFFSETS: [[i8; 2]; 4] = [[-1, 0], [1, 0], [0, -1], [0, 1]];
 

@@ -1,8 +1,7 @@
 use crate::error::{BoardError, InvalidPlay};
-use crate::game::MoveValidity::{Invalid, Valid};
+use crate::game::PlayValidity::{Invalid, Valid};
 use crate::game::WinReason::{AllCaptured, Enclosed, ExitFort, KingCaptured, KingEscaped, NoMoves};
-use crate::game::{DrawReason, GameOutcome, MoveValidity, PlayOutcome, WinReason};
-use crate::play_iter::PlayIterator;
+use crate::game::{DrawReason, GameOutcome, PlayValidity, PlayOutcome, WinReason};
 use crate::rules::EnclosureWinRules::WithoutEdgeAccess;
 use crate::rules::KingAttack::{Anvil, Armed, Hammer};
 use crate::rules::{KingStrength, RepetitionRule, Ruleset, ShieldwallRules};
@@ -10,7 +9,7 @@ use crate::tiles::{Axis, AxisOffset, Coords, RowColOffset, Tile};
 use crate::utils::UniqueStack;
 use crate::pieces::{Piece, PieceSet, PlacedPiece, Side};
 use crate::pieces::PieceType::{King, Soldier};
-use crate::play::{Play, PlayRecord};
+use crate::play::{Play, PlayRecord, PlayIterator};
 use crate::error::InvalidPlay::{BlockedByPiece, GameOver, MoveOntoBlockedTile, MoveThroughBlockedTile, NoCommonAxis, NoPiece, OutOfBounds, TooFar, WrongPlayer};
 use crate::game::GameOutcome::{Draw, Winner};
 use crate::game::GameStatus::{Ongoing, Over};
@@ -146,7 +145,7 @@ impl GameLogic {
         play: Play,
         side: Side,
         state: &GameState<T>
-    ) -> MoveValidity {
+    ) -> PlayValidity {
         if state.status != Ongoing {
             return Invalid(GameOver)
         }
@@ -200,7 +199,7 @@ impl GameLogic {
     }
 
     /// Check whether a move is valid.
-    pub fn check_play_validity<T: BoardState>(&self, play: Play, state: &GameState<T>) -> MoveValidity {
+    pub fn check_play_validity<T: BoardState>(&self, play: Play, state: &GameState<T>) -> PlayValidity {
         self.check_play_validity_for_side(play, state.side_to_play, state)
     }
 
@@ -809,7 +808,7 @@ mod tests {
     use crate::board::state::{BoardState, HugeBasicBoardState, LargeBasicBoardState, MediumBasicBoardState, SmallBasicBoardState};
     use crate::error::InvalidPlay::{BlockedByPiece, MoveOntoBlockedTile, MoveThroughBlockedTile, NoPiece, OutOfBounds, TooFar};
     use crate::game::Game;
-    use crate::game::MoveValidity::{Invalid, Valid};
+    use crate::game::PlayValidity::{Invalid, Valid};
     use crate::game::WinReason::{KingCaptured, KingEscaped, Repetition};
     use crate::pieces::{Piece, PieceSet, PlacedPiece};
     use crate::pieces::PieceType::{King, Soldier};
@@ -821,7 +820,6 @@ mod tests {
     use crate::game::GameStatus::{Ongoing, Over};
     use crate::game::logic::GameLogic;
     use crate::game::state::GameState;
-    use crate::hashset;
     use crate::tiles::Tile;
 
     const TEST_RULES: Ruleset = Ruleset {

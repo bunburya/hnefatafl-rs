@@ -1,8 +1,9 @@
 use std::hash::Hash;
+#[cfg(test)]
 use crate::tiles::Tile;
 
 /// Creates a [`std::collections::HashSet`] containing the arguments, similar to [`vec!`].
-#[macro_export] macro_rules! hashset {
+macro_rules! hashset {
     ($( $x: expr ),* ) => {
         {
             let mut tmp = std::collections::HashSet::new();

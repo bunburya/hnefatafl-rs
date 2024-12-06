@@ -88,9 +88,9 @@ pub trait BitField:
 
 }
 
-/// Implement the [BitField] trait for the given integer type. First argument should be the type
+/// Implement the [`BitField`] trait for the given integer type. First argument should be the type
 /// to implement the trait for; the second should be the byte value to use for
-/// [BitField::ROW_WIDTH]. This macro is for use with the standard library integer types .
+/// [`BitField::ROW_WIDTH`]. This macro is for use with the standard library integer types .
 #[macro_export] macro_rules! impl_bitfield {
     ($t:ty, $row_width:expr) => {
 
@@ -128,9 +128,9 @@ pub trait BitField:
 }
 
 
-/// Implement the [BitField] trait for the given integer type. First argument should be the type
+/// Implement the [`BitField`] trait for the given integer type. First argument should be the type
 /// to implement the trait for; the second should be the byte value to use for
-/// [BitField::ROW_WIDTH]. This macro is for use with the big integer types provided by the
+/// [`BitField::ROW_WIDTH`]. This macro is for use with the big integer types provided by the
 /// [`primitive_types`] crate. It implements the trait in a way that works with the methods exposed
 /// by these types. Trying to use this macro on other types (or, conversely, trying to use the
 /// [`crate::impl_bitfield!`] macro on the `primitive_types` types) could result in weird and

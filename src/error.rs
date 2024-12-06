@@ -18,7 +18,7 @@ pub enum ParseError {
     /// Could not parse an integer from a string. This variant wraps the [`ParseIntError`] that was
     /// returned when trying to parse.
     BadInt(ParseIntError),
-    /// Tried to parse a string which represents an invalid [`Move`].
+    /// Tried to parse a string which represents an invalid [`Play`].
     BadPlay(PlayError),
     /// A generic error type where the given string could not be parsed for some reason.
     BadString(String)
