@@ -122,7 +122,6 @@ impl<T: BoardState> Game<T> {
     
 }
 
-
 /// Game supporting basic pieces (soldier and king), suitable for boards up to 7x7.
 pub type SmallBasicGame = Game<SmallBasicBoardState>;
 /// Game supporting basic pieces (soldier and king), suitable for boards up to 11x11.

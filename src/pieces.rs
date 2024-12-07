@@ -5,6 +5,9 @@ use crate::pieces::PieceType::{Commander, Guard, King, Knight, Mercenary, Soldie
 use crate::pieces::Side::{Attacker, Defender};
 use crate::tiles::Tile;
 
+/// A convenience reference to the king piece.
+pub const KING: Piece = Piece { piece_type: King, side: Defender };
+
 /// The two sides of the game (attacker and defender).
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub enum Side {

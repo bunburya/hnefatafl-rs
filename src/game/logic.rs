@@ -202,6 +202,16 @@ impl GameLogic {
     pub fn check_play_validity<T: BoardState>(&self, play: Play, state: &GameState<T>) -> PlayValidity {
         self.check_play_validity_for_side(play, state.side_to_play, state)
     }
+    
+    /// Check whether the king is beside the throne.
+    pub fn king_beside_throne<T: BoardState>(&self, board: &T) -> bool {
+        self.board_geo.neighbors(self.board_geo.special_tiles.throne).contains(&board.get_king())
+    }
+    
+    /// Check whether the king is on the throne.
+    pub fn king_on_throne<T: BoardState>(&self, board: &T) -> bool {
+        board.get_king() == self.board_geo.special_tiles.throne
+    }
 
     /// Check whether the king is *currently* strong (must be surrounded on all four sides to be
     /// captured), considering the game rules and the king's current position (for example, the
@@ -211,9 +221,7 @@ impl GameLogic {
             KingStrength::Strong => true,
             KingStrength::Weak => false,
             KingStrength::StrongByThrone => {
-                let k = board.get_king();
-                self.board_geo.special_tiles.corners.contains(&k)
-                    || self.board_geo.special_tiles.throne == k
+                self.king_beside_throne(board) || self.king_on_throne(board)
             }
         }
     }
@@ -589,6 +597,22 @@ impl GameLogic {
                         // Friendly neighbour so no possibility for capture
                         continue
                     }
+                    // Special case to deal with situation where strong king is beside his throne
+                    // and captured by three hostile pieces, which is not detected by the default
+                    // logic.
+                    if other_piece.piece_type == King
+                        && self.king_beside_throne(&state.board)
+                        && self.rules.king_strength == KingStrength::StrongByThrone
+                        && (self.rules.throne_movement == NoEntry
+                        || self.rules.throne_movement == KingEntry)
+                        && self.board_geo.neighbors(n).iter().all(|t|
+                        t == &self.board_geo.special_tiles.throne
+                            || self.tile_hostile(*t, other_piece, &state.board)
+                    ) {
+                        captures.insert(PlacedPiece { tile: n, piece: other_piece });
+                        continue
+                    }
+
                     let signed_to_row = to.row as i8;
                     let signed_to_col = to.col as i8;
                     let signed_n_row = n.row as i8;
@@ -724,7 +748,6 @@ impl GameLogic {
     /// difficult to debug errors. If in any doubt as to the validity of a play, call
     /// [`Self::check_play_validity`] first or use [`Self::do_play`] instead (which performs that
     /// check).
-
     pub fn do_valid_play<T: BoardState>(
         &self,
         play: Play,
@@ -810,7 +833,7 @@ mod tests {
     use crate::game::Game;
     use crate::game::PlayValidity::{Invalid, Valid};
     use crate::game::WinReason::{KingCaptured, KingEscaped, Repetition};
-    use crate::pieces::{Piece, PieceSet, PlacedPiece};
+    use crate::pieces::{Piece, PieceSet, PlacedPiece, KING};
     use crate::pieces::PieceType::{King, Soldier};
     use crate::pieces::Side::{Attacker, Defender};
     use crate::play::Play;
@@ -819,7 +842,7 @@ mod tests {
     use crate::game::GameOutcome::Win;
     use crate::game::GameStatus::{Ongoing, Over};
     use crate::game::logic::GameLogic;
-    use crate::game::state::GameState;
+    use crate::game::state::{GameState, SmallBasicGameState};
     use crate::tiles::Tile;
 
     const TEST_RULES: Ruleset = Ruleset {
@@ -1346,6 +1369,51 @@ mod tests {
         game.do_play(Play::from_str("d6-f6").unwrap()).unwrap();
 
         assert_eq!(game.state.status, Over(Win(Repetition, Defender)));
+    }
+    
+    #[test]
+    fn test_strong_king_capture() {
+        let logic = GameLogic::new(rules::BRANDUBH, 7);
+        let king = PlacedPiece { tile: Tile::new(3, 4), piece: KING };
+        
+        // King is beside the throne and gets "pinned" against the throne, resulting in a capture
+        let (after, record) = logic.do_play(
+            Play::from_tiles(Tile::new(3, 6), Tile::new(3, 5)).unwrap(),
+            SmallBasicGameState::new("7/7/4t2/4K1t/4t2/7/7", Attacker).unwrap()
+        ).unwrap();
+        assert!(record.outcome.captures.contains(&king));
+        assert_eq!(record.outcome.captures.len(), 1);
+        assert_eq!(record.outcome.game_outcome, Some(Win(KingCaptured, Attacker)));
+
+        // King is beside the throne and gets "flanked", resulting in a capture
+        let (after, record) = logic.do_play(
+            Play::from_tiles(Tile::new(1, 4), Tile::new(2, 4)).unwrap(),
+            SmallBasicGameState::new("7/4t2/7/4Kt1/4t2/7/7", Attacker).unwrap()
+        ).unwrap();
+        println!("{}", SmallBasicGameState::new("7/4t2/7/4Kt1/4t2/7/7", Attacker).unwrap().board);
+        println!("{}", Play::from_tiles(Tile::new(1, 4), Tile::new(2, 4)).unwrap());
+        println!("{}", after.board);
+        println!("{:?}", record.outcome.captures);
+        assert!(record.outcome.captures.contains(&king));
+        assert_eq!(record.outcome.captures.len(), 1);
+        assert_eq!(record.outcome.game_outcome, Some(Win(KingCaptured, Attacker)));
+
+        // King is beside the throne and gets pinned, but no capture because not fully flanked
+        let (after, record) = logic.do_play(
+            Play::from_tiles(Tile::new(3, 6), Tile::new(3, 5)).unwrap(),
+            SmallBasicGameState::new("7/7/7/4K1t/4t2/7/7", Attacker).unwrap()
+        ).unwrap();
+        assert!(record.outcome.captures.is_empty());
+        assert_eq!(record.outcome.game_outcome, None);
+
+        // King is beside the throne and gets flanked, but no capture because not pinned
+        let (after, record) = logic.do_play(
+            Play::from_tiles(Tile::new(1, 4), Tile::new(2, 4)).unwrap(),
+            SmallBasicGameState::new("7/4t2/7/4K2/4t2/7/7", Attacker).unwrap()
+        ).unwrap();
+        assert!(record.outcome.captures.is_empty());
+        assert_eq!(record.outcome.game_outcome, None);
+
     }
 
 }
