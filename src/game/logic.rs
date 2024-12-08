@@ -297,6 +297,7 @@ impl GameLogic {
         abort_on_corner: bool,
         board: &T,
     ) -> Option<Enclosure> {
+        println!("searching for enclosure");
         let Coords { row, col } = Coords::from(tile);
         let mut enclosure = Enclosure::default();
         if !self.row_col_enclosed(
@@ -805,7 +806,9 @@ impl GameLogic {
     /// Whether the given side could make any play given the current board.
     pub fn side_can_play<T: BoardState>(&self, side: Side, state: &GameState<T>) -> bool {
         for tile in state.board.iter_occupied(side) {
-            if self.iter_plays(tile, state).expect("Tile must not be empty.").next().is_some() {
+            if self.iter_plays(tile, state)
+                .expect("Tile must not be empty.")
+                .next().is_some() {
                 return true
             }
         }
@@ -913,10 +916,8 @@ mod tests {
             Invalid(BlockedByPiece)
         );
 
-        //println!("{}", fb_game.state.board);
         state.board.move_piece(Tile::new(3, 2), Tile::new(4, 2));
         state.board.move_piece(Tile::new(3, 3), Tile::new(3, 2));
-        //println!("{}", fb_game.state.board);
 
         assert_eq!(
             logic.check_play_validity(Play::from_tiles(
@@ -1379,7 +1380,7 @@ mod tests {
         // King is beside the throne and gets "pinned" against the throne, resulting in a capture
         let (after, record) = logic.do_play(
             Play::from_tiles(Tile::new(3, 6), Tile::new(3, 5)).unwrap(),
-            SmallBasicGameState::new("7/7/4t2/4K1t/4t2/7/7", Attacker).unwrap()
+            SmallBasicGameState::new("1T5/7/4t2/4K1t/4t2/7/7", Attacker).unwrap()
         ).unwrap();
         assert!(record.outcome.captures.contains(&king));
         assert_eq!(record.outcome.captures.len(), 1);
@@ -1388,9 +1389,9 @@ mod tests {
         // King is beside the throne and gets "flanked", resulting in a capture
         let (after, record) = logic.do_play(
             Play::from_tiles(Tile::new(1, 4), Tile::new(2, 4)).unwrap(),
-            SmallBasicGameState::new("7/4t2/7/4Kt1/4t2/7/7", Attacker).unwrap()
+            SmallBasicGameState::new("1T5/4t2/7/4Kt1/4t2/7/7", Attacker).unwrap()
         ).unwrap();
-        println!("{}", SmallBasicGameState::new("7/4t2/7/4Kt1/4t2/7/7", Attacker).unwrap().board);
+        println!("{}", SmallBasicGameState::new("1T5/4t2/7/4Kt1/4t2/7/7", Attacker).unwrap().board);
         println!("{}", Play::from_tiles(Tile::new(1, 4), Tile::new(2, 4)).unwrap());
         println!("{}", after.board);
         println!("{:?}", record.outcome.captures);
@@ -1401,7 +1402,7 @@ mod tests {
         // King is beside the throne and gets pinned, but no capture because not fully flanked
         let (after, record) = logic.do_play(
             Play::from_tiles(Tile::new(3, 6), Tile::new(3, 5)).unwrap(),
-            SmallBasicGameState::new("7/7/7/4K1t/4t2/7/7", Attacker).unwrap()
+            SmallBasicGameState::new("1T5/7/7/4K1t/4t2/7/7", Attacker).unwrap()
         ).unwrap();
         assert!(record.outcome.captures.is_empty());
         assert_eq!(record.outcome.game_outcome, None);
@@ -1409,7 +1410,7 @@ mod tests {
         // King is beside the throne and gets flanked, but no capture because not pinned
         let (after, record) = logic.do_play(
             Play::from_tiles(Tile::new(1, 4), Tile::new(2, 4)).unwrap(),
-            SmallBasicGameState::new("7/4t2/7/4K2/4t2/7/7", Attacker).unwrap()
+            SmallBasicGameState::new("1T5/4t2/7/4K2/4t2/7/7", Attacker).unwrap()
         ).unwrap();
         assert!(record.outcome.captures.is_empty());
         assert_eq!(record.outcome.game_outcome, None);

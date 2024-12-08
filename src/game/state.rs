@@ -133,7 +133,7 @@ pub struct GameState<T: BoardState> {
 }
 
 impl <T: BoardState> GameState<T> {
-    pub(crate) fn new(fen_str: &str, side_to_play: Side) -> Result<Self, ParseError> {
+    pub fn new(fen_str: &str, side_to_play: Side) -> Result<Self, ParseError> {
         Ok(Self {
             board: T::from_fen(fen_str)?,
             side_to_play,

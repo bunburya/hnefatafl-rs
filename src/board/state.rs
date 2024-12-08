@@ -192,10 +192,10 @@ impl<T: BitField> BoardState for BitfieldBoardState<T> {
     }
 
     fn count_pieces(&self, side: Side) -> u8 {
-        match side {
+        (match side {
             Side::Attacker => self.attackers,
             Side::Defender => self.defenders
-        }.count_ones() as u8
+        } << 4).count_ones() as u8
     }
 
     fn iter_occupied(&self, side: Side) -> Self::Iter {
@@ -342,10 +342,11 @@ pub type HugeBasicBoardState = BitfieldBoardState<U512>;
 mod tests {
     use std::collections::HashSet;
     use std::str::FromStr;
-    use crate::board::state::{BoardState, SmallBasicBoardState};
+    use crate::board::state::{BoardState, MediumBasicBoardState, SmallBasicBoardState};
     use crate::pieces::Piece;
     use crate::pieces::PieceType::{King, Soldier};
     use crate::pieces::Side::{Attacker, Defender};
+    use crate::preset::boards;
     use crate::tiles::Tile;
 
     fn test_from_str() {
@@ -436,5 +437,12 @@ mod tests {
         assert_eq!(board.get_piece(Tile::new(1, 1)), Some(Piece::new(Soldier, Attacker)));
         assert_eq!(board.get_king(), Tile::new(4, 3));
 
+    }
+    
+    #[test]
+    fn test_count_pieces() {
+        let board = MediumBasicBoardState::from_str(boards::COPENHAGEN).unwrap();
+        assert_eq!(board.count_pieces(Attacker), 24);
+        assert_eq!(board.count_pieces(Defender), 13);
     }
 }
