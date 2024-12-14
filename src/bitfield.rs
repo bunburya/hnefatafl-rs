@@ -90,7 +90,7 @@ pub trait BitField:
 
 /// Implement the [`BitField`] trait for the given integer type. First argument should be the type
 /// to implement the trait for; the second should be the byte value to use for
-/// [`BitField::ROW_WIDTH`]. This macro is for use with the standard library integer types .
+/// [`BitField::ROW_WIDTH`]. This macro is for use with the standard library integer types.
 #[macro_export] macro_rules! impl_bitfield {
     ($t:ty, $row_width:expr) => {
 

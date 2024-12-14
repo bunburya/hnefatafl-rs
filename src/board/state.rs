@@ -1,5 +1,5 @@
 use primitive_types::{U256, U512};
-use std::fmt::{Display, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 use std::str::FromStr;
 use crate::bitfield::BitField;
 use crate::error::ParseError;
@@ -9,7 +9,7 @@ use crate::pieces::PieceType::{King, Soldier};
 use crate::tiles::Tile;
 
 /// Store information on the current board state (ie, pieces).
-pub trait BoardState: Default + Clone + Copy + Display + FromStr {
+pub trait BoardState: Default + Clone + Copy + Display + FromStr + Debug {
     
     type Iter: Iterator<Item=Tile>;
 

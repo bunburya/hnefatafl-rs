@@ -297,7 +297,6 @@ impl GameLogic {
         abort_on_corner: bool,
         board: &T,
     ) -> Option<Enclosure> {
-        println!("searching for enclosure");
         let Coords { row, col } = Coords::from(tile);
         let mut enclosure = Enclosure::default();
         if !self.row_col_enclosed(
@@ -1391,10 +1390,6 @@ mod tests {
             Play::from_tiles(Tile::new(1, 4), Tile::new(2, 4)).unwrap(),
             SmallBasicGameState::new("1T5/4t2/7/4Kt1/4t2/7/7", Attacker).unwrap()
         ).unwrap();
-        println!("{}", SmallBasicGameState::new("1T5/4t2/7/4Kt1/4t2/7/7", Attacker).unwrap().board);
-        println!("{}", Play::from_tiles(Tile::new(1, 4), Tile::new(2, 4)).unwrap());
-        println!("{}", after.board);
-        println!("{:?}", record.outcome.captures);
         assert!(record.outcome.captures.contains(&king));
         assert_eq!(record.outcome.captures.len(), 1);
         assert_eq!(record.outcome.game_outcome, Some(Win(KingCaptured, Attacker)));
