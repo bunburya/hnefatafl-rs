@@ -1,13 +1,13 @@
 use crate::error::{BoardError, InvalidPlay};
 use crate::game::PlayValidity::{Invalid, Valid};
-use crate::game::WinReason::{AllCaptured, Enclosed, ExitFort, KingCaptured, KingEscaped, NoMoves};
+use crate::game::WinReason::{AllCaptured, Enclosed, ExitFort, KingCaptured, KingEscaped};
 use crate::game::{DrawReason, GameOutcome, PlayValidity, PlayOutcome, WinReason};
 use crate::rules::EnclosureWinRules::WithoutEdgeAccess;
 use crate::rules::KingAttack::{Anvil, Armed, Hammer};
 use crate::rules::{KingStrength, RepetitionRule, Ruleset, ShieldwallRules};
 use crate::tiles::{Axis, AxisOffset, Coords, RowColOffset, Tile};
 use crate::utils::UniqueStack;
-use crate::pieces::{Piece, PieceSet, PlacedPiece, Side};
+use crate::pieces::{Piece, PieceSet, PlacedPiece, Side, KING};
 use crate::pieces::PieceType::{King, Soldier};
 use crate::play::{Play, PlayRecord, PlayIterator};
 use crate::error::InvalidPlay::{BlockedByPiece, GameOver, MoveOntoBlockedTile, MoveThroughBlockedTile, NoCommonAxis, NoPiece, OutOfBounds, TooFar, WrongPlayer};
@@ -655,10 +655,22 @@ impl GameLogic {
                             }
                         }
                         captures.insert(PlacedPiece { tile: n, piece: other_piece });
+                    } else if self.rules.linnaean_capture && state.side_to_play == Attacker {
+                        // Handle Linnaean captures
+                        if let Ok(far_tile) = self.board_geo.coords_to_tile(far_coords) {
+                            if far_tile == self.board_geo.special_tiles.throne
+                                && state.board.is_king(far_tile) {
+                                if self.board_geo.neighbors(far_tile).iter()
+                                    .filter(|t| 
+                                        self.tile_hostile(**t, KING, &state.board)
+                                    ).count() == 3 {
+                                    captures.insert(PlacedPiece { tile: n, piece: other_piece});
+                                }
+                            }
+                        }
                     }
                 }
             }
-
         }
 
         // Detect shieldwall captures
@@ -733,7 +745,12 @@ impl GameLogic {
 
         if !self.side_can_play(state.side_to_play.other(), state) {
             // Other side has no playable moves.
-            return Some(Win(NoMoves, state.side_to_play))
+            if self.rules.draw_on_no_plays {
+                return Some(Draw(DrawReason::NoPlays))
+            } else {
+                return Some(Win(WinReason::NoPlays, state.side_to_play))
+            }
+
         }
 
         None
@@ -844,7 +861,7 @@ mod tests {
     use crate::game::GameOutcome::Win;
     use crate::game::GameStatus::{Ongoing, Over};
     use crate::game::logic::GameLogic;
-    use crate::game::state::{GameState, SmallBasicGameState};
+    use crate::game::state::{GameState, MediumBasicGameState, SmallBasicGameState};
     use crate::tiles::Tile;
 
     const TEST_RULES: Ruleset = Ruleset {
@@ -1410,6 +1427,23 @@ mod tests {
         assert!(record.outcome.captures.is_empty());
         assert_eq!(record.outcome.game_outcome, None);
 
+    }
+    
+    #[test]
+    fn test_linnaean_capture() {
+        let logic = GameLogic::new(rules::TABLUT, 9);
+        let state = MediumBasicGameState::new(
+            "tT7/9/9/4t4/t2TKt3/4t4/9/9/9",
+            Attacker
+        ).unwrap();
+        let (s, r) = logic.do_play(Play::from_tiles(
+            Tile::new(4, 0),
+            Tile::new(4, 2)
+        ).expect("Invalid play."), state).expect("Invalid play");
+        assert_eq!(r.outcome.captures, hashset!(PlacedPiece { 
+            tile: Tile::new(4, 3),
+            piece: Piece { piece_type: Soldier, side: Defender } 
+        }));
     }
 
 }

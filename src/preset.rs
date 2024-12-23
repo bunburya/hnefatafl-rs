@@ -6,7 +6,7 @@ pub mod rules {
     use crate::rules::{HostilityRules, RepetitionRule, Ruleset, ShieldwallRules};
     use crate::rules::EnclosureWinRules::WithoutEdgeAccess;
     use crate::rules::KingStrength::{Strong, StrongByThrone};
-    use crate::rules::ThroneRule::KingEntry;
+    use crate::rules::ThroneRule::{KingEntry, NoEntry};
 
     /// Rules for Copenhagen Hnefatafl.
     pub const COPENHAGEN: Ruleset = Ruleset {
@@ -28,7 +28,9 @@ pub mod rules {
         slow_pieces: PieceSet::none(),
         starting_side: Attacker,
         enclosure_win: Some(WithoutEdgeAccess),
-        repetition_rule: Some(RepetitionRule { n_repetitions: 3, is_loss: true })
+        repetition_rule: Some(RepetitionRule { n_repetitions: 3, is_loss: true }),
+        draw_on_no_plays: false,
+        linnaean_capture: false,
     };
 
     /// Rules for Federation Brandubh.
@@ -48,7 +50,9 @@ pub mod rules {
         slow_pieces: PieceSet::none(),
         starting_side: Attacker,
         enclosure_win: Some(WithoutEdgeAccess),
-        repetition_rule: Some(RepetitionRule { n_repetitions: 3, is_loss: true })
+        repetition_rule: Some(RepetitionRule { n_repetitions: 3, is_loss: true }),
+        draw_on_no_plays: false,
+        linnaean_capture: false
     };
 
     pub const MAGPIE: Ruleset = Ruleset {
@@ -67,7 +71,30 @@ pub mod rules {
         slow_pieces: PieceSet::from_piece_type(King),
         starting_side: Attacker,
         enclosure_win: None,
-        repetition_rule: None
+        repetition_rule: None,
+        draw_on_no_plays: false,
+        linnaean_capture: false
+    };
+
+    pub const TABLUT: Ruleset = Ruleset {
+        edge_escape: false,
+        king_strength: StrongByThrone,
+        king_attack: Armed,
+        shieldwall: None,
+        exit_fort: false,
+        throne_movement: NoEntry,
+        may_enter_corners: PieceSet::all(),
+        hostility: HostilityRules {
+            throne: PieceSet::all(),
+            corners: PieceSet::none(),
+            edge: PieceSet::none()
+        },
+        slow_pieces: PieceSet::none(),
+        starting_side: Attacker,
+        enclosure_win: None,
+        repetition_rule: Some(RepetitionRule { n_repetitions: 3, is_loss: false }),
+        draw_on_no_plays: true,
+        linnaean_capture: true
     };
 }
 
@@ -78,4 +105,6 @@ pub mod boards {
     pub const BRANDUBH: &str = "3t3/3t3/3T3/ttTKTtt/3T3/3t3/3t3";
 
     pub const MAGPIE: &str = "3t3/1t3t1/3T3/t1TKT1t/3T3/1t3t1/3t3";
+    
+    pub const TABLUT: &str = "3ttt3/4t4/4T4/t3T3t/ttTTKTTtt/t3T3t/4T4/4t4/3ttt3";
 }

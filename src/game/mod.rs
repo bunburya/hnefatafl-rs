@@ -26,8 +26,8 @@ pub enum WinReason {
     /// The other side is completely enclosed (with or without edge or corner access, depending on
     /// the rules).
     Enclosed,
-    /// The other side has no legal moves available.
-    NoMoves,
+    /// The other side has no legal plays available.
+    NoPlays,
     /// The other side has repeated a move too many times.
     Repetition
 }
@@ -36,7 +36,9 @@ pub enum WinReason {
 #[derive(Eq, PartialEq, Debug, Copy, Clone, Hash)]
 pub enum DrawReason {
     /// A move has been repeated too many times.
-    Repetition
+    Repetition,
+    /// Player has no legal plays available.
+    NoPlays
 }
 
 /// The outcome of a single game.

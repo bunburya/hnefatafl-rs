@@ -2,11 +2,10 @@
 
 - [X] Implement `Coords` as unbounded row-col pair and use where appropriate.
 - [X] Testing for exit fort detection.
-- [ ] Remove references to non-standard units for now.
 - [X] Iterate occupied squares.
 - [X] Iterate possible moves for a piece.
 - [X] Advanced win conditions (enclosures, repetition rule)
-- [ ] Ensure everything is documented, including overview of project, what is/is not supported and assumptions.
+- [X] Ensure everything is documented, including overview of project, what is/is not supported and assumptions.
 - [X] Clean up `lib.rs` to expose clean public interface.
 - [X] Larger boards.
 - [ ] Review against https://rust-lang.github.io/api-guidelines/.

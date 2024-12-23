@@ -106,6 +106,13 @@ pub struct Ruleset {
     /// Whether attacker can win by enclosing all defending pieces.
     pub enclosure_win: Option<EnclosureWinRules>,
     /// Whether repeated moves result in a loss or draw.
-    pub repetition_rule: Option<RepetitionRule>
+    pub repetition_rule: Option<RepetitionRule>,
+    /// Whether the game is drawn when one player has no legal plays available to it. If `false`,
+    /// the player with no available plays loses.
+    pub draw_on_no_plays: bool,
+    /// Whether the game supports "Linnaean capture" (if the king is on the throne, surrounded by
+    /// three enemies and one friendly soldier, that friendly soldier may be captured against the
+    /// occupied throne).
+    pub linnaean_capture: bool,
 }
 
