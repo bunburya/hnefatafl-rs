@@ -1,6 +1,6 @@
 [package]
 name = "hnefatafl"
-version = "0.0.1-beta"
+version = "0.0.1"
 edition = "2021"
 license = "MIT"
 description = "A crate for building software for the tafl family of board games"
