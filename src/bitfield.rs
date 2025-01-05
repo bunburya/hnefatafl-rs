@@ -3,7 +3,10 @@ use primitive_types::{U256, U512};
 use std::fmt::Debug;
 use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not, Shl, Shr};
 
-trait ZeroArray {
+/// A very simple trait for numeric array types, giving them a `zero` method that returns an array
+/// of zeroes. Used for the `Bytes` associated type of the [`BitField`] trait, as not all byte
+/// arrays implement [`Default`].
+pub trait ZeroArray {
     fn zero() -> Self;
 }
 

@@ -2,21 +2,9 @@ use std::hash::Hash;
 #[cfg(test)]
 use crate::tiles::Tile;
 
-/// Creates a [`std::collections::HashSet`] containing the arguments, similar to [`vec!`].
-macro_rules! hashset {
-    ($( $x: expr ),* ) => {
-        {
-            let mut tmp = std::collections::HashSet::new();
-            $(
-                tmp.insert($x);
-            )*
-            tmp
-        }
-    };
-}
-
 /// A stack that each value can only be pushed to once. Once a value has been pushed to the stack,
-/// it cannot be pushed to the stack again, even if it has been popped.
+/// it cannot be pushed to the stack again, even if it has been popped (pushing again silently
+/// fails).
 #[derive(Default)]
 pub(crate) struct UniqueStack<T: Hash + Eq + Copy> {
     stack: Vec<T>,
@@ -36,8 +24,8 @@ impl<T: Hash + Eq + Copy> UniqueStack<T> {
     }
 }
 
-/// A double-ended queue of a fixed size. Pushing a new value to the end of the queue drops the
-/// first item in the queue.
+/// A queue of a fixed size. Pushing a new value to the end of the queue drops the first item in the
+/// queue.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct FixedSizeQueue<T, const N: usize> {
     queue: [T; N],
@@ -46,18 +34,26 @@ pub(crate) struct FixedSizeQueue<T, const N: usize> {
 
 impl<T, const N: usize> FixedSizeQueue<T, N> {
 
+    #[cfg(test)]
     pub(crate) fn new(queue: [T; N]) -> Self {
         Self {
             queue,
             first_i: 0
         }
     }
+
+    #[cfg(test)]
     fn last_i(&self) -> usize {
         if self.first_i == 0 {
             N - 1
         } else {
             self.first_i - 1
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn last(&self) -> &T {
+        &self.queue[self.last_i()]
     }
 
     pub(crate) fn push(&mut self, value: T) {
@@ -73,9 +69,6 @@ impl<T, const N: usize> FixedSizeQueue<T, N> {
         &self.queue[self.first_i]
     }
 
-    pub(crate) fn last(&self) -> &T {
-        &self.queue[self.last_i()]
-    }
 }
 
 impl<T: Default + Copy, const N: usize> Default for FixedSizeQueue<T, N> {
@@ -85,6 +78,20 @@ impl<T: Default + Copy, const N: usize> Default for FixedSizeQueue<T, N> {
             first_i: 0
         }
     }
+}
+
+#[cfg(test)]
+/// Creates a [`std::collections::HashSet`] containing the arguments, similar to [`vec!`].
+macro_rules! hashset {
+    ($( $x: expr ),* ) => {
+        {
+            let mut tmp = std::collections::HashSet::new();
+            $(
+                tmp.insert($x);
+            )*
+            tmp
+        }
+    };
 }
 
 #[cfg(test)]

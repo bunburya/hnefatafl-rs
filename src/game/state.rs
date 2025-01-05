@@ -23,7 +23,7 @@ impl From<&PlayRecord> for ShortPlayRecord {
         Self {
             side: play_record.side,
             play: play_record.play,
-            captures: !play_record.outcome.captures.is_empty()
+            captures: !play_record.effects.captures.is_empty()
         }
     }
 }

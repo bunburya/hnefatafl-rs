@@ -50,10 +50,10 @@ pub enum GameOutcome {
     Draw(DrawReason)
 }
 
-/// The outcome of a single play, including captures and the game outcome caused by the play, if
+/// The effects of a single play, including captures and the game outcome caused by the play, if
 /// any.
 #[derive(Eq, PartialEq, Debug, Default, Clone)]
-pub struct PlayOutcome {
+pub struct PlayEffects {
     /// Tiles containing pieces that have been captured by the move.
     pub captures: HashSet<PlacedPiece>,
     /// The outcome of the game, if the move has brought the game to an end.
@@ -102,7 +102,7 @@ impl<T: BoardState> Game<T> {
     /// Actually "do" a play, checking validity, getting outcome, applying outcome to board state,
     /// switching side to play and returning a description of the game status following the move.
     pub fn do_play(&mut self, play: Play) -> Result<GameStatus, InvalidPlay> {
-        let (state, play_record) = self.logic.do_play(play, self.state)?;
+        let (state, play_record) = self.logic.do_play(play, self.state)?.into();
         self.state_history.push(self.state);
         self.state = state;
         self.play_history.push(play_record);
@@ -219,13 +219,13 @@ mod tests {
     fn test_undo() {
         let mut g: Game<SmallBasicBoardState> = Game::new(rules::BRANDUBH, boards::BRANDUBH).unwrap();
         let state_0 = g.state.clone();
-        g.do_play(Play::from_tiles(Tile::new(0, 3), Tile::new(0, 2)).unwrap());
+        g.do_play(Play::from_tiles(Tile::new(0, 3), Tile::new(0, 2)).unwrap()).unwrap();
         let state_1 = g.state.clone();
         assert_ne!(state_0, state_1);
-        g.do_play(Play::from_tiles(Tile::new(2, 3), Tile::new(2, 1)).unwrap());
+        g.do_play(Play::from_tiles(Tile::new(2, 3), Tile::new(2, 1)).unwrap()).unwrap();
         let state_2 = g.state.clone();
         assert_ne!(state_0, state_2);
-        g.do_play(Play::from_tiles(Tile::new(1, 3), Tile::new(1, 1)).unwrap());
+        g.do_play(Play::from_tiles(Tile::new(1, 3), Tile::new(1, 1)).unwrap()).unwrap();
         let state_3 = g.state.clone();
         assert_ne!(state_0, state_3);
         g.undo_last_play();

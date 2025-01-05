@@ -6,7 +6,7 @@ use crate::error::{BoardError, ParseError, PlayError};
 use crate::error::ParseError::{BadPlay, BadString};
 use crate::error::PlayError::DisjointTiles;
 use crate::game::logic::GameLogic;
-use crate::game::PlayOutcome;
+use crate::game::PlayEffects;
 use crate::game::state::GameState;
 use crate::pieces::{Piece, Side};
 use crate::tiles::Axis::{Horizontal, Vertical};
@@ -98,8 +98,8 @@ pub struct PlayRecord {
     pub side: Side,
     /// Details of the play (piece movement) itself.
     pub play: Play,
-    /// Details of the outcome of the play.
-    pub outcome: PlayOutcome
+    /// Details of the effects of the play.
+    pub effects: PlayEffects
 }
 
 impl PlayRecord {
@@ -113,9 +113,9 @@ impl PlayRecord {
 impl Display for PlayRecord {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.play)?;
-        if !self.outcome.captures.is_empty() {
+        if !self.effects.captures.is_empty() {
             write!(f, "x{}",
-                self.outcome.captures.iter().map(|p|
+                self.effects.captures.iter().map(|p|
                     p.tile.to_string()).collect::<Vec<_>>().join("/"))?;
         }
         Ok(())
@@ -208,11 +208,4 @@ impl<'logic, 'state, T: BoardState> Iterator for PlayIterator<'logic, 'state, T>
             }
         }
     }
-}
-
-/// A record of all past plays in a game.
-#[derive(Debug, Default)]
-pub struct PlayHistory {
-    attacker_moves: Vec<PlayRecord>,
-    defender_moves: Vec<PlayRecord>
 }

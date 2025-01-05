@@ -55,6 +55,7 @@ pub mod rules {
         linnaean_capture: false
     };
 
+    /// Rules for Magpie.
     pub const MAGPIE: Ruleset = Ruleset {
         edge_escape: false,
         king_strength: Strong,
@@ -76,8 +77,9 @@ pub mod rules {
         linnaean_capture: false
     };
 
+    /// Rules for Linnaeus Tablut.
     pub const TABLUT: Ruleset = Ruleset {
-        edge_escape: false,
+        edge_escape: true,
         king_strength: StrongByThrone,
         king_attack: Armed,
         shieldwall: None,

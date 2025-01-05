@@ -20,6 +20,11 @@ impl AxisOffset {
     pub fn new(axis: Axis, displacement: i8) -> Self {
         Self { axis, displacement }
     }
+
+    /// Return the Manhattan distance represented by this offset.
+    pub fn manhattan_dist(&self) -> u8 {
+        self.displacement.unsigned_abs()
+    }
 }
 
 /// An offset which can be applied to [`Coords`] and which is composed of the row and column offset
@@ -31,8 +36,13 @@ pub struct RowColOffset{
 }
 
 impl RowColOffset {
-    pub(crate) fn new(row: i8, col: i8) -> Self {
+    pub fn new(row: i8, col: i8) -> Self {
         Self { row, col }
+    }
+
+    /// Return the Manhattan distance represented by this offset.
+    pub fn manhattan_dist(&self) -> u8 {
+        self.row.unsigned_abs() + self.col.unsigned_abs()
     }
 }
 
@@ -48,6 +58,13 @@ pub struct Coords {
 impl Coords {
     pub fn new(row: i8, col: i8) -> Self {
         Self { row, col }
+    }
+
+    pub fn row_col_offset_from(&self, other: Coords) -> RowColOffset {
+        RowColOffset {
+            row: self.row - other.row,
+            col: self.col - other.col
+        }
     }
 }
 
@@ -84,6 +101,9 @@ impl Add<AxisOffset> for Coords {
 /// The location of a single tile on the board, ie, row and column. This struct is only a reference
 /// to a location on the board, and does not contain any other information such as piece placement,
 /// etc.
+///
+/// Avoid constructing `Tile`s which may refer to positions not on the game board (use [`Coords`]
+/// for that instead).
 #[derive(Copy, Clone, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub struct Tile {
     pub row: u8,

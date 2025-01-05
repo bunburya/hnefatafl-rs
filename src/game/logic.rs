@@ -1,7 +1,7 @@
 use crate::error::{BoardError, InvalidPlay};
 use crate::game::PlayValidity::{Invalid, Valid};
 use crate::game::WinReason::{AllCaptured, Enclosed, ExitFort, KingCaptured, KingEscaped};
-use crate::game::{DrawReason, GameOutcome, PlayValidity, PlayOutcome, WinReason};
+use crate::game::{DrawReason, GameOutcome, PlayValidity, PlayEffects, WinReason};
 use crate::rules::EnclosureWinRules::WithoutEdgeAccess;
 use crate::rules::KingAttack::{Anvil, Armed, Hammer};
 use crate::rules::{KingStrength, RepetitionRule, Ruleset, ShieldwallRules};
@@ -35,6 +35,20 @@ pub struct Enclosure {
 impl Enclosure {
     pub fn contains(&self, tile: &Tile) -> bool {
         self.occupied.contains(tile) || self.unoccupied.contains(tile)
+    }
+}
+
+/// The result of making a play.
+pub struct DoPlayResult<T: BoardState> {
+    /// The game state following the play.
+    pub new_state: GameState<T>,
+    /// A record of the play and its effect.
+    pub record: PlayRecord
+}
+
+impl<T: BoardState> From<DoPlayResult<T>> for (GameState<T>, PlayRecord) {
+    fn from(result: DoPlayResult<T>) -> (GameState<T>, PlayRecord) {
+        (result.new_state, result.record)
     }
 }
 
@@ -656,17 +670,13 @@ impl GameLogic {
                         }
                         captures.insert(PlacedPiece { tile: n, piece: other_piece });
                     } else if self.rules.linnaean_capture && state.side_to_play == Attacker {
-                        // Handle Linnaean captures
-                        if let Ok(far_tile) = self.board_geo.coords_to_tile(far_coords) {
-                            if far_tile == self.board_geo.special_tiles.throne
-                                && state.board.is_king(far_tile) {
-                                if self.board_geo.neighbors(far_tile).iter()
-                                    .filter(|t| 
-                                        self.tile_hostile(**t, KING, &state.board)
-                                    ).count() == 3 {
-                                    captures.insert(PlacedPiece { tile: n, piece: other_piece});
-                                }
-                            }
+                        if let Some(pp) = self.detect_linnaean_capture(
+                            n,
+                            other_piece,
+                            far_coords,
+                            state
+                        ) {
+                            captures.insert(pp);
                         }
                     }
                 }
@@ -769,7 +779,7 @@ impl GameLogic {
         &self,
         play: Play,
         mut state: GameState<T>
-    ) -> (GameState<T>, PlayRecord) {
+    ) -> DoPlayResult<T> {
         // First move the piece on the board
         let moving_piece = state.board.move_piece(play.from, play.to());
         // Then remove captured pieces
@@ -791,15 +801,16 @@ impl GameLogic {
             None => Ongoing
         };
 
-        let outcome = PlayOutcome { captures, game_outcome };
+        let outcome = PlayEffects { captures, game_outcome };
         let record = PlayRecord {
-            side: state.side_to_play, play, outcome
+            side: state.side_to_play, play,
+            effects: outcome
         };
 
         state.side_to_play = state.side_to_play.other();
         state.status = game_status;
 
-        (state, record)
+        DoPlayResult { new_state: state, record }
 
     }
 
@@ -812,11 +823,12 @@ impl GameLogic {
         &self,
         play: Play,
         state: GameState<T>
-    ) -> Result<(GameState<T>, PlayRecord), InvalidPlay> {
+    ) -> Result<DoPlayResult<T>, InvalidPlay> {
         if let Invalid(v) = self.check_play_validity(play, &state) {
-            return Err(v)
-        };
-        Ok(self.do_valid_play(play, state))
+            Err(v)
+        } else {
+            Ok(self.do_valid_play(play, state))
+        }
     }
     
     /// Whether the given side could make any play given the current board.
@@ -839,6 +851,29 @@ impl GameLogic {
         state: &'state GameState<T>
     ) -> Result<PlayIterator<'logic, 'state, T>, BoardError> {
         PlayIterator::new(self, state, tile)
+    }
+    
+    /// Detect whether a "Linnaean capture" has occurred.
+    fn detect_linnaean_capture<T: BoardState>(
+        &self,
+        tile: Tile,
+        other_piece: Piece,
+        far_coords: Coords,
+        state: &GameState<T>
+    ) -> Option<PlacedPiece> {
+        if let Ok(far_tile) = self.board_geo.coords_to_tile(far_coords) {
+            if far_tile == self.board_geo.special_tiles.throne
+                && state.board.is_king(far_tile) {
+                if self.board_geo.neighbors(far_tile).iter()
+                    .filter(|t|
+                        self.tile_hostile(**t, KING, &state.board)
+                    ).count() == 3 {
+                    return Some(PlacedPiece { tile, piece: other_piece})
+                }
+            }
+        }
+        None
+
     }
 }
 
@@ -921,7 +956,7 @@ mod tests {
                 Tile::new(4, 1)
             ).unwrap(),
             state
-        ).unwrap().0;
+        ).unwrap().new_state;
 
         let play = Play::from_tiles(
             Tile::new(3, 3),
@@ -992,11 +1027,6 @@ mod tests {
 
     fn generic_test_play_outcome<T: BoardState>() {
 
-        let test_game: Game<T> = Game::new(
-            TEST_RULES,
-            "4t2/5Tt/2T4/2t2t1/Tt4T/2t4/2T2K1"
-        ).unwrap();
-
         // First, move the piece on the board directly and check that it picks up the correct
         // captures. Then, reverse the move, and call `do_move` to check that the correct game
         // outcome is detected.
@@ -1013,7 +1043,7 @@ mod tests {
             [PlacedPiece::new(Tile::new(6, 5), Piece::new(King, Defender))].into()
         );
         state.board.move_piece(play.to(), play.from);
-        assert_eq!(logic.do_play(play, state).unwrap().0.status, Over(Win(KingCaptured, Attacker)));
+        assert_eq!(logic.do_play(play, state).unwrap().new_state.status, Over(Win(KingCaptured, Attacker)));
 
         let (logic, mut state) = proto.clone();
         state.side_to_play = Defender;
@@ -1028,7 +1058,7 @@ mod tests {
             ].into()
         );
         state.board.move_piece(play.to(), play.from);
-        assert_eq!(logic.do_play(play, state).unwrap().0.status, Ongoing);
+        assert_eq!(logic.do_play(play, state).unwrap().new_state.status, Ongoing);
 
         let (logic, mut state) = proto.clone();
         state.side_to_play = Defender;
@@ -1039,7 +1069,7 @@ mod tests {
             [].into(),
         );
         state.board.move_piece(play.to(), play.from);
-        assert_eq!(logic.do_play(play, state).unwrap().0.status, Over(Win(KingEscaped, Defender)));
+        assert_eq!(logic.do_play(play, state).unwrap().new_state.status, Over(Win(KingEscaped, Defender)));
 
         let (logic, mut state) = proto.clone();
         state.side_to_play = Defender;
@@ -1050,7 +1080,7 @@ mod tests {
             [].into()
         );
         state.board.move_piece(play.to(), play.from);
-        assert_eq!(logic.do_play(play, state).unwrap().0.status, Ongoing);
+        assert_eq!(logic.do_play(play, state).unwrap().new_state.status, Ongoing);
     }
 
     #[test]
@@ -1125,11 +1155,18 @@ mod tests {
             Tile::new(4, 8),
             Tile::new(6, 8)
         )));
+        
+        let king_cap_logic = GameLogic::new(king_capture_rules, 9);
+        assert_eq!(king_cap_logic.detect_shieldwall(m, &king_state), Some(hashset!(
+            Tile::new(4, 8),
+            Tile::new(5, 8),
+            Tile::new(6, 8)
+        )));
 
         let gap_state: GameState<MediumBasicBoardState> = GameState::new(no_sw_gap, Attacker).unwrap();
         assert_eq!(regular_logic.detect_shieldwall(m, &gap_state), None);
 
-        let friend_state: GameState<MediumBasicBoardState> = GameState::new(no_sw_gap, Attacker).unwrap();
+        let friend_state: GameState<MediumBasicBoardState> = GameState::new(no_sw_friend, Attacker).unwrap();
         assert_eq!(regular_logic.detect_shieldwall(m, &friend_state), None);
 
         let small_state: GameState<MediumBasicBoardState> = GameState::new(no_sw_small, Attacker).unwrap();
@@ -1394,38 +1431,38 @@ mod tests {
         let king = PlacedPiece { tile: Tile::new(3, 4), piece: KING };
         
         // King is beside the throne and gets "pinned" against the throne, resulting in a capture
-        let (after, record) = logic.do_play(
+        let (_, record) = logic.do_play(
             Play::from_tiles(Tile::new(3, 6), Tile::new(3, 5)).unwrap(),
             SmallBasicGameState::new("1T5/7/4t2/4K1t/4t2/7/7", Attacker).unwrap()
-        ).unwrap();
-        assert!(record.outcome.captures.contains(&king));
-        assert_eq!(record.outcome.captures.len(), 1);
-        assert_eq!(record.outcome.game_outcome, Some(Win(KingCaptured, Attacker)));
+        ).unwrap().into();
+        assert!(record.effects.captures.contains(&king));
+        assert_eq!(record.effects.captures.len(), 1);
+        assert_eq!(record.effects.game_outcome, Some(Win(KingCaptured, Attacker)));
 
         // King is beside the throne and gets "flanked", resulting in a capture
-        let (after, record) = logic.do_play(
+        let (_, record) = logic.do_play(
             Play::from_tiles(Tile::new(1, 4), Tile::new(2, 4)).unwrap(),
             SmallBasicGameState::new("1T5/4t2/7/4Kt1/4t2/7/7", Attacker).unwrap()
-        ).unwrap();
-        assert!(record.outcome.captures.contains(&king));
-        assert_eq!(record.outcome.captures.len(), 1);
-        assert_eq!(record.outcome.game_outcome, Some(Win(KingCaptured, Attacker)));
+        ).unwrap().into();
+        assert!(record.effects.captures.contains(&king));
+        assert_eq!(record.effects.captures.len(), 1);
+        assert_eq!(record.effects.game_outcome, Some(Win(KingCaptured, Attacker)));
 
         // King is beside the throne and gets pinned, but no capture because not fully flanked
-        let (after, record) = logic.do_play(
+        let (_, record) = logic.do_play(
             Play::from_tiles(Tile::new(3, 6), Tile::new(3, 5)).unwrap(),
             SmallBasicGameState::new("1T5/7/7/4K1t/4t2/7/7", Attacker).unwrap()
-        ).unwrap();
-        assert!(record.outcome.captures.is_empty());
-        assert_eq!(record.outcome.game_outcome, None);
+        ).unwrap().into();
+        assert!(record.effects.captures.is_empty());
+        assert_eq!(record.effects.game_outcome, None);
 
         // King is beside the throne and gets flanked, but no capture because not pinned
-        let (after, record) = logic.do_play(
+        let (_, record) = logic.do_play(
             Play::from_tiles(Tile::new(1, 4), Tile::new(2, 4)).unwrap(),
             SmallBasicGameState::new("1T5/4t2/7/4K2/4t2/7/7", Attacker).unwrap()
-        ).unwrap();
-        assert!(record.outcome.captures.is_empty());
-        assert_eq!(record.outcome.game_outcome, None);
+        ).unwrap().into();
+        assert!(record.effects.captures.is_empty());
+        assert_eq!(record.effects.game_outcome, None);
 
     }
     
@@ -1436,11 +1473,14 @@ mod tests {
             "tT7/9/9/4t4/t2TKt3/4t4/9/9/9",
             Attacker
         ).unwrap();
-        let (s, r) = logic.do_play(Play::from_tiles(
-            Tile::new(4, 0),
-            Tile::new(4, 2)
-        ).expect("Invalid play."), state).expect("Invalid play");
-        assert_eq!(r.outcome.captures, hashset!(PlacedPiece { 
+        let (_, r) = logic.do_play(
+            Play::from_tiles(
+                Tile::new(4, 0),
+                Tile::new(4, 2)
+            ).expect("Invalid play."),
+            state
+        ).expect("Invalid play").into();
+        assert_eq!(r.effects.captures, hashset!(PlacedPiece {
             tile: Tile::new(4, 3),
             piece: Piece { piece_type: Soldier, side: Defender } 
         }));
