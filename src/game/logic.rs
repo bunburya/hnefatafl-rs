@@ -1,25 +1,24 @@
-use crate::error::{BoardError, InvalidPlay};
-use crate::game::PlayValidity::{Invalid, Valid};
-use crate::game::WinReason::{AllCaptured, Enclosed, ExitFort, KingCaptured, KingEscaped};
-use crate::game::{DrawReason, GameOutcome, PlayValidity, PlayEffects, WinReason};
-use crate::rules::EnclosureWinRules::WithoutEdgeAccess;
-use crate::rules::KingAttack::{Anvil, Armed, Hammer};
-use crate::rules::{KingStrength, RepetitionRule, Ruleset, ShieldwallRules};
-use crate::tiles::{Axis, AxisOffset, Coords, RowColOffset, Tile};
-use crate::utils::UniqueStack;
-use crate::pieces::{Piece, PieceSet, PlacedPiece, Side, KING};
-use crate::pieces::PieceType::{King, Soldier};
-use crate::play::{Play, PlayRecord, PlayIterator};
-use crate::error::InvalidPlay::{BlockedByPiece, GameOver, MoveOntoBlockedTile, MoveThroughBlockedTile, NoCommonAxis, NoPiece, OutOfBounds, TooFar, WrongPlayer};
-use crate::game::GameOutcome::{Draw, Win};
-use crate::game::GameStatus::{Ongoing, Over};
-use crate::game::state::GameState;
-use crate::pieces::Side::{Attacker, Defender};
-use crate::rules::ThroneRule::{KingEntry, KingPass, NoEntry, NoPass, NoThrone};
-use crate::tiles::Axis::{Horizontal, Vertical};
-use std::collections::HashSet;
 use crate::board::geometry::BoardGeometry;
 use crate::board::state::BoardState;
+use crate::error::PlayInvalid::{BlockedByPiece, GameOver, MoveOntoBlockedTile, MoveThroughBlockedTile, NoCommonAxis, NoPiece, OutOfBounds, TooFar, WrongPlayer};
+use crate::error::{BoardError, PlayInvalid};
+use crate::game::state::GameState;
+use crate::game::GameOutcome::{Draw, Win};
+use crate::game::GameStatus::{Ongoing, Over};
+use crate::game::WinReason::{AllCaptured, Enclosed, ExitFort, KingCaptured, KingEscaped};
+use crate::game::{DrawReason, GameOutcome, PlayEffects, WinReason};
+use crate::pieces::PieceType::{King, Soldier};
+use crate::pieces::Side::{Attacker, Defender};
+use crate::pieces::{Piece, PieceSet, PlacedPiece, Side, KING};
+use crate::play::{Play, ValidPlayIterator, PlayRecord, ValidPlay};
+use crate::rules::EnclosureWinRules::WithoutEdgeAccess;
+use crate::rules::KingAttack::{Anvil, Armed, Hammer};
+use crate::rules::ThroneRule::{KingEntry, KingPass, NoEntry, NoPass, NoThrone};
+use crate::rules::{KingStrength, RepetitionRule, Ruleset, ShieldwallRules};
+use crate::tiles::Axis::{Horizontal, Vertical};
+use crate::tiles::{Axis, AxisOffset, Coords, RowColOffset, Tile};
+use crate::utils::UniqueStack;
+use std::collections::HashSet;
 
 /// A space on the board that is enclosed by pieces.
 #[derive(Debug, Default)]
@@ -123,98 +122,103 @@ impl GameLogic {
         piece: Piece,
         state: &GameState<T>
     ) -> (bool, bool) {
-        let validity = self.check_play_validity_for_side(play, piece.side, state);
-        match validity {
-            Valid => (true, true),
-            Invalid(MoveOntoBlockedTile) => {
+        let validity = self.validate_play_for_side(play, piece.side, state);
+        let can_occupy = validity.is_ok();
+        let can_pass = match validity {
+            Ok(_) => true,
+            Err(MoveOntoBlockedTile) => {
                 // Generally, the only way you could be unable to move onto a tile but be able to
                 // move past it is if the tile is a throne and the rules permit passing through, but
                 // not occupying, the throne. Of course, this will differ for knights and commanders
                 // when implemented.
                 if play.to() == self.board_geo.special_tiles.throne {
                     match self.rules.throne_movement {
-                        NoThrone => (true, true),
-                        NoPass => (false, false),
-                        NoEntry => (false, true),
+                        NoThrone => true, // shouldn't happen as validity would be `Ok`
+                        NoPass => false,
+                        NoEntry => true,
                         KingPass => {
-                            let is_king = piece.piece_type == King;
-                            (is_king, is_king)
+                            piece.piece_type == King
                         },
-                        KingEntry => (piece.piece_type == King, true),
+                        KingEntry => true,
                     }
                 } else {
                     // If special tile is not a throne, it must be a corner, so cannot be passed.
-                    (false, false)
+                    false
                 }
             },
             _ => {
-                (false, false)
+                false
             }
-        }
+        };
+        (can_occupy, can_pass)
     }
 
-    /// Check whether a play is valid for the given side.
-    pub fn check_play_validity_for_side<T: BoardState>(
+    /// Check whether a play is valid for the given side. Returns a `Result` which contains a
+    /// [`ValidPlay`] wrapping the given `Play` if it is valid, and an [`PlayInvalid`] describing
+    ///the reason for the invalidity otherwise. 
+    pub fn validate_play_for_side<T: BoardState>(
         &self,
         play: Play,
         side: Side,
         state: &GameState<T>
-    ) -> PlayValidity {
+    ) -> Result<ValidPlay, PlayInvalid> {
         if state.status != Ongoing {
-            return Invalid(GameOver)
+            return Err(GameOver)
         }
         let from = play.from;
         let to = play.to();
         let maybe_piece = state.board.get_piece(from);
         match maybe_piece {
-            None => Invalid(NoPiece),
+            None => Err(NoPiece),
             Some(piece) => {
                 if piece.side != side {
-                    return Invalid(WrongPlayer);
+                    return Err(WrongPlayer);
                 }
                 if !(self.board_geo.tile_in_bounds(from) && self.board_geo.tile_in_bounds(to)) {
-                    return Invalid(OutOfBounds)
+                    return Err(OutOfBounds)
                 }
                 if (from.row != to.row) && (from.col != to.col) {
-                    return Invalid(NoCommonAxis)
+                    return Err(NoCommonAxis)
                 }
                 if state.board.tile_occupied(to) {
-                    return Invalid(BlockedByPiece)
+                    return Err(BlockedByPiece)
                 }
                 let between = self.board_geo.tiles_between(from, to);
                 if between.iter().any(|t| state.board.tile_occupied(*t)) {
-                    return Invalid(BlockedByPiece)
+                    return Err(BlockedByPiece)
                 }
                 if !self.rules.may_enter_corners.contains(piece) &&
                     self.board_geo.special_tiles.corners.contains(&to) {
-                    return Invalid(MoveOntoBlockedTile)
+                    return Err(MoveOntoBlockedTile)
                 }
                 if (
                     (self.rules.throne_movement == NoPass)
                         || ((self.rules.throne_movement == KingPass)
                         && piece.piece_type != King)
                 ) && between.contains(&self.board_geo.special_tiles.throne) {
-                    return Invalid(MoveThroughBlockedTile)
+                    return Err(MoveThroughBlockedTile)
                 }
                 if ((self.rules.throne_movement == NoEntry)
                     || ((self.rules.throne_movement == KingEntry)
                     && piece.piece_type != King)
                 ) && (to == self.board_geo.special_tiles.throne) {
-                    return Invalid(MoveOntoBlockedTile)
+                    return Err(MoveOntoBlockedTile)
                 }
                 if self.rules.slow_pieces.contains(piece) && play.distance() > 1 {
                     // Slow piece can't move more than one space at a time
-                    return Invalid(TooFar)
+                    return Err(TooFar)
                 }
-                Valid
-
+                Ok(ValidPlay { play })
             }
         }
     }
 
-    /// Check whether a move is valid.
-    pub fn check_play_validity<T: BoardState>(&self, play: Play, state: &GameState<T>) -> PlayValidity {
-        self.check_play_validity_for_side(play, state.side_to_play, state)
+    /// Check whether a move is valid. Returns a `Result` which contains a [`ValidPlay`] wrapping
+    /// the given `Play` if it is valid, and a [`PlayInvalid`] describing the reason for the
+    /// invalidity otherwise.
+    pub fn validate_play<T: BoardState>(&self, play: Play, state: &GameState<T>) 
+        -> Result<ValidPlay, PlayInvalid> {
+        self.validate_play_for_side(play, state.side_to_play, state)
     }
     
     /// Check whether the king is beside the throne.
@@ -777,9 +781,10 @@ impl GameLogic {
     /// check).
     pub fn do_valid_play<T: BoardState>(
         &self,
-        play: Play,
+        valid_play: ValidPlay,
         mut state: GameState<T>
     ) -> DoPlayResult<T> {
+        let play = valid_play.play;
         // First move the piece on the board
         let moving_piece = state.board.move_piece(play.from, play.to());
         // Then remove captured pieces
@@ -823,12 +828,9 @@ impl GameLogic {
         &self,
         play: Play,
         state: GameState<T>
-    ) -> Result<DoPlayResult<T>, InvalidPlay> {
-        if let Invalid(v) = self.check_play_validity(play, &state) {
-            Err(v)
-        } else {
-            Ok(self.do_valid_play(play, state))
-        }
+    ) -> Result<DoPlayResult<T>, PlayInvalid> {
+        let valid_play = self.validate_play(play, &state)?;
+        Ok(self.do_valid_play(valid_play, state))
     }
     
     /// Whether the given side could make any play given the current board.
@@ -849,8 +851,8 @@ impl GameLogic {
         &'logic self,
         tile: Tile,
         state: &'state GameState<T>
-    ) -> Result<PlayIterator<'logic, 'state, T>, BoardError> {
-        PlayIterator::new(self, state, tile)
+    ) -> Result<ValidPlayIterator<'logic, 'state, T>, BoardError> {
+        ValidPlayIterator::new(self, state, tile)
     }
     
     /// Detect whether a "Linnaean capture" has occurred.
@@ -879,31 +881,44 @@ impl GameLogic {
 
 #[cfg(test)]
 mod tests {
-    use crate::preset::{boards, rules};
-    use crate::utils::check_tile_vec;
-    use std::str::FromStr;
     use crate::board::state::{BoardState, HugeBasicBoardState, LargeBasicBoardState, MediumBasicBoardState, SmallBasicBoardState};
-    use crate::error::InvalidPlay::{BlockedByPiece, MoveOntoBlockedTile, MoveThroughBlockedTile, NoPiece, OutOfBounds, TooFar};
-    use crate::game::Game;
-    use crate::game::PlayValidity::{Invalid, Valid};
-    use crate::game::WinReason::{KingCaptured, KingEscaped, Repetition};
-    use crate::pieces::{Piece, PieceSet, PlacedPiece, KING};
-    use crate::pieces::PieceType::{King, Soldier};
-    use crate::pieces::Side::{Attacker, Defender};
-    use crate::play::Play;
-    use crate::rules::{HostilityRules, Ruleset, ShieldwallRules};
-    use crate::rules::ThroneRule::NoPass;
-    use crate::game::GameOutcome::Win;
-    use crate::game::GameStatus::{Ongoing, Over};
+    use crate::error::PlayInvalid::{BlockedByPiece, MoveOntoBlockedTile, MoveThroughBlockedTile, NoPiece, OutOfBounds, TooFar};
     use crate::game::logic::GameLogic;
     use crate::game::state::{GameState, MediumBasicGameState, SmallBasicGameState};
+    use crate::game::Game;
+    use crate::game::GameOutcome::Win;
+    use crate::game::GameStatus::{Ongoing, Over};
+    use crate::game::WinReason::{KingCaptured, KingEscaped, Repetition};
+    use crate::pieces::PieceType::{King, Soldier};
+    use crate::pieces::Side::{Attacker, Defender};
+    use crate::pieces::{Piece, PieceSet, PlacedPiece, KING};
+    use crate::play::{Play, ValidPlay};
+    use crate::preset::{boards, rules};
+    use crate::rules::ThroneRule::NoPass;
+    use crate::rules::{HostilityRules, Ruleset, ShieldwallRules};
     use crate::tiles::Tile;
+    use crate::utils::check_tile_vec;
+    use std::str::FromStr;
+    use crate::error::PlayInvalid;
 
     const TEST_RULES: Ruleset = Ruleset {
         slow_pieces: PieceSet::from_piece_type(King),
         throne_movement: NoPass,
         ..rules::BRANDUBH
     };
+    
+    fn assert_valid_play<T: BoardState>(logic: GameLogic, play: Play, state: &GameState<T>) {
+        assert_eq!(logic.validate_play(play, state), Ok(ValidPlay { play }));
+    }
+    
+    fn assert_invalid_play<T: BoardState>(
+        logic: GameLogic,
+        play: Play,
+        state: &GameState<T>,
+        reason: PlayInvalid
+    ) {
+        assert_eq!(logic.validate_play(play, state), Err(reason));
+    }
 
     fn generic_test_play_validity<T: BoardState>() {
 
@@ -912,42 +927,34 @@ mod tests {
         let mut state: GameState<T> = GameState::new(boards::BRANDUBH, logic.rules.starting_side)
             .expect("Could not initiate game state.");
 
-        assert_eq!(
-            logic.check_play_validity(Play::from_tiles(
-                Tile::new(3, 1),
-                Tile::new(4, 1)
-            ).unwrap(), &state),
-            Valid
+        assert_valid_play(
+            logic,
+            Play::from_tiles(Tile::new(3, 1), Tile::new(4, 1)).unwrap(),
+            &state
         );
-        assert_eq!(
-            logic.check_play_validity(Play::from_tiles(
-                Tile::new(0, 3),
-                Tile::new(0, 0)
-            ).unwrap(), &state),
-            Invalid(MoveOntoBlockedTile)
+        assert_invalid_play(
+            logic,
+            Play::from_tiles(Tile::new(0, 3), Tile::new(0, 0)).unwrap(),
+            &state,
+            MoveOntoBlockedTile
         );
-        assert_eq!(
-            logic.check_play_validity(Play::from_tiles(
-                Tile::new(1, 1),
-                Tile::new(2, 1)
-            ).unwrap(), &state),
-            Invalid(NoPiece)
+        assert_invalid_play(
+            logic,
+            Play::from_tiles(Tile::new(1, 1), Tile::new(2, 1)).unwrap(),
+            &state,
+            NoPiece
         );
-
-        assert_eq!(
-            logic.check_play_validity(Play::from_tiles(
-                Tile::new(0, 3),
-                Tile::new(0, 7)
-            ).unwrap(), &state),
-            Invalid(OutOfBounds)
+        assert_invalid_play(
+            logic,
+            Play::from_tiles(Tile::new(0, 3), Tile::new(0, 7)).unwrap(),
+            &state,
+            OutOfBounds
         );
-
-        assert_eq!(
-            logic.check_play_validity(Play::from_tiles(
-                Tile::new(0, 3),
-                Tile::new(2, 3)
-            ).unwrap(), &state),
-            Invalid(BlockedByPiece)
+        assert_invalid_play(
+            logic,
+            Play::from_tiles(Tile::new(0, 3), Tile::new(2, 3)).unwrap(),
+            &state,
+            BlockedByPiece
         );
 
         state = logic.do_play(
@@ -962,58 +969,46 @@ mod tests {
             Tile::new(3, 3),
             Tile::new(3, 2)
         ).unwrap();
-        assert_eq!(
-            logic.check_play_validity(play, &state),
-            Invalid(BlockedByPiece)
-        );
+        assert_invalid_play(logic, play, &state, BlockedByPiece);
 
         state.board.move_piece(Tile::new(3, 2), Tile::new(4, 2));
         state.board.move_piece(Tile::new(3, 3), Tile::new(3, 2));
-
-        assert_eq!(
-            logic.check_play_validity(Play::from_tiles(
-                Tile::new(2, 3),
-                Tile::new(3, 3)
-            ).unwrap(), &state),
-            Invalid(MoveOntoBlockedTile)
+        assert_invalid_play(
+            logic,
+            Play::from_tiles(Tile::new(2, 3), Tile::new(3, 3)).unwrap(),
+            &state,
+            MoveOntoBlockedTile
         );
 
-        assert_eq!(
-            logic.check_play_validity(Play::from_tiles(
-                Tile::new(3, 2),
-                Tile::new(3, 3)
-            ).unwrap(), &state),
-            Valid
+        assert_valid_play(
+            logic,
+            Play::from_tiles(Tile::new(3, 2), Tile::new(3, 3)).unwrap(),
+            &state
         );
 
         let logic: GameLogic = GameLogic::new(TEST_RULES, 7);
         let mut state: GameState<T> = GameState::new("7/5Tt/2T4/2t2t1/Tt4T/2t4/2T2K1", Defender)
             .expect("Could not initiate game state.");
 
-        assert_eq!(
-            logic.check_play_validity(Play::from_tiles(
-                Tile::new(6, 5),
-                Tile::new(6, 3)
-            ).unwrap(), &state),
-            Invalid(TooFar)
+        assert_invalid_play(
+            logic,
+            Play::from_tiles(Tile::new(6, 5), Tile::new(6, 3)).unwrap(),
+            &state,
+            TooFar
         );
-
-        assert_eq!(
-            logic.check_play_validity(Play::from_tiles(
-                Tile::new(6, 5),
-                Tile::new(6, 4)
-            ).unwrap(), &state),
-            Valid
+        assert_valid_play(
+            logic,
+            Play::from_tiles(Tile::new(6, 5), Tile::new(6, 4)).unwrap(),
+            &state
         );
 
         state.side_to_play = Attacker;
 
-        assert_eq!(
-            logic.check_play_validity(Play::from_tiles(
-                Tile::new(3, 2),
-                Tile::new(3, 4)
-            ).unwrap(), &state),
-            Invalid(MoveThroughBlockedTile)
+        assert_invalid_play(
+            logic,
+            Play::from_tiles(Tile::new(3, 2), Tile::new(3, 4)).unwrap(),
+            &state,
+            MoveThroughBlockedTile
         );
     }
 

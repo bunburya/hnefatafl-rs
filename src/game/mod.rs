@@ -1,16 +1,16 @@
 pub mod logic;
 pub mod state;
 
-use crate::error::{BoardError, InvalidPlay, ParseError};
+use crate::board::state::{BoardState, HugeBasicBoardState, LargeBasicBoardState, MediumBasicBoardState, SmallBasicBoardState};
+use crate::error::{BoardError, PlayInvalid, ParseError};
+use crate::game::logic::GameLogic;
+use crate::game::state::GameState;
 use crate::pieces::{PlacedPiece, Side};
-use crate::play::{Play, PlayRecord, PlayIterator};
+use crate::play::{Play, PlayRecord, ValidPlayIterator};
 use crate::rules::Ruleset;
 use crate::tiles::Tile;
 use std::cmp::PartialEq;
 use std::collections::HashSet;
-use crate::board::state::{BoardState, HugeBasicBoardState, LargeBasicBoardState, MediumBasicBoardState, SmallBasicBoardState};
-use crate::game::logic::GameLogic;
-use crate::game::state::GameState;
 
 /// The reason why a game has been won.
 #[derive(Eq, PartialEq, Debug, Copy, Clone, Hash)]
@@ -69,15 +69,6 @@ pub enum GameStatus {
     Over(GameOutcome)
 }
 
-/// Whether a play is valid.
-#[derive(Eq, PartialEq, Debug)]
-pub enum PlayValidity {
-    /// Play is valid.
-    Valid,
-    /// Play is invalid, for the given reason.
-    Invalid(InvalidPlay)
-}
-
 /// A struct representing a single game, including all state and associated information (such as
 /// rules) needed to play. This struct also keeps a record of all previous plays and the game state
 /// after each turn (to allow undoing plays).
@@ -101,7 +92,7 @@ impl<T: BoardState> Game<T> {
     
     /// Actually "do" a play, checking validity, getting outcome, applying outcome to board state,
     /// switching side to play and returning a description of the game status following the move.
-    pub fn do_play(&mut self, play: Play) -> Result<GameStatus, InvalidPlay> {
+    pub fn do_play(&mut self, play: Play) -> Result<GameStatus, PlayInvalid> {
         let (state, play_record) = self.logic.do_play(play, self.state)?.into();
         self.state_history.push(self.state);
         self.state = state;
@@ -118,8 +109,8 @@ impl<T: BoardState> Game<T> {
 
     /// Iterate over the possible plays that can be made by the piece at the given tile. Returns an
     /// error if there is no piece at the given tile. Order of iteration is not guaranteed.
-    pub fn iter_plays(&self, tile: Tile) -> Result<PlayIterator<T>, BoardError> {
-        PlayIterator::new(&self.logic, &self.state, tile)
+    pub fn iter_plays(&self, tile: Tile) -> Result<ValidPlayIterator<T>, BoardError> {
+        ValidPlayIterator::new(&self.logic, &self.state, tile)
     }
     
 }
@@ -135,12 +126,12 @@ pub type HugeBasicGame = Game<HugeBasicBoardState>;
 
 #[cfg(test)]
 mod tests {
+    use crate::board::state::SmallBasicBoardState;
     use crate::game::Game;
     use crate::play::Play;
     use crate::preset::{boards, rules};
     use crate::tiles::Tile;
     use std::collections::HashSet;
-    use crate::board::state::SmallBasicBoardState;
 
     #[test]
     fn test_iter_plays() {
@@ -151,7 +142,7 @@ mod tests {
         let outer_att_iter = game.iter_plays(outer_att_tile);
         assert!(outer_att_iter.is_ok());
         assert_eq!(
-            outer_att_iter.unwrap().collect::<HashSet<Play>>(),
+            outer_att_iter.unwrap().map(|vp| vp.play).collect::<HashSet<Play>>(),
             hashset!(
                 Play::from_tiles(outer_att_tile, Tile::new(0, 1)).unwrap(),
                 Play::from_tiles(outer_att_tile, Tile::new(0, 2)).unwrap(),
@@ -163,7 +154,7 @@ mod tests {
         let inner_att_iter = game.iter_plays(inner_att_tile);
         assert!(inner_att_iter.is_ok());
         assert_eq!(
-            inner_att_iter.unwrap().collect::<HashSet<Play>>(),
+            inner_att_iter.unwrap().map(|vp| vp.play).collect::<HashSet<Play>>(),
             hashset!(
                 Play::from_tiles(inner_att_tile, Tile::new(1, 0)).unwrap(),
                 Play::from_tiles(inner_att_tile, Tile::new(1, 1)).unwrap(),
@@ -177,7 +168,7 @@ mod tests {
         let outer_def_iter = game.iter_plays(outer_def_tile);
         assert!(outer_def_iter.is_ok());
         assert_eq!(
-            outer_def_iter.unwrap().collect::<HashSet<Play>>(),
+            outer_def_iter.unwrap().map(|vp| vp.play).collect::<HashSet<Play>>(),
             hashset!(
                 Play::from_tiles(outer_def_tile, Tile::new(2, 0)).unwrap(),
                 Play::from_tiles(outer_def_tile, Tile::new(2, 1)).unwrap(),
@@ -190,7 +181,7 @@ mod tests {
         let king_tile = Tile::new(3, 3);
         let king_iter = game.iter_plays(king_tile);
         assert!(king_iter.is_ok());
-        assert_eq!(king_iter.unwrap().collect::<HashSet<Play>>(), HashSet::new());
+        assert_eq!(king_iter.unwrap().map(|vp| vp.play).collect::<HashSet<Play>>(), HashSet::new());
         let game: Game<SmallBasicBoardState> = Game::new(
             rules::BRANDUBH,
             "1T5/7/7/1t3K1/7/7/7"
@@ -201,7 +192,7 @@ mod tests {
         let iter = game.iter_plays(test_tile);
         assert!(iter.is_ok());
         assert_eq!(
-            iter.unwrap().collect::<HashSet<Play>>(),
+            iter.unwrap().map(|vp| vp.play).collect::<HashSet<Play>>(),
             hashset!(
                 Play::from_tiles(test_tile, Tile::new(1, 1)).unwrap(),
                 Play::from_tiles(test_tile, Tile::new(2, 1)).unwrap(),

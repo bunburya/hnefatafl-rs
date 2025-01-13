@@ -17,7 +17,8 @@ use crate::tiles::Axis::{Horizontal, Vertical};
 /// This is implemented as a combination of source tile, axis of movement and displacement (with a
 /// negative displacement representing a move "backwards" along the relevant axis, ie, to a
 /// lower-numbered row or column). This way, moves are guaranteed to be along a row or column (but
-/// are not guaranteed to be within the bounds of the board).
+/// are not guaranteed to be within the bounds of the board, nor are they guaranteed to be valid
+/// generally).
 #[derive(Debug, Eq, PartialEq, Clone, Copy, Hash)]
 pub struct Play {
     pub from: Tile,
@@ -90,6 +91,15 @@ impl Display for Play {
     }
 }
 
+/// A thin wrapper around a [`Play`], intended to indicate that the `Play` is known to be a valid
+/// play in the current game.
+/// 
+/// **NOTE:** A `ValidPlay` should only be constructed with a `Play` that is known to be valid.
+/// Passing a `ValidPlay` around an invalid `Play` to a function can cause panics or bad program
+/// state. It is generally preferable to create a `ValidPlay` by passing a `Play` to the
+/// [`GameLogic::validate_play`] method.
+#[derive(Debug, Eq, PartialEq, Clone, Copy, Hash)]
+pub struct ValidPlay { pub play: Play }
 
 /// A record of a single play.
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -126,7 +136,7 @@ impl Display for PlayRecord {
 /// because this struct holds a reference to the [`GameLogic`] and [`GameState`], neither may be
 /// mutated while the iterator exists. Order of iteration is not guaranteed.
 
-pub struct PlayIterator<'a, 'b, T: BoardState> {
+pub struct ValidPlayIterator<'a, 'b, T: BoardState> {
     game_logic: &'a GameLogic,
     game_state: &'b GameState<T>,
     start_tile: Tile,
@@ -134,9 +144,10 @@ pub struct PlayIterator<'a, 'b, T: BoardState> {
     movement: AxisOffset,
 }
 
-impl<'logic, 'state, T: BoardState> PlayIterator<'logic, 'state, T> {
+impl<'logic, 'state, T: BoardState> ValidPlayIterator<'logic, 'state, T> {
 
-    pub fn new(game_logic: &'logic GameLogic, game_state: &'state GameState<T>, tile: Tile) -> Result<Self, BoardError> {
+    pub fn new(game_logic: &'logic GameLogic, game_state: &'state GameState<T>, tile: Tile)
+        -> Result<Self, BoardError> {
         if let Some(piece) = game_state.board.get_piece(tile) {
             Ok(Self {
                 game_logic,
@@ -172,8 +183,8 @@ impl<'logic, 'state, T: BoardState> PlayIterator<'logic, 'state, T> {
     }
 }
 
-impl<'logic, 'state, T: BoardState> Iterator for PlayIterator<'logic, 'state, T> {
-    type Item = Play;
+impl<'logic, 'state, T: BoardState> Iterator for ValidPlayIterator<'logic, 'state, T> {
+    type Item = ValidPlay;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -185,11 +196,15 @@ impl<'logic, 'state, T: BoardState> Iterator for PlayIterator<'logic, 'state, T>
                 // Increase the step for the next iteration.
                 self.movement.displacement +=
                     if self.movement.displacement.is_positive() { 1 } else { -1 };
-                let (can_occupy, can_pass) = self.game_logic.can_occupy_or_pass(play, self.piece, self.game_state);
+                let (can_occupy, can_pass) = self.game_logic.can_occupy_or_pass(
+                    play, self.piece, self.game_state
+                );
                 if can_occupy {
                     // We found a tile we can occupy, so return that
-                    return Some(Play::from_tiles(self.start_tile, dest_tile)
-                        .expect("Tiles should be on same axis."))
+                    return Some(ValidPlay { 
+                        play: Play::from_tiles(self.start_tile, dest_tile)
+                            .expect("Tiles should be on same axis.")
+                    })
                 } else if can_pass {
                     // We can't occupy this tile, but we can pass it, so go back to the start of the
                     // loop to continue in the same direction

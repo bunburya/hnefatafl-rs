@@ -1,17 +1,17 @@
+use hnefatafl::board::state::{BoardState, MediumBasicBoardState};
+use hnefatafl::error::ParseError;
+use hnefatafl::error::ParseError::EmptyString;
+use hnefatafl::game::Game;
+use hnefatafl::game::{GameOutcome, GameStatus};
+use hnefatafl::pieces::Side;
+use hnefatafl::play::Play;
+use hnefatafl::preset::{boards, rules};
+use hnefatafl::rules::Ruleset;
+use hnefatafl::tiles::Tile;
 use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
 use std::str::FromStr;
-use hnefatafl::board::state::{BoardState, MediumBasicBoardState};
-use hnefatafl::game::{GameOutcome, GameStatus, PlayValidity};
-use hnefatafl::error::ParseError;
-use hnefatafl::error::ParseError::EmptyString;
-use hnefatafl::play::Play;
-use hnefatafl::preset::{boards, rules};
-use hnefatafl::game::Game;
-use hnefatafl::rules::Ruleset;
-use hnefatafl::pieces::Side;
-use hnefatafl::tiles::Tile;
 
 fn play_captures_from_str(s: &str) -> Result<(Play, HashSet<Tile>), ParseError> {
     if s.is_empty() {
@@ -58,7 +58,7 @@ fn test_real_games(rules: Ruleset, starting_posn: &str, fname: &str) {
             //println!("{p_str}");
             //println!("{}", g.board);
             if let Ok((p, c)) = play_captures_from_str(p_str) {
-                assert_eq!(g.logic.check_play_validity(p, &g.state), PlayValidity::Valid);
+                assert!(g.logic.validate_play(p, &g.state).is_ok());
                 let piece = g.state.board.move_piece(p.from, p.to());
                 let captures = g.logic.get_captures(p, piece, &g.state);
                 g.state.board.move_piece(p.to(), p.from);
