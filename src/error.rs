@@ -47,7 +47,7 @@ pub enum BoardError {
 
 /// Different ways a [`Play`] can be invalid.
 #[derive(Debug, Eq, PartialEq)]
-pub enum InvalidPlay {
+pub enum PlayInvalid {
     /// The piece being moved does not belong to the player whose turn it is.
     WrongPlayer,
     /// There is no piece to move at the given tile.
