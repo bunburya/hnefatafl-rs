@@ -12,8 +12,12 @@ use crate::tiles::Tile;
 use std::cmp::PartialEq;
 use std::collections::HashSet;
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 /// The reason why a game has been won.
 #[derive(Eq, PartialEq, Debug, Copy, Clone, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum WinReason {
     /// King has escaped in the "normal" way, ie, by reaching an edge or corner.
     KingEscaped,
@@ -34,6 +38,7 @@ pub enum WinReason {
 
 /// The reason why a game has been drawn.
 #[derive(Eq, PartialEq, Debug, Copy, Clone, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum DrawReason {
     /// A move has been repeated too many times.
     Repetition,
@@ -43,6 +48,7 @@ pub enum DrawReason {
 
 /// The outcome of a single game.
 #[derive(Eq, PartialEq, Debug, Copy, Clone, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum GameOutcome {
     /// Game has been won by the specified side.
     Win(WinReason, Side),
@@ -53,6 +59,7 @@ pub enum GameOutcome {
 /// The effects of a single play, including captures and the game outcome caused by the play, if
 /// any.
 #[derive(Eq, PartialEq, Debug, Default, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct PlayEffects {
     /// Tiles containing pieces that have been captured by the move.
     pub captures: HashSet<PlacedPiece>,
@@ -62,6 +69,7 @@ pub struct PlayEffects {
 
 /// The current status of the game.
 #[derive(Eq, PartialEq, Debug, Copy, Clone, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum GameStatus {
     /// Game is still ongoing.
     Ongoing,
@@ -72,7 +80,8 @@ pub enum GameStatus {
 /// A struct representing a single game, including all state and associated information (such as
 /// rules) needed to play. This struct also keeps a record of all previous plays and the game state
 /// after each turn (to allow undoing plays).
-#[derive(Clone)]
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Game<T: BoardState> {
     pub logic: GameLogic,
     pub state: GameState<T>,

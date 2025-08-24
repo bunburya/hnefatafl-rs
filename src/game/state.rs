@@ -5,14 +5,17 @@ use crate::game::GameStatus;
 use crate::game::GameStatus::Ongoing;
 use crate::pieces::Side;
 use crate::play::{Play, PlayRecord};
-use crate::utils::FixedSizeQueue;
+
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
 
 /// A short (fixed-size) record of the relevant information about a play we need to figure out
 /// if it is a repetition of a previous play.
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[derive(Eq)]
 #[derive(Hash)]
-struct ShortPlayRecord {
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub(crate) struct ShortPlayRecord {
     side: Side,
     play: Play,
     captures: bool
@@ -28,6 +31,32 @@ impl From<&PlayRecord> for ShortPlayRecord {
     }
 }
 
+/// A queue of a fixed size. Pushing a new value to the end of the queue drops the first item in the
+/// queue.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+struct PlayRecQueue {
+    queue: [Option<ShortPlayRecord>; 4],
+    first_i: usize
+}
+
+impl PlayRecQueue {
+
+    pub(crate) fn push(&mut self, value: Option<ShortPlayRecord>) {
+        self.queue[self.first_i] = value;
+        self.first_i = if self.first_i == 3 {
+            0
+        } else {
+            self.first_i + 1
+        }
+    }
+
+    pub(crate) fn first(&self) -> &Option<ShortPlayRecord> {
+        &self.queue[self.first_i]
+    }
+
+}
+
 /// Keeps track of the number of consecutive times each side has repeated its last move.
 ///
 /// A move is considered to be a repetition if
@@ -39,12 +68,13 @@ impl From<&PlayRecord> for ShortPlayRecord {
 /// `a1-b1` would count as a repetition but the second `b1-a1` would not (but would not force
 /// a reset of the repetition counter).
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct RepetitionTracker {
     pub(crate) attacker_reps: usize,
     pub(crate) defender_reps: usize,
     attacker_mid_pair: bool,
     defender_mid_pair: bool,
-    recent_plays: FixedSizeQueue<Option<ShortPlayRecord>, 4>
+    recent_plays: PlayRecQueue
 }
 
 impl RepetitionTracker {
@@ -117,6 +147,7 @@ impl RepetitionTracker {
 /// and that changes regularly. The idea is to keep this struct as small as possible to facilitate
 /// efficient play evaluation.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct GameState<T: BoardState> {
     /// Board state, ie, the current pieces on the board.
     pub board: T,

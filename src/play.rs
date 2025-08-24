@@ -11,6 +11,9 @@ use crate::game::state::GameState;
 use crate::pieces::{Piece, Side};
 use crate::tiles::Axis::{Horizontal, Vertical};
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 /// A single move of a piece from one tile to another. (Named "Play" rather than "Move" as the lower-cased version of
 /// the latter would clash with the Rust keyword.)
 ///
@@ -103,6 +106,7 @@ pub struct ValidPlay { pub play: Play }
 
 /// A record of a single play.
 #[derive(Debug, PartialEq, Eq, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct PlayRecord {
     /// The side that made the play.
     pub side: Side,

@@ -1,13 +1,16 @@
+use crate::bitfield::BitField;
+use crate::error::ParseError;
+use crate::error::ParseError::BadLineLen;
+use crate::pieces::PieceType::{King, Soldier};
+use crate::pieces::{Piece, Side};
+use crate::tiles::Tile;
 use primitive_types::{U256, U512};
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::Hash;
 use std::str::FromStr;
-use crate::bitfield::BitField;
-use crate::error::ParseError;
-use crate::error::ParseError::BadLineLen;
-use crate::pieces::{Piece, Side};
-use crate::pieces::PieceType::{King, Soldier};
-use crate::tiles::Tile;
+
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// Store information on the current board state (ie, pieces).
 pub trait BoardState: Default + Clone + Copy + Display + FromStr + Debug + PartialEq {
@@ -114,13 +117,13 @@ impl<T: BitField> Iterator for BitfieldIter<T> {
 /// logic (like checking move validity, etc) is implemented elsewhere and uses [Tile] structs. If
 /// performance was an issue we could look at moving some of that logic to the bitfield level.
 #[derive(Copy, Clone, Hash, Eq, PartialEq, Default, Debug)]
-pub struct BitfieldBoardState<T: BitField> {
+pub struct BitfieldBasicBoardState<T: BitField> {
     attackers: T,
     defenders: T,
     side_len: u8
 }
 
-impl<T: BitField> BoardState for BitfieldBoardState<T> {
+impl<T: BitField> BoardState for BitfieldBasicBoardState<T> {
     
     type Iter = BitfieldIter<T>;
 
@@ -315,40 +318,40 @@ impl<T: BitField> BoardState for BitfieldBoardState<T> {
     }
 }
 
-impl<T: BitField> FromStr for BitfieldBoardState<T> {
+impl<T: BitField> FromStr for BitfieldBasicBoardState<T> {
     type Err = ParseError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Self::from_fen(s)
     }
 }
 
-impl <T: BitField> Display for BitfieldBoardState<T> {
+impl <T: BitField> Display for BitfieldBasicBoardState<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.to_display_str())
     }
 }
 
 /// Board state supporting basic pieces (soldier and king), suitable for boards up to 7x7.
-pub type SmallBasicBoardState = BitfieldBoardState<u64>;
+pub type SmallBasicBoardState = BitfieldBasicBoardState<u64>;
 /// Board state supporting basic pieces (soldier and king), suitable for boards up to 11x11.
-pub type MediumBasicBoardState = BitfieldBoardState<u128>;
+pub type MediumBasicBoardState = BitfieldBasicBoardState<u128>;
 
 /// Board state supporting basic pieces (soldier and king), suitable for boards up to 15x15.
-pub type LargeBasicBoardState = BitfieldBoardState<U256>;
+pub type LargeBasicBoardState = BitfieldBasicBoardState<U256>;
 
 /// Board state supporting basic pieces (soldier and king), suitable for boards up to 21x21.
-pub type HugeBasicBoardState = BitfieldBoardState<U512>;
+pub type HugeBasicBoardState = BitfieldBasicBoardState<U512>;
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
-    use std::str::FromStr;
     use crate::board::state::{BoardState, MediumBasicBoardState, SmallBasicBoardState};
     use crate::pieces::Piece;
     use crate::pieces::PieceType::{King, Soldier};
     use crate::pieces::Side::{Attacker, Defender};
     use crate::preset::boards;
     use crate::tiles::Tile;
+    use std::collections::HashSet;
+    use std::str::FromStr;
 
     #[test]
     fn test_from_str() {

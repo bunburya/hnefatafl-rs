@@ -2,9 +2,13 @@ use crate::board::state::BoardState;
 use crate::error::BoardError;
 use crate::tiles::{Coords, Tile, TileIterator};
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 const NEIGHBOR_OFFSETS: [[i8; 2]; 4] = [[-1, 0], [1, 0], [0, -1], [0, 1]];
 
-#[derive(Copy, Clone, PartialEq, Debug)]
+#[derive(PartialEq, Eq, Copy, Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct SpecialTiles {
     pub throne: Tile,
     pub corners: [Tile; 4]
@@ -26,7 +30,8 @@ impl From<u8> for SpecialTiles {
 /// This struct contains information about the geometry of the board, such as its size and the
 /// positions of various special tiles. It does not contain information about piece placement or any
 /// other state that would be expected to change over the course of a game.
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct BoardGeometry {
     pub side_len: u8,
     pub special_tiles: SpecialTiles

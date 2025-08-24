@@ -19,6 +19,16 @@ use crate::tiles::Axis::{Horizontal, Vertical};
 use crate::tiles::{Axis, AxisOffset, Coords, RowColOffset, Tile};
 use crate::utils::UniqueStack;
 use std::collections::HashSet;
+#[cfg(feature = "serde")]
+use serde::{Serialize, Deserialize};
+
+///// The rules that apply to a special tile. *Not yet implemented*.
+//pub struct SpecialTileRules {
+//    hostile_to: PieceSet,
+//    passable_by: PieceSet,
+//    occupiable_by: PieceSet
+//}
+
 
 /// A space on the board that is enclosed by pieces.
 #[derive(Debug, Default)]
@@ -58,7 +68,8 @@ impl<T: BoardState> From<DoPlayResult<T>> for (GameState<T>, PlayRecord) {
 /// The information stored in this struct is not expected to change over the course of a game. It
 /// does not contain the current game state (piece placement, number of repetitions, etc), but
 /// rather, its methods take references to such state where necessary.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct GameLogic {
     pub rules: Ruleset,
     pub board_geo: BoardGeometry
@@ -777,7 +788,7 @@ impl GameLogic {
     /// **NOTE**: This method assumes that the given play is valid, and should only ever be called
     /// with a known valid play. Providing an invalid play to this method may result in panics or
     /// difficult to debug errors. If in any doubt as to the validity of a play, call
-    /// [`Self::check_play_validity`] first or use [`Self::do_play`] instead (which performs that
+    /// [`Self::validate_play`] first or use [`Self::do_play`] instead (which performs that
     /// check).
     pub fn do_valid_play<T: BoardState>(
         &self,

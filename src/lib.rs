@@ -35,7 +35,7 @@
 //! trait.
 //! 
 //! `hnefatafl`'s default representation of the board state uses bitfields to represent piece
-//! placement (see [`board::state::BitfieldBoardState`]). This means that larger boards will require
+//! placement (see [`board::state::BitfieldBasicBoardState`]). This means that larger boards will require
 //! the use of larger integer types to represent them - for example, a 7x7 board can be represented
 //! by a couple of `u64`s, but an 11x11 board can't (at least, using our existing implementation).
 //! This crate therefore provides a number of different `BoardState` implementations which use
@@ -60,8 +60,16 @@
 //! 
 //! So if you just want to play a game on a 7x7 board, you can use a `SmallBasicGame` instead of a
 //! `Game<BitfieldBoardState<u64>>`.
-
-extern crate core;
+//!
+//! # Serialization
+//!
+//! If compiled with the `serde` feature, the structs in this crate may be serialised and
+//! deserialized using the [`serde`](https://serde.rs/) crate.
+//!
+//! Currently, most structs derive implementations of `Serialize` and `Deserialize`, except for:
+//! * [`board::state::BoardState`], which (de)serialises to/from a string in FEN notation (see
+//!   [`board::state::BoardState::to_fen`]; and
+//! * [`play::Play`], which (de)serialises to a string in a format like `c3-h3`.
 
 /// Miscellaneous utilities used elsewhere in the crate.
 #[macro_use]
@@ -93,3 +101,6 @@ pub mod preset;
 
 /// Code relating to the board, including board state and geometry.
 pub mod board;
+
+#[cfg(feature = "serde")]
+mod serde_utils;

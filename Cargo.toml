@@ -11,6 +11,10 @@ categories = ["game-development", "game-engines"]
 
 [dependencies]
 primitive-types = "0.13.1"
+serde = { version = "1.0.219", optional = true, features = ["derive"] }
+
+[dev-dependencies]
+bincode = { version = "2.0.1", features = ["serde"]}
 
 [features]
 demo = []

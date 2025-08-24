@@ -1,8 +1,12 @@
 use crate::pieces::{PieceSet, Side};
 use std::cmp::PartialEq;
 
+#[cfg(feature = "serde")]
+use serde::{Serialize, Deserialize};
+
 /// Rules relating to who may occupy/pass through the throne.
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum ThroneRule {
     /// Board has no throne
     NoThrone,
@@ -19,6 +23,7 @@ pub enum ThroneRule {
 /// Rules relating to whether and when the king is strong (must be surrounded by hostile tiles on
 /// all four sides to be captured).
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum KingStrength {
     /// King must be surrounded by four hostile pieces or tiles to be captured.
     Strong,
@@ -31,6 +36,7 @@ pub enum KingStrength {
 
 /// Whether king may participate in captures.
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum KingAttack {
     /// King can participate in captures in same way as normal pieces.
     Armed,
@@ -43,7 +49,8 @@ pub enum KingAttack {
 
 
 /// A struct describing what pieces certain special tiles are considered hostile to.
-#[derive(Copy, Clone, Debug)]
+#[derive(PartialEq, Eq, Copy, Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct HostilityRules {
     pub(crate) throne: PieceSet,
     pub(crate) corners: PieceSet,
@@ -51,7 +58,8 @@ pub struct HostilityRules {
 }
 
 /// Rules relating to shieldwall captures.
-#[derive(Clone, Copy, Debug)]
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct ShieldwallRules {
     /// Whether a shieldwall may be closed at one end by a corner.
     pub corners_may_close: bool,
@@ -61,6 +69,7 @@ pub struct ShieldwallRules {
 
 /// Circumstances in which attacker wins as a result of enclosing all defenders.
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum EnclosureWinRules {
     /// Attacker wins if defender is entirely surrounded, even if defender has edge access. 
     WithEdgeAccess,
@@ -69,7 +78,8 @@ pub enum EnclosureWinRules {
 }
 
 /// Consequence of repeated plays.
-#[derive(Clone, Copy, Debug)]
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct RepetitionRule {
     /// Number of repetitions that will trigger the rule. 
     pub(crate) n_repetitions: usize,
@@ -79,7 +89,8 @@ pub struct RepetitionRule {
 }
 
 /// A set of rules for a tafl game.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Ruleset {
     /// Whether defender wins by getting king to edge of board (otherwise, corner escape is
     /// assumed).

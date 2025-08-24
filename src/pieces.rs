@@ -5,11 +5,15 @@ use crate::pieces::PieceType::{Commander, Guard, King, Knight, Mercenary, Soldie
 use crate::pieces::Side::{Attacker, Defender};
 use crate::tiles::Tile;
 
+#[cfg(feature = "serde")]
+use serde::{Serialize, Deserialize};
+
 /// A convenience reference to the king piece.
 pub const KING: Piece = Piece { piece_type: King, side: Defender };
 
 /// The two sides of the game (attacker and defender).
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Side {
     Attacker = 0,
     Defender = 8
@@ -28,6 +32,7 @@ impl Side {
 
 /// The different types of pieces that can occupy a board.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum PieceType {
     King =      0b0000_0001,
     Soldier =   0b0000_0010,
@@ -38,6 +43,7 @@ pub enum PieceType {
 }
 
 impl Shl<Side> for PieceType {
+    
     type Output = u16;
     fn shl(self, rhs: Side) -> Self::Output {
         (self as u16) << (rhs as u16)
@@ -59,8 +65,9 @@ impl BitOr<PieceType> for u16 {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
 /// A piece belonging to a particular side.
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Piece {
     pub piece_type: PieceType,
     pub side: Side
@@ -142,6 +149,7 @@ impl TryFrom<char> for Piece {
 
 /// A struct representing a combination of a tile and a piece.
 #[derive(Debug, Eq, PartialEq, Clone, Copy, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct PlacedPiece {
     pub tile: Tile,
     pub piece: Piece
@@ -153,7 +161,8 @@ impl PlacedPiece {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(PartialEq, Eq, Copy, Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct PieceSet(u16);
 
 impl From<u16> for PieceSet {

@@ -5,9 +5,13 @@ use std::fmt::{Debug, Display, Formatter};
 use std::ops::Add;
 use std::str::FromStr;
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 /// An offset which can be applied to [`Coords`] and which is composed of the axis of movement and
 /// an offset along that axis.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct AxisOffset {
     /// The axis along which the tile is offset.
     pub axis: Axis,
@@ -105,6 +109,7 @@ impl Add<AxisOffset> for Coords {
 /// Avoid constructing `Tile`s which may refer to positions not on the game board (use [`Coords`]
 /// for that instead).
 #[derive(Copy, Clone, Eq, PartialEq, Hash, PartialOrd, Ord)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Tile {
     pub row: u8,
     pub col: u8
@@ -164,6 +169,7 @@ impl From<Tile> for (u8, u8) {
 
 /// A single axis of movement (vertical or horizontal).
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Axis {
     Vertical = 0,
     Horizontal = 0x80
