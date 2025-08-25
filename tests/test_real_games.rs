@@ -58,9 +58,11 @@ fn test_real_games(rules: Ruleset, starting_posn: &str, fname: &str) {
             //println!("{p_str}");
             //println!("{}", g.board);
             if let Ok((p, c)) = play_captures_from_str(p_str) {
-                assert!(g.logic.validate_play(p, &g.state).is_ok());
+                let vp_res = g.logic.validate_play(p, &g.state);
+                assert!(vp_res.is_ok());
+                let vp = vp_res.unwrap(); // just checked that this is ok
                 let piece = g.state.board.move_piece(p.from, p.to());
-                let captures = g.logic.get_captures(p, piece, &g.state);
+                let captures = g.logic.get_captures(vp, piece, &g.state);
                 g.state.board.move_piece(p.to(), p.from);
                 if !c.is_empty() {
                     // Test data doesn't report capture of king as a capture using "x" notation

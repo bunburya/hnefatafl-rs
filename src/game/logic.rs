@@ -543,7 +543,8 @@ impl GameLogic {
     /// Detect whether the given move has created a shieldwall according to the applicable rules.
     /// Returns `None` if no shieldwall is detected; otherwise returns a set of tiles that have been
     /// captured in the shieldwall.
-    pub fn detect_shieldwall<T: BoardState>(&self, play: Play, state: &GameState<T>) -> Option<HashSet<Tile>> {
+    pub fn detect_shieldwall<T: BoardState>(&self, valid_play: ValidPlay, state: &GameState<T>) -> Option<HashSet<Tile>> {
+        let play = valid_play.play;
         let sw_rule = self.rules.shieldwall?;
         let to = play.to();
         let (axis, away_from_edge) = if to.row == 0 {
@@ -612,9 +613,9 @@ impl GameLogic {
     }
 
     /// Get the tiles containing pieces captured by the given play.
-    pub fn get_captures<T: BoardState>(&self, play: Play, moving_piece: Piece, state: &GameState<T>) -> HashSet<PlacedPiece> {
+    pub fn get_captures<T: BoardState>(&self, valid_play: ValidPlay, moving_piece: Piece, state: &GameState<T>) -> HashSet<PlacedPiece> {
         let mut captures: HashSet<PlacedPiece> = HashSet::new();
-        let to = play.to();
+        let to = valid_play.play.to();
 
         // Detect normal captures
         if moving_piece.piece_type != King
@@ -699,7 +700,7 @@ impl GameLogic {
         }
 
         // Detect shieldwall captures
-        if let Some(walled) = self.detect_shieldwall(play, state) {
+        if let Some(walled) = self.detect_shieldwall(valid_play, state) {
             captures.extend(walled.iter().map(|t| 
                 PlacedPiece { tile: *t, piece: state.board.get_piece(*t)
                     .expect("No piece found on captured tile.") }
@@ -712,7 +713,7 @@ impl GameLogic {
     /// Get the outcome of the game, if any. If None, the game is still ongoing.
     pub fn get_game_outcome<T: BoardState>(
         &self,
-        play: Play,
+        valid_play: ValidPlay,
         moving_piece: Piece,
         caps: &HashSet<PlacedPiece>,
         state: &GameState<T>,
@@ -745,8 +746,8 @@ impl GameLogic {
             }
         } else {
             if moving_piece.piece_type == King && (
-                (self.rules.edge_escape && self.board_geo.tile_at_edge(play.to()))
-                    || (!self.rules.edge_escape && self.board_geo.special_tiles.corners.contains(&play.to()))
+                (self.rules.edge_escape && self.board_geo.tile_at_edge(valid_play.play.to()))
+                    || (!self.rules.edge_escape && self.board_geo.special_tiles.corners.contains(&valid_play.play.to()))
             ) {
                 // King has escaped.
                 return Some(Win(KingEscaped, Defender))
@@ -799,7 +800,7 @@ impl GameLogic {
         // First move the piece on the board
         let moving_piece = state.board.move_piece(play.from, play.to());
         // Then remove captured pieces
-        let captures = self.get_captures(play, moving_piece, &state);
+        let captures = self.get_captures(valid_play, moving_piece, &state);
         for &c in &captures {
             state.board.clear_tile(c.tile)
         }
@@ -809,7 +810,7 @@ impl GameLogic {
             state.plays_since_capture += 1;
         }
         // Then assess the game outcome
-        let game_outcome = self.get_game_outcome(play, moving_piece, &captures, &state);
+        let game_outcome = self.get_game_outcome(valid_play, moving_piece, &captures, &state);
 
         state.turn += 1;
         let game_status = match game_outcome {
@@ -1042,51 +1043,60 @@ mod tests {
             GameState::new("4t2/5Tt/2T4/2t2t1/Tt4T/2t4/2T2K1", TEST_RULES.starting_side).unwrap()
         );
         let (logic, mut state) = proto.clone();
-        let play = Play::from_tiles(Tile::new(0, 4), Tile::new(6, 4)).unwrap();
-        let piece = state.board.move_piece(play.from, play.to());
+        let vp = logic.validate_play(
+            Play::from_tiles(Tile::new(0, 4), Tile::new(6, 4)).unwrap(),
+            &state
+        ).unwrap();
+        let piece = state.board.move_piece(vp.play.from, vp.play.to());
         assert_eq!(
-            logic.get_captures(play, piece, &state),
+            logic.get_captures(vp, piece, &state),
             [PlacedPiece::new(Tile::new(6, 5), Piece::new(King, Defender))].into()
         );
-        state.board.move_piece(play.to(), play.from);
-        assert_eq!(logic.do_play(play, state).unwrap().new_state.status, Over(Win(KingCaptured, Attacker)));
+        state.board.move_piece(vp.play.to(), vp.play.from);
+        assert_eq!(logic.do_play(vp.play, state).unwrap().new_state.status, Over(Win(KingCaptured, Attacker)));
 
         let (logic, mut state) = proto.clone();
         state.side_to_play = Defender;
-        let play = Play::from_tiles(Tile::new(4, 6), Tile::new(4, 2)).unwrap();
-        let piece = state.board.move_piece(play.from, play.to());
+        let vp = ValidPlay { play: Play::from_tiles(Tile::new(4, 6), Tile::new(4, 2)).unwrap() };
+        let piece = state.board.move_piece(vp.play.from, vp.play.to());
         assert_eq!(
-            logic.get_captures(play, piece, &state),
+            logic.get_captures(vp, piece, &state),
             [
                 PlacedPiece::new(Tile::new(4, 1), Piece::new(Soldier, Attacker)),
                 PlacedPiece::new(Tile::new(3, 2), Piece::new(Soldier, Attacker)),
                 PlacedPiece::new(Tile::new(5, 2), Piece::new(Soldier, Attacker)),
             ].into()
         );
-        state.board.move_piece(play.to(), play.from);
-        assert_eq!(logic.do_play(play, state).unwrap().new_state.status, Ongoing);
+        state.board.move_piece(vp.play.to(), vp.play.from);
+        assert_eq!(logic.do_valid_play(vp, state).new_state.status, Ongoing);
 
         let (logic, mut state) = proto.clone();
         state.side_to_play = Defender;
-        let play = Play::from_tiles(Tile::new(6, 5), Tile::new(6, 6)).unwrap();
-        let piece = state.board.move_piece(play.from, play.to());
+        let vp =  logic.validate_play(
+            Play::from_tiles(Tile::new(6, 5), Tile::new(6, 6)).unwrap(),
+            &state
+        ).unwrap();
+        let piece = state.board.move_piece(vp.play.from, vp.play.to());
         assert_eq!(
-            logic.get_captures(play, piece, &state),
+            logic.get_captures(vp, piece, &state),
             [].into(),
         );
-        state.board.move_piece(play.to(), play.from);
-        assert_eq!(logic.do_play(play, state).unwrap().new_state.status, Over(Win(KingEscaped, Defender)));
+        state.board.move_piece(vp.play.to(), vp.play.from);
+        assert_eq!(logic.do_valid_play(vp, state).new_state.status, Over(Win(KingEscaped, Defender)));
 
         let (logic, mut state) = proto.clone();
         state.side_to_play = Defender;
-        let play = Play::from_tiles(Tile::new(6, 5), Tile::new(5, 5)).unwrap();
-        let piece = state.board.move_piece(play.from, play.to());
+        let vp = logic.validate_play(
+            Play::from_tiles(Tile::new(6, 5), Tile::new(5, 5)).unwrap(),
+            &state
+        ).unwrap();
+        let piece = state.board.move_piece(vp.play.from, vp.play.to());
         assert_eq!(
-            logic.get_captures(play, piece, &state),
+            logic.get_captures(vp, piece, &state),
             [].into()
         );
-        state.board.move_piece(play.to(), play.from);
-        assert_eq!(logic.do_play(play, state).unwrap().new_state.status, Ongoing);
+        state.board.move_piece(vp.play.to(), vp.play.from);
+        assert_eq!(logic.do_valid_play(vp, state).new_state.status, Ongoing);
     }
 
     #[test]
@@ -1123,18 +1133,18 @@ mod tests {
         let no_sw_friend = "9/9/9/6t2/7tT/6tTT/7tT/8t/9";
         let no_sw_small = "9/9/9/6t2/7tT/8t/9/9/9";
 
-        let cm = Play::from_tiles(
+        let cm = ValidPlay { play: Play::from_tiles(
             Tile::new(4, 6),
             Tile::new(4, 8)
-        ).unwrap();
-        let m = Play::from_tiles(
+        ).unwrap() };
+        let m = ValidPlay { play: Play::from_tiles(
             Tile::new(3, 6),
             Tile::new(3, 8)
-        ).unwrap();
-        let n = Play::from_tiles(
+        ).unwrap() };
+        let n = ValidPlay { play: Play::from_tiles(
             Tile::new(3, 6),
             Tile::new(3, 7)
-        ).unwrap();
+        ).unwrap() };
 
         let corner_logic: GameLogic = GameLogic::new(rules::COPENHAGEN, 9);
         let corner_state: GameState<MediumBasicBoardState> = GameState::new(corner_sw, Attacker).unwrap();
