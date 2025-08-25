@@ -2,6 +2,9 @@ use std::num::ParseIntError;
 use crate::error::ParseError::BadInt;
 use crate::play::Play;
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 /// Errors that may be encountered when parsing a string.
 #[derive(Debug, Eq, PartialEq)]
 pub enum ParseError {
@@ -33,12 +36,14 @@ impl From<ParseIntError> for ParseError {
 
 /// Errors that may be encountered when constructing a [`Play`].
 #[derive(Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum PlayError {
     DisjointTiles
 }
 
 /// Errors relating to the board.
 #[derive(Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum BoardError {
     /// Coordinates are out of bounds, ie, not on board.
     OutOfBounds,
@@ -48,6 +53,7 @@ pub enum BoardError {
 
 /// Different ways a [`Play`] can be invalid.
 #[derive(Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum PlayInvalid {
     /// The piece being moved does not belong to the player whose turn it is.
     WrongPlayer,
