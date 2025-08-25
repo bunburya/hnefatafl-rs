@@ -67,9 +67,11 @@
 //! deserialized using the [`serde`](https://serde.rs/) crate.
 //!
 //! Currently, most structs derive implementations of `Serialize` and `Deserialize`, except for:
-//! * [`board::state::BoardState`], which (de)serialises to/from a string in FEN notation (see
-//!   [`board::state::BoardState::to_fen`]; and
+//! * [`board::state::BoardState`], which (de)serialises to/from a string in FEN notation; and
 //! * [`play::Play`], which (de)serialises to a string in a format like `c3-h3`.
+//!
+//! This should not be considered stable behaviour. Several other structs may get custom
+//! (de)serialization implementations in the future.
 
 /// Miscellaneous utilities used elsewhere in the crate.
 #[macro_use]

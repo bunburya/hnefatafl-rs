@@ -11,9 +11,7 @@ use serde::{Deserialize, Serialize};
 
 /// A short (fixed-size) record of the relevant information about a play we need to figure out
 /// if it is a repetition of a previous play.
-#[derive(Debug, Copy, Clone, PartialEq)]
-#[derive(Eq)]
-#[derive(Hash)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub(crate) struct ShortPlayRecord {
     side: Side,
@@ -143,7 +141,7 @@ impl RepetitionTracker {
     }
 }
 
-/// This strict contains all state that can be used to evaluate play outcomes and board positions
+/// This struct contains all state that can be used to evaluate play outcomes and board positions
 /// and that changes regularly. The idea is to keep this struct as small as possible to facilitate
 /// efficient play evaluation.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
