@@ -20,6 +20,29 @@ pub enum ThroneRule {
     KingEntry
 }
 
+/// Rules relating to a particular type of special tile.
+#[derive(PartialEq, Eq, Copy, Clone, Debug)]
+pub struct SpecialTileRule {
+    /// The pieces to which this tile is considered hostile.
+    pub hostile: PieceSet,
+    /// The pieces that may occupy this tile.
+    pub may_occupy: PieceSet,
+    pub may_pass: PieceSet,
+}
+
+/// Rules that apply to different types of special tile.
+pub struct SpecialTiles {
+    /// Rules relating to the corners of the board.
+    pub corner: Option<SpecialTileRule>,
+    /// Rules relating to the throne (the starting position of the king).
+    pub throne: Option<SpecialTileRule>,
+    /// Rules relating to base camp tiles (the starting positions of the attackers).
+    pub base_camp: Option<SpecialTileRule>,
+    /// Rules relating to fortress tiles (the starting positions of the defenders other than the
+    /// king).
+    pub fortress: Option<SpecialTileRule>
+}
+
 /// Rules relating to whether and when the king is strong (must be surrounded by hostile tiles on
 /// all four sides to be captured).
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
@@ -48,13 +71,28 @@ pub enum KingAttack {
 }
 
 
-/// A struct describing what pieces certain special tiles are considered hostile to.
+/// What pieces certain special tiles are considered hostile to.
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct HostilityRules {
     pub throne: PieceSet,
     pub corners: PieceSet,
     pub edge: PieceSet
+}
+
+/// What pieces may occupy special tiles.
+#[derive(PartialEq, Eq, Copy, Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct OccupyRules {
+    pub throne: PieceSet,
+    pub corners: PieceSet
+}
+
+/// What pieces may pass through special tiles.
+#[derive(PartialEq, Eq, Copy, Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct PassRules {
+    pub throne: PieceSet,
 }
 
 /// Rules relating to shieldwall captures.
@@ -82,10 +120,10 @@ pub enum EnclosureWinRules {
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct RepetitionRule {
     /// Number of repetitions that will trigger the rule. 
-    pub(crate) n_repetitions: usize,
+    pub n_repetitions: usize,
     /// Whether repetitions result in a loss for the repeating player. If this is `false`, then
     /// repetitions will result in a draw.
-    pub(crate) is_loss: bool
+    pub is_loss: bool
 }
 
 /// A set of rules for a tafl game.
@@ -104,12 +142,12 @@ pub struct Ruleset {
     pub shieldwall: Option<ShieldwallRules>,
     /// Whether the king can escape through an exit fort.
     pub exit_fort: bool,
-    /// Whether the throne blocks movement.
-    pub throne_movement: ThroneRule,
-    /// What pieces may enter the corners.
-    pub may_enter_corners: PieceSet,
-    /// What special tiles are hostile to what pieces.
-    pub hostility: HostilityRules,
+    /// What special tiles are hostile to which pieces.
+    pub hostile_tiles: HostilityRules,
+    /// What pieces may occupy special tiles.
+    pub occupiable_tiles: OccupyRules,
+    /// What pieces may pass through special tiles.
+    pub passable_tiles: PassRules,
     /// Types of piece whose movement is restricted to one tile per move.
     pub slow_pieces: PieceSet,
     /// Which side goes first.

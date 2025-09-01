@@ -161,6 +161,7 @@ impl PlacedPiece {
     }
 }
 
+/// A set of (unplaced) pieces. Can contain pieces of each side.
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct PieceSet(u16);
@@ -282,14 +283,22 @@ impl PieceSet {
     /// Check whether the set is empty.
     pub fn is_empty(&self) -> bool {
         // Filter irrelevant bits
-        self.0 & 0b0011_1111 == 0
+        self.0 & 0b0011_1111_0011_1111 == 0
     }
-    
+
+    /// Check whether the set contains only the king. Returns `true` if the set contains only the
+    /// defending king OR if the set contains only both kings, but returns `false` if the set
+    /// contains only the attacking king.
+    pub fn is_king_only(&self) -> bool {
+        let mut c = *self;
+        c.unset_piece_type(King);
+        (!self.is_empty()) && c.is_empty()
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::pieces::{Piece, PieceSet};
+    use crate::pieces::{Piece, PieceSet, KING};
     use crate::pieces::PieceType::{Commander, Guard, King, Knight, Mercenary, Soldier};
     use crate::pieces::Side::{Attacker, Defender};
 
@@ -331,5 +340,25 @@ mod tests {
             assert!(!ps.contains(Piece::new(Knight, s)));
             assert!(!ps.contains(Piece::new(Mercenary, s)));
         }
+    }
+
+    #[test]
+    fn test_empty() {
+        assert!(PieceSet::none().is_empty());
+        assert!(!PieceSet::from(vec![King]).is_empty());
+        assert!(!PieceSet::from(vec![Soldier, Guard]).is_empty());
+        assert!(!PieceSet::from_piece(Piece::new(Soldier, Attacker)).is_empty());
+        assert!(!PieceSet::all().is_empty());
+
+    }
+
+    #[test]
+    fn test_king_only() {
+        assert!(PieceSet::from(vec![King]).is_king_only());
+        assert!(PieceSet::from_piece(KING).is_king_only());
+        assert!(!PieceSet::from(vec![King, Soldier]).is_king_only());
+        assert!(!PieceSet::from(vec![King, Soldier, Guard]).is_king_only());
+        assert!(!PieceSet::from(vec![Soldier, Guard, Commander]).is_king_only());
+        assert!(!PieceSet::none().is_king_only());
     }
 }

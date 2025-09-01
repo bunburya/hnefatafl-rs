@@ -56,7 +56,7 @@ fn test_real_games(rules: Ruleset, starting_posn: &str, fname: &str) {
         //println!("{line}");
         for p_str in plays {
             //println!("{p_str}");
-            //println!("{}", g.board);
+            //println!("{}", g.state.board);
             if let Ok((p, c)) = play_captures_from_str(p_str) {
                 let vp_res = g.logic.validate_play(p, &g.state);
                 assert!(vp_res.is_ok());

@@ -10,25 +10,16 @@ use crate::game::{DrawReason, GameOutcome, PlayEffects, WinReason};
 use crate::pieces::PieceType::{King, Soldier};
 use crate::pieces::Side::{Attacker, Defender};
 use crate::pieces::{Piece, PieceSet, PlacedPiece, Side, KING};
-use crate::play::{Play, ValidPlayIterator, PlayRecord, ValidPlay};
+use crate::play::{Play, PlayRecord, ValidPlay, ValidPlayIterator};
 use crate::rules::EnclosureWinRules::WithoutEdgeAccess;
 use crate::rules::KingAttack::{Anvil, Armed, Hammer};
-use crate::rules::ThroneRule::{KingEntry, KingPass, NoEntry, NoPass, NoRule};
 use crate::rules::{KingStrength, RepetitionRule, Ruleset, ShieldwallRules};
 use crate::tiles::Axis::{Horizontal, Vertical};
 use crate::tiles::{Axis, AxisOffset, Coords, RowColOffset, Tile};
 use crate::utils::UniqueStack;
-use std::collections::HashSet;
 #[cfg(feature = "serde")]
-use serde::{Serialize, Deserialize};
-
-///// The rules that apply to a special tile. *Not yet implemented*.
-//pub struct SpecialTileRules {
-//    hostile_to: PieceSet,
-//    passable_by: PieceSet,
-//    occupiable_by: PieceSet
-//}
-
+use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 
 /// A space on the board that is enclosed by pieces.
 #[derive(Debug, Default)]
@@ -85,10 +76,10 @@ impl GameLogic {
     /// Determine whether the given tile is hostile specifically by reference to the rules regarding
     /// hostility of special tiles.
     pub fn special_tile_hostile(&self, tile: Tile, piece: Piece) -> bool {
-        (self.rules.hostility.throne.contains(piece) && tile == self.board_geo.special_tiles.throne)
-            || (self.rules.hostility.corners.contains(piece)
+        (self.rules.hostile_tiles.throne.contains(piece) && tile == self.board_geo.special_tiles.throne)
+            || (self.rules.hostile_tiles.corners.contains(piece)
             && self.board_geo.special_tiles.corners.contains(&tile))
-            || (self.rules.hostility.edge.contains(piece)
+            || (self.rules.hostile_tiles.edge.contains(piece)
             && !self.board_geo.tile_in_bounds(tile))
     }
 
@@ -120,7 +111,7 @@ impl GameLogic {
         if self.board_geo.coords_in_bounds(coords) {
             self.tile_hostile(Tile::new(coords.row as u8, coords.col as u8), piece, board)
         } else {
-            self.rules.hostility.edge.contains(piece)
+            self.rules.hostile_tiles.edge.contains(piece)
         }
     }
 
@@ -134,26 +125,21 @@ impl GameLogic {
         state: &GameState<T>
     ) -> (bool, bool) {
         let validity = self.validate_play_for_side(play, piece.side, state);
+        // Whether we can occupy the tile is checked when validating the play.
         let can_occupy = validity.is_ok();
         let can_pass = match validity {
             Ok(_) => true,
             Err(MoveOntoBlockedTile) => {
                 // Generally, the only way you could be unable to move onto a tile but be able to
-                // move past it is if the tile is a throne and the rules permit passing through, but
-                // not occupying, the throne. Of course, this will differ for knights and commanders
-                // when implemented.
+                // move past it is if the tile is an empty throne and the rules permit passing
+                // through, but not occupying, the throne. Of course, this will differ for knights
+                // and commanders when implemented.
                 if play.to() == self.board_geo.special_tiles.throne {
-                    match self.rules.throne_movement {
-                        NoRule => true, // shouldn't happen as validity would be `Ok`
-                        NoPass => false,
-                        NoEntry => true,
-                        KingPass => {
-                            piece.piece_type == King
-                        },
-                        KingEntry => true,
-                    }
+                    self.rules.passable_tiles.throne.contains(piece)
+                        && !state.board.tile_occupied(self.board_geo.special_tiles.throne)
                 } else {
                     // If special tile is not a throne, it must be a corner, so cannot be passed.
+                    // This will be different when base camps and fortresses are implemented.
                     false
                 }
             },
@@ -198,22 +184,17 @@ impl GameLogic {
                 if between.iter().any(|t| state.board.tile_occupied(*t)) {
                     return Err(BlockedByPiece)
                 }
-                if !self.rules.may_enter_corners.contains(piece) &&
+                if !self.rules.occupiable_tiles.corners.contains(piece) &&
                     self.board_geo.special_tiles.corners.contains(&to) {
                     return Err(MoveOntoBlockedTile)
                 }
-                if (
-                    (self.rules.throne_movement == NoPass)
-                        || ((self.rules.throne_movement == KingPass)
-                        && piece.piece_type != King)
-                ) && between.contains(&self.board_geo.special_tiles.throne) {
-                    return Err(MoveThroughBlockedTile)
-                }
-                if ((self.rules.throne_movement == NoEntry)
-                    || ((self.rules.throne_movement == KingEntry)
-                    && piece.piece_type != King)
-                ) && (to == self.board_geo.special_tiles.throne) {
+                if !self.rules.occupiable_tiles.throne.contains(piece)
+                    && (to == self.board_geo.special_tiles.throne) {
                     return Err(MoveOntoBlockedTile)
+                }
+                if !self.rules.passable_tiles.throne.contains(piece)
+                    && between.contains(&self.board_geo.special_tiles.throne) {
+                    return Err(MoveThroughBlockedTile)
                 }
                 if self.rules.slow_pieces.contains(piece) && play.distance() > 1 {
                     // Slow piece can't move more than one space at a time
@@ -263,13 +244,11 @@ impl GameLogic {
             return false
         }
         let t = Tile::new(coords.row as u8, coords.col as u8);
-        if self.board_geo.special_tiles.throne == t && (
-            (self.rules.throne_movement == NoEntry)
-                || (self.rules.throne_movement == KingEntry && piece.piece_type != King)
-        ) {
+        if self.board_geo.special_tiles.throne == t
+            && !self.rules.occupiable_tiles.throne.contains(piece) {
             return false
         }
-        if !self.rules.may_enter_corners.contains(piece)
+        if !self.rules.occupiable_tiles.corners.contains(piece)
             && self.board_geo.special_tiles.corners.contains(&t) {
             return false
         }
@@ -461,7 +440,7 @@ impl GameLogic {
                         }
                     } else {
                         // Coords are out of bounds
-                        if !self.rules.hostility.edge.contains(piece) {
+                        if !self.rules.hostile_tiles.edge.contains(piece) {
                             // Piece is at edge and edge is not hostile
                             continue 'axisloop;
                         }
@@ -633,15 +612,15 @@ impl GameLogic {
                     if other_piece.piece_type == King
                         && self.king_beside_throne(&state.board)
                         && self.rules.king_strength == KingStrength::StrongByThrone
-                        && (self.rules.throne_movement == NoEntry
-                        || self.rules.throne_movement == KingEntry)
+                        && (self.rules.occupiable_tiles.throne.is_empty()
+                            || self.rules.occupiable_tiles.throne.is_king_only())
                         && self.board_geo.neighbors(n).iter().all(|t|
-                        t == &self.board_geo.special_tiles.throne
-                            || self.tile_hostile(*t, other_piece, &state.board)
-                    ) {
-                        captures.insert(PlacedPiece { tile: n, piece: other_piece });
-                        continue
-                    }
+                            t == &self.board_geo.special_tiles.throne
+                                || self.tile_hostile(*t, other_piece, &state.board)
+                        ) {
+                            captures.insert(PlacedPiece { tile: n, piece: other_piece });
+                            continue
+                        }
 
                     let signed_to_row = to.row as i8;
                     let signed_to_col = to.col as i8;
@@ -894,6 +873,7 @@ impl GameLogic {
 #[cfg(test)]
 mod tests {
     use crate::board::state::{BoardState, HugeBasicBoardState, LargeBasicBoardState, MediumBasicBoardState, SmallBasicBoardState};
+    use crate::error::PlayInvalid;
     use crate::error::PlayInvalid::{BlockedByPiece, MoveOntoBlockedTile, MoveThroughBlockedTile, NoPiece, OutOfBounds, TooFar};
     use crate::game::logic::GameLogic;
     use crate::game::state::{GameState, MediumBasicGameState, SmallBasicGameState};
@@ -906,16 +886,17 @@ mod tests {
     use crate::pieces::{Piece, PieceSet, PlacedPiece, KING};
     use crate::play::{Play, ValidPlay};
     use crate::preset::{boards, rules};
-    use crate::rules::ThroneRule::NoPass;
-    use crate::rules::{HostilityRules, Ruleset, ShieldwallRules};
+    use crate::rules::{HostilityRules, PassRules, Ruleset, ShieldwallRules};
     use crate::tiles::Tile;
     use crate::utils::check_tile_vec;
     use std::str::FromStr;
-    use crate::error::PlayInvalid;
 
     const TEST_RULES: Ruleset = Ruleset {
         slow_pieces: PieceSet::from_piece_type(King),
-        throne_movement: NoPass,
+        passable_tiles: PassRules {
+            throne: PieceSet::none(),
+            ..rules::BRANDUBH.passable_tiles
+        },
         ..rules::BRANDUBH
     };
     
@@ -1197,7 +1178,7 @@ mod tests {
         let setup_4 = "2t2t1/1t3t1/1t1K1t1/2ttt2/7";
 
         let safe_corners = Ruleset {
-            hostility: HostilityRules {
+            hostile_tiles: HostilityRules {
                 corners: PieceSet::none(),
                 edge: PieceSet::none(),
                 throne: PieceSet::none()

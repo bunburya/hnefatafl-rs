@@ -200,6 +200,9 @@ mod tests {
         let test_tile = Tile::new(3, 1);
         let iter = game.iter_plays(test_tile);
         assert!(iter.is_ok());
+        for vp in game.iter_plays(test_tile).unwrap() {
+            print!("{}, ", vp)
+        }
         assert_eq!(
             iter.unwrap().map(|vp| vp.play).collect::<HashSet<Play>>(),
             hashset!(
