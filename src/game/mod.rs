@@ -238,6 +238,29 @@ mod tests {
         assert_eq!(g.state, state_0);
 
     }
-    
+}
 
+#[cfg(all(test, feature = "serde"))]
+mod serde_tests {
+    use std::str::FromStr;
+    use crate::game::{Game, MediumBasicGame};
+    use crate::preset::{rules, boards};
+    use bincode;
+    use bincode::serde::{encode_to_vec, decode_from_slice};
+    use crate::play::Play;
+
+    #[test]
+    fn test_round_trip() {
+        let mut g: MediumBasicGame = Game::new(rules::COPENHAGEN, boards::COPENHAGEN)
+            .expect("failed to create game");
+        let cfg = bincode::config::standard();
+        let bytes = encode_to_vec(&g, cfg).unwrap();
+        let (back, _len) = decode_from_slice(&bytes, cfg).unwrap();
+        assert_eq!(g, back);
+        g.do_play(Play::from_str("h11-h7").expect("bad play")).expect("failed to do play");
+        g.do_play(Play::from_str("f8-h8").expect("bad play")).expect("failed to do play");
+        let bytes = encode_to_vec(&g, cfg).unwrap();
+        let (back, _len) = decode_from_slice(&bytes, cfg).unwrap();
+        assert_eq!(g, back);
+    }
 }

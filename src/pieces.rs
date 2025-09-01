@@ -278,6 +278,12 @@ impl PieceSet {
     pub fn contains(&self, piece: Piece) -> bool {
         self.0 & self.get_mask(piece.piece_type, Some(piece.side)) > 0
     }
+
+    /// Check whether the set is empty.
+    pub fn is_empty(&self) -> bool {
+        // Filter irrelevant bits
+        self.0 & 0b0011_1111 == 0
+    }
     
 }
 

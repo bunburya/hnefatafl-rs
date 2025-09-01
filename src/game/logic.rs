@@ -13,7 +13,7 @@ use crate::pieces::{Piece, PieceSet, PlacedPiece, Side, KING};
 use crate::play::{Play, ValidPlayIterator, PlayRecord, ValidPlay};
 use crate::rules::EnclosureWinRules::WithoutEdgeAccess;
 use crate::rules::KingAttack::{Anvil, Armed, Hammer};
-use crate::rules::ThroneRule::{KingEntry, KingPass, NoEntry, NoPass, NoThrone};
+use crate::rules::ThroneRule::{KingEntry, KingPass, NoEntry, NoPass, NoRule};
 use crate::rules::{KingStrength, RepetitionRule, Ruleset, ShieldwallRules};
 use crate::tiles::Axis::{Horizontal, Vertical};
 use crate::tiles::{Axis, AxisOffset, Coords, RowColOffset, Tile};
@@ -144,7 +144,7 @@ impl GameLogic {
                 // when implemented.
                 if play.to() == self.board_geo.special_tiles.throne {
                     match self.rules.throne_movement {
-                        NoThrone => true, // shouldn't happen as validity would be `Ok`
+                        NoRule => true, // shouldn't happen as validity would be `Ok`
                         NoPass => false,
                         NoEntry => true,
                         KingPass => {
