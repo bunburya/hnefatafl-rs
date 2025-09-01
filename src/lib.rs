@@ -103,6 +103,3 @@ pub mod preset;
 
 /// Code relating to the board, including board state and geometry.
 pub mod board;
-
-#[cfg(feature = "serde")]
-mod serde_utils;

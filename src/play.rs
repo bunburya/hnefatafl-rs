@@ -13,6 +13,7 @@ use crate::tiles::Axis::{Horizontal, Vertical};
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
+use crate::game::GameOutcome::{Draw, Win};
 
 /// A single move of a piece from one tile to another. (Named "Play" rather than "Move" as the lower-cased version of
 /// the latter would clash with the Rust keyword.)
@@ -23,6 +24,7 @@ use serde::{Deserialize, Serialize};
 /// are not guaranteed to be within the bounds of the board, nor are they guaranteed to be valid
 /// generally).
 #[derive(Debug, Eq, PartialEq, Clone, Copy, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Play {
     pub from: Tile,
     /// The axis along which the move occurs, ie, horizontal or vertical.
@@ -102,7 +104,14 @@ impl Display for Play {
 /// state. It is generally preferable to create a `ValidPlay` by passing a `Play` to the
 /// [`GameLogic::validate_play`] method.
 #[derive(Debug, Eq, PartialEq, Clone, Copy, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct ValidPlay { pub play: Play }
+
+impl Display for ValidPlay {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        self.play.fmt(f)
+    }
+}
 
 /// A record of a single play.
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -131,6 +140,17 @@ impl Display for PlayRecord {
             write!(f, "x{}",
                 self.effects.captures.iter().map(|p|
                     p.tile.to_string()).collect::<Vec<_>>().join("/"))?;
+        }
+        match self.effects.game_outcome {
+            Some(Win(_, side)) => {
+                if side == Side::Attacker {
+                    write!(f, "++")?;
+                } else {
+                    write!(f, "--")?;
+                }
+            },
+            Some(Draw(_)) => write!(f, "==")?,
+            None => {}
         }
         Ok(())
     }
