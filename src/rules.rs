@@ -8,8 +8,8 @@ use serde::{Serialize, Deserialize};
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum ThroneRule {
-    /// Board has no throne
-    NoThrone,
+    /// No particular rules relating to who may occupy/pass through the throne.
+    NoRule,
     /// No piece may pass through the throne.
     NoPass,
     /// Only the king may pass through the throne.
@@ -52,9 +52,9 @@ pub enum KingAttack {
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct HostilityRules {
-    pub(crate) throne: PieceSet,
-    pub(crate) corners: PieceSet,
-    pub(crate) edge: PieceSet
+    pub throne: PieceSet,
+    pub corners: PieceSet,
+    pub edge: PieceSet
 }
 
 /// Rules relating to shieldwall captures.
