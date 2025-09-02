@@ -4,45 +4,6 @@ use std::cmp::PartialEq;
 #[cfg(feature = "serde")]
 use serde::{Serialize, Deserialize};
 
-/// Rules relating to who may occupy/pass through the throne.
-#[derive(PartialEq, Eq, Copy, Clone, Debug)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub enum ThroneRule {
-    /// No particular rules relating to who may occupy/pass through the throne.
-    NoRule,
-    /// No piece may pass through the throne.
-    NoPass,
-    /// Only the king may pass through the throne.
-    KingPass,
-    /// No piece may enter the throne (but any piece may pass through it).
-    NoEntry,
-    /// Only the king may enter the throne (other pieces may pass through it).
-    KingEntry
-}
-
-/// Rules relating to a particular type of special tile.
-#[derive(PartialEq, Eq, Copy, Clone, Debug)]
-pub struct SpecialTileRule {
-    /// The pieces to which this tile is considered hostile.
-    pub hostile: PieceSet,
-    /// The pieces that may occupy this tile.
-    pub may_occupy: PieceSet,
-    pub may_pass: PieceSet,
-}
-
-/// Rules that apply to different types of special tile.
-pub struct SpecialTiles {
-    /// Rules relating to the corners of the board.
-    pub corner: Option<SpecialTileRule>,
-    /// Rules relating to the throne (the starting position of the king).
-    pub throne: Option<SpecialTileRule>,
-    /// Rules relating to base camp tiles (the starting positions of the attackers).
-    pub base_camp: Option<SpecialTileRule>,
-    /// Rules relating to fortress tiles (the starting positions of the defenders other than the
-    /// king).
-    pub fortress: Option<SpecialTileRule>
-}
-
 /// Rules relating to whether and when the king is strong (must be surrounded by hostile tiles on
 /// all four sides to be captured).
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
@@ -72,6 +33,9 @@ pub enum KingAttack {
 
 
 /// What pieces certain special tiles are considered hostile to.
+///
+/// **NOTE:** Generally speaking, hostility rules are applied to empty tiles only. A tile will
+/// not be considered hostile if occupied by a friendly piece.
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct HostilityRules {
@@ -130,6 +94,8 @@ pub struct RepetitionRule {
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Ruleset {
+    /// The pieces that may be used in the game.
+    pub pieces: PieceSet,
     /// Whether defender wins by getting king to edge of board (otherwise, corner escape is
     /// assumed).
     pub edge_escape: bool,

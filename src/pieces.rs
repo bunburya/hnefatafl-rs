@@ -11,6 +11,11 @@ use serde::{Serialize, Deserialize};
 /// A convenience reference to the king piece.
 pub const KING: Piece = Piece { piece_type: King, side: Defender };
 
+/// All the pieces commonly used in basic games (soldiers of each side and a defending king).
+pub const BASIC_PIECES: PieceSet = PieceSet::none()
+    .with_piece_type(Soldier)
+    .with_piece(KING);
+
 /// The two sides of the game (attacker and defender).
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -75,12 +80,12 @@ pub struct Piece {
 
 impl Piece {
     /// Create a new piece of the given type and side.
-    pub fn new(piece_type: PieceType, side: Side) -> Self {
+    pub const fn new(piece_type: PieceType, side: Side) -> Self {
         Self { piece_type, side }
     }
 
     /// Create a new king piece.
-    pub fn king() -> Self {
+    pub const fn king() -> Self {
         Self {
             piece_type: King,
             side: Defender
@@ -88,7 +93,7 @@ impl Piece {
     }
 
     /// Create a new attacking piece of the given type.
-    pub fn attacker(piece_type: PieceType) -> Self {
+    pub const fn attacker(piece_type: PieceType) -> Self {
         Self {
             piece_type,
             side: Attacker
@@ -96,7 +101,7 @@ impl Piece {
     }
 
     /// Create a new defending piece of the given type.
-    pub fn defender(piece_type: PieceType) -> Self {
+    pub const fn defender(piece_type: PieceType) -> Self {
         Self {
             piece_type,
             side: Defender
@@ -245,43 +250,58 @@ impl PieceSet {
         Self((value.piece_type as u16) << (value.side as u16))
     }
 
+    /// Return a copy of this [`PieceSet`] but with the given piece included.
+    pub const fn with_piece(&self, piece: Piece) -> Self {
+        Self(self.0 | self.get_mask(piece.piece_type, Some(piece.side)))
+    }
+
+    /// Return a copy of this [`PieceSet`] but with the given piece type (both sides) included.
+    pub const fn with_piece_type(&self, piece_type: PieceType) -> Self {
+        Self(self.0 | self.get_mask(piece_type, None))
+    }
+
     /// Get the bitmask corresponding to the given piece type and side. If `side` is `None`, the
     /// mask will represent the piece type of each side.
-    fn get_mask(&self, piece_type: PieceType, side: Option<Side>) -> u16 {
+    const fn get_mask(&self, piece_type: PieceType, side: Option<Side>) -> u16 {
         if let Some(s) = side {
-            piece_type << s
+            (piece_type as u16) << (s as u16)
         } else {
             (piece_type as u16) | ((piece_type as u16) << 8) 
         }
     }
     
     /// Add the given piece to the set.
-    pub fn set_piece(&mut self, piece: Piece) {
+    pub const fn set_piece(&mut self, piece: Piece) {
         self.0 |= self.get_mask(piece.piece_type, Some(piece.side));
     }
     
     /// Add the given piece type (both sides) to the set.
-    pub fn set_piece_type(&mut self, piece_type: PieceType) {
+    pub const fn set_piece_type(&mut self, piece_type: PieceType) {
         self.0 |= self.get_mask(piece_type, None)
     }
 
     /// Remove the given piece from the set.
-    pub fn unset_piece(&mut self, piece: Piece) {
+    pub const fn unset_piece(&mut self, piece: Piece) {
         self.0 &= !self.get_mask(piece.piece_type, Some(piece.side));
     }
     
     /// Remove the given piece type (both sides) from the set.
-    pub fn unset_piece_type(&mut self, piece_type: PieceType) {
+    pub const fn unset_piece_type(&mut self, piece_type: PieceType) {
         self.0 &= !self.get_mask(piece_type, None)
     }
 
     /// Check whether the set contains the given piece.
-    pub fn contains(&self, piece: Piece) -> bool {
+    pub const fn contains(&self, piece: Piece) -> bool {
         self.0 & self.get_mask(piece.piece_type, Some(piece.side)) > 0
     }
 
+    /// Check whether the set contains all the pieces in the other set.
+    pub const fn contains_set(&self, other: &Self) -> bool {
+        (other.0 & self.0) == other.0
+    }
+
     /// Check whether the set is empty.
-    pub fn is_empty(&self) -> bool {
+    pub const fn is_empty(&self) -> bool {
         // Filter irrelevant bits
         self.0 & 0b0011_1111_0011_1111 == 0
     }
@@ -289,7 +309,7 @@ impl PieceSet {
     /// Check whether the set contains only the king. Returns `true` if the set contains only the
     /// defending king OR if the set contains only both kings, but returns `false` if the set
     /// contains only the attacking king.
-    pub fn is_king_only(&self) -> bool {
+    pub const fn is_king_only(&self) -> bool {
         let mut c = *self;
         c.unset_piece_type(King);
         (!self.is_empty()) && c.is_empty()

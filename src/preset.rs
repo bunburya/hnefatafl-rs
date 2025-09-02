@@ -1,5 +1,5 @@
 pub mod rules {
-    use crate::pieces::{PieceSet, KING};
+    use crate::pieces::{PieceSet, BASIC_PIECES, KING};
     use crate::pieces::PieceType::{King, Soldier};
     use crate::pieces::Side::Attacker;
     use crate::rules::KingAttack::Armed;
@@ -9,6 +9,7 @@ pub mod rules {
 
     /// Rules for Copenhagen Hnefatafl.
     pub const COPENHAGEN: Ruleset = Ruleset {
+        pieces: BASIC_PIECES,
         edge_escape: false,
         king_strength: Strong,
         king_attack: Armed,
@@ -39,6 +40,7 @@ pub mod rules {
 
     /// Rules for Federation Brandubh.
     pub const BRANDUBH: Ruleset = Ruleset {
+        pieces: BASIC_PIECES,
         edge_escape: false,
         king_strength: StrongByThrone,
         king_attack: Armed,
@@ -66,6 +68,7 @@ pub mod rules {
 
     /// Rules for Magpie.
     pub const MAGPIE: Ruleset = Ruleset {
+        pieces: BASIC_PIECES,
         edge_escape: false,
         king_strength: Strong,
         king_attack: Armed,
@@ -93,6 +96,7 @@ pub mod rules {
 
     /// Rules for Linnaeus Tablut.
     pub const TABLUT: Ruleset = Ruleset {
+        pieces: BASIC_PIECES,
         edge_escape: true,
         king_strength: StrongByThrone,
         king_attack: Armed,
