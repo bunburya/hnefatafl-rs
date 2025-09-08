@@ -6,11 +6,11 @@ use crate::game::state::GameState;
 use crate::game::GameOutcome::{Draw, Win};
 use crate::game::GameStatus::{Ongoing, Over};
 use crate::game::WinReason::{AllCaptured, Enclosed, ExitFort, KingCaptured, KingEscaped};
-use crate::game::{DrawReason, GameOutcome, PlayEffects, WinReason};
+use crate::game::{DrawReason, GameOutcome, WinReason};
 use crate::pieces::PieceType::{King, Soldier};
 use crate::pieces::Side::{Attacker, Defender};
 use crate::pieces::{Piece, PieceSet, PlacedPiece, Side, KING};
-use crate::play::{Play, PlayRecord, ValidPlay, ValidPlayIterator};
+use crate::play::{Play, PlayRecord, PlayEffects, ValidPlay, ValidPlayIterator};
 use crate::rules::EnclosureWinRules::WithoutEdgeAccess;
 use crate::rules::KingAttack::{Anvil, Armed, Hammer};
 use crate::rules::{KingStrength, RepetitionRule, Ruleset, ShieldwallRules};
@@ -608,7 +608,7 @@ impl GameLogic {
                     }
                     // Special case to deal with situation where strong king is beside his throne
                     // and captured by three hostile pieces, which is not detected by the default
-                    // logic.
+                    // logic. (Do we need this if empty throne is hostile?)
                     if other_piece.piece_type == King
                         && self.king_beside_throne(&state.board)
                         && self.rules.king_strength == KingStrength::StrongByThrone

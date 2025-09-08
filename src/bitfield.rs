@@ -89,6 +89,9 @@ pub trait BitField:
     /// Whether the bitfield is empty (ie, no set bits).
     fn is_empty(&self) -> bool;
 
+    /// Clear all bits in the bitfield.
+    fn clear(&mut self);
+
 }
 
 /// Implement the [`BitField`] trait for the given integer type. First argument should be the type
@@ -125,6 +128,10 @@ pub trait BitField:
 
             fn is_empty(&self) -> bool {
                 *self == 0
+            }
+
+            fn clear(&mut self) {
+                *self = 0;
             }
         }
     };
@@ -169,6 +176,10 @@ pub trait BitField:
             
             fn is_empty(&self) -> bool {
                 *self == Self::zero()
+            }
+
+            fn clear(&mut self) {
+                *self = Self::zero();
             }
         }
     };

@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use crate::tiles::{Axis, AxisOffset, Coords, Tile};
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
@@ -6,9 +7,9 @@ use crate::error::{BoardError, ParseError, PlayError};
 use crate::error::ParseError::{BadPlay, BadString};
 use crate::error::PlayError::DisjointTiles;
 use crate::game::logic::GameLogic;
-use crate::game::PlayEffects;
+use crate::game::GameOutcome;
 use crate::game::state::GameState;
-use crate::pieces::{Piece, Side};
+use crate::pieces::{Piece, PlacedPiece, Side};
 use crate::tiles::Axis::{Horizontal, Vertical};
 
 #[cfg(feature = "serde")]
@@ -111,6 +112,17 @@ impl Display for ValidPlay {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         self.play.fmt(f)
     }
+}
+
+/// The effects of a single play, including captures and the game outcome caused by the play, if
+/// any.
+#[derive(Eq, PartialEq, Debug, Default, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct PlayEffects {
+    /// Tiles containing pieces that have been captured by the move.
+    pub captures: HashSet<PlacedPiece>,
+    /// The outcome of the game, if the move has brought the game to an end.
+    pub game_outcome: Option<GameOutcome>
 }
 
 /// A record of a single play.

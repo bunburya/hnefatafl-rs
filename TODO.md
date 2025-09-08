@@ -2,8 +2,6 @@
 
 - [ ] Review against https://rust-lang.github.io/api-guidelines/.
 - [ ] Improve center square logic.
-  - [ ] Distinguish in hostility rules between occupied and empty throne. **OR**, apply special rule to unoccupied tile
-    only.
   - [ ] Remove special case for strong king beside throne from game logic. The king can be captured by three pieces
     beside the throne if the empty throne is hostile to the king.
 

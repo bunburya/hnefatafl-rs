@@ -4,9 +4,12 @@ use crate::tiles::Axis::{Horizontal, Vertical};
 use std::fmt::{Debug, Display, Formatter};
 use std::ops::Add;
 use std::str::FromStr;
+use crate::bitfield::BitField;
+
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
+use crate::board::state::BitfieldIter;
 
 /// An offset which can be applied to [`Coords`] and which is composed of the axis of movement and
 /// an offset along that axis.
@@ -215,6 +218,66 @@ impl Iterator for TileIterator {
             self.current_col += 1;
         }
         Some(tile)
+    }
+}
+
+pub trait TileSet {
+
+    type Iter: Iterator<Item=Tile>;
+
+    /// Return an iterator over all tiles in the set.
+    fn iter(&self) -> Self::Iter;
+
+    /// Return the number of tiles in the set.
+    fn count(&self) -> u32;
+
+    /// Check whether the given tile is in the set.
+    fn contains(&self, t: Tile) -> bool;
+
+    /// Check whether the set is empty.
+    fn is_empty(&self) -> bool;
+
+    /// Add the given tile to the set, if not present.
+    fn insert(&mut self, t: Tile);
+
+    /// Remove the given tile from the set, if present.
+    fn remove(&mut self, t: Tile);
+
+    /// Remove all tiles from the set.
+    fn clear(&mut self);
+}
+
+impl<B: BitField> TileSet for B {
+    type Iter = BitfieldIter<B>;
+    fn iter(&self) -> Self::Iter {
+        BitfieldIter {
+            state: *self,
+            i: 0
+        }
+    }
+
+    fn count(&self) -> u32 {
+        self.count_ones()
+    }
+
+    fn contains(&self, t: Tile) -> bool {
+        !(Self::tile_mask(t) & *self).is_empty()
+    }
+
+    fn is_empty(&self) -> bool {
+        self.is_empty()
+    }
+
+    fn insert(&mut self, t: Tile) {
+        *self |= Self::tile_mask(t)
+    }
+
+    fn remove(&mut self, t: Tile) {
+        *self &= !Self::tile_mask(t)
+    }
+
+    fn clear(&mut self) {
+        self.clear()
     }
 }
 

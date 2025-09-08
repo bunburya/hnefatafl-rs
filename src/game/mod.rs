@@ -2,15 +2,14 @@ pub mod logic;
 pub mod state;
 
 use crate::board::state::{BoardState, HugeBasicBoardState, LargeBasicBoardState, MediumBasicBoardState, SmallBasicBoardState};
-use crate::error::{BoardError, PlayInvalid, ParseError};
+use crate::error::{BoardError, ParseError, PlayInvalid};
 use crate::game::logic::GameLogic;
 use crate::game::state::GameState;
-use crate::pieces::{PlacedPiece, Side};
+use crate::pieces::Side;
 use crate::play::{Play, PlayRecord, ValidPlayIterator};
 use crate::rules::Ruleset;
 use crate::tiles::Tile;
 use std::cmp::PartialEq;
-use std::collections::HashSet;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -54,17 +53,6 @@ pub enum GameOutcome {
     Win(WinReason, Side),
     /// Game has ended in a draw.
     Draw(DrawReason)
-}
-
-/// The effects of a single play, including captures and the game outcome caused by the play, if
-/// any.
-#[derive(Eq, PartialEq, Debug, Default, Clone)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct PlayEffects {
-    /// Tiles containing pieces that have been captured by the move.
-    pub captures: HashSet<PlacedPiece>,
-    /// The outcome of the game, if the move has brought the game to an end.
-    pub game_outcome: Option<GameOutcome>
 }
 
 /// The current status of the game.
@@ -245,12 +233,12 @@ mod tests {
 
 #[cfg(all(test, feature = "serde"))]
 mod serde_tests {
-    use std::str::FromStr;
     use crate::game::{Game, MediumBasicGame};
-    use crate::preset::{rules, boards};
-    use bincode;
-    use bincode::serde::{encode_to_vec, decode_from_slice};
     use crate::play::Play;
+    use crate::preset::{boards, rules};
+    use bincode;
+    use bincode::serde::{decode_from_slice, encode_to_vec};
+    use std::str::FromStr;
 
     #[test]
     fn test_round_trip() {

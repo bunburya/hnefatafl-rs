@@ -83,12 +83,11 @@ pub trait BoardState: Default + Clone + Copy + Display + FromStr + Debug + Parti
     
 }
 
-
 pub struct BitfieldIter<T: BitField> {
     /// Bitfield representing board state.
-    state: T,
+    pub(crate) state: T,
     /// Keeps track of current position in the bitfield.
-    i: u32,
+    pub(crate) i: u32,
 }
 
 impl<T: BitField> Iterator for BitfieldIter<T> {
