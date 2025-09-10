@@ -215,12 +215,18 @@ impl GameLogic {
     
     /// Check whether the king is beside the throne.
     pub fn king_beside_throne<T: BoardState>(&self, board: &T) -> bool {
-        self.board_geo.neighbors(self.board_geo.special_tiles.throne).contains(&board.get_king())
+        if let Some(k) = board.get_king() {
+            self.board_geo.neighbors(self.board_geo.special_tiles.throne).contains(&k)
+        } else {
+            // No king = not beside throne
+            false
+        }
+
     }
     
     /// Check whether the king is on the throne.
     pub fn king_on_throne<T: BoardState>(&self, board: &T) -> bool {
-        board.get_king() == self.board_geo.special_tiles.throne
+        board.get_king() == Some(self.board_geo.special_tiles.throne)
     }
 
     /// Check whether the king is *currently* strong (must be surrounded on all four sides to be
@@ -561,34 +567,39 @@ impl GameLogic {
 
     /// Detect whether the king is in an exit fort.
     pub fn detect_exit_fort<T: BoardState>(&self, board: &T) -> bool {
-        let king_tile = board.get_king();
-
-        // King is at edge
-        if !self.board_geo.tile_at_edge(king_tile) {
-            return false
-        }
-
-        // Check king is enclosed by his own pieces
-        if let Some(encl) = self.find_enclosure(
-            king_tile,
-            PieceSet::from(King),
-            PieceSet::from(Defender),
-            false,
-            true,
-            board,
-        ) {
-            // King has space to move
-            if !self.board_geo.neighbors(king_tile).iter().any(|t| !board.tile_occupied(*t)) {
+        if let Some(king_tile) = board.get_king() {
+            // King is at edge
+            if !self.board_geo.tile_at_edge(king_tile) {
                 return false
             }
-            // Check enclosing pieces are all themselves safe
-            if !self.enclosure_secure(&encl, true, false, board) {
-                return false
+
+            // Check king is enclosed by his own pieces
+            if let Some(encl) = self.find_enclosure(
+                king_tile,
+                PieceSet::from(King),
+                PieceSet::from(Defender),
+                false,
+                true,
+                board,
+            ) {
+                // King has space to move
+                if !self.board_geo.neighbors(king_tile).iter().any(|t| !board.tile_occupied(*t)) {
+                    return false
+                }
+                // Check enclosing pieces are all themselves safe
+                if !self.enclosure_secure(&encl, true, false, board) {
+                    return false
+                }
+                true
+            } else {
+                false
             }
-            true
         } else {
+            // No king (should not normally happen, but in any event means there is no exit fort)
             false
         }
+
+
     }
 
     /// Get the tiles containing pieces captured by the given play.
@@ -702,27 +713,27 @@ impl GameLogic {
             return Some(Win(AllCaptured, state.side_to_play))
         }
         if state.side_to_play == Attacker {
-            // This test relies on the fact that even once the king has been removed from the board,
-            // the bits at the end that encode its position remain set.
-            if caps.iter().any(|c| state.board.is_king(c.tile)) {
+            if let Some(k) = state.board.get_king() {
+                if let Some(encl_win) = self.rules.enclosure_win {
+                    if let Some(encl) = self.find_enclosure(
+                        k,
+                        PieceSet::from(Defender),
+                        PieceSet::from(Attacker),
+                        encl_win == WithoutEdgeAccess,
+                        true,
+                        &state.board
+                    ) {
+                        if encl.occupied.len() == state.board.count_pieces(Defender) as usize
+                            && self.enclosure_secure(&encl, false, true, &state.board) {
+                            return Some(Win(Enclosed, Attacker))
+                        }
+                    }
+                }
+            } else {
                 // Attacker has captured the king.
                 return Some(Win(KingCaptured, Attacker))
             }
-            if let Some(encl_win) = self.rules.enclosure_win {
-                if let Some(encl) = self.find_enclosure(
-                    state.board.get_king(),
-                    PieceSet::from(Defender),
-                    PieceSet::from(Attacker),
-                    encl_win == WithoutEdgeAccess,
-                    true,
-                    &state.board
-                ) {
-                    if encl.occupied.len() == state.board.count_pieces(Defender) as usize
-                        && self.enclosure_secure(&encl, false, true, &state.board) {
-                        return Some(Win(Enclosed, Attacker))
-                    }
-                }
-            }
+
         } else {
             if moving_piece.piece_type == King && (
                 (self.rules.edge_escape && self.board_geo.tile_at_edge(valid_play.play.to()))

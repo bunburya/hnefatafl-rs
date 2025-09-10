@@ -3,7 +3,7 @@ use crate::error::ParseError;
 use crate::error::ParseError::BadLineLen;
 use crate::pieces::PieceType::{King, Soldier};
 use crate::pieces::{Piece, Side};
-use crate::tiles::Tile;
+use crate::tiles::{Tile, TileSet};
 use primitive_types::{U256, U512};
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::Hash;
@@ -17,15 +17,17 @@ pub trait BoardState: Default + Clone + Copy + Display + FromStr + Debug + Parti
     
     type Iter: Iterator<Item=Tile>;
 
+    type TileSet: TileSet;
+
     /// Get the tile on which the king is currently placed.
-    fn get_king(&self) -> Tile;
+    fn get_king(&self) -> Option<Tile>;
 
     /// Store the given location as the position of the king. 
     fn set_king(&mut self, t: Tile);
 
     /// Check whether the given tile contains the king.
     fn is_king(&self, t: Tile) -> bool {
-        self.get_king() == t
+        self.get_king() == Some(t)
     }
 
     /// Place a piece representing the given side at the given position.
@@ -120,50 +122,46 @@ impl<T: BitField> Iterator for BitfieldIter<T> {
 pub struct BitfieldBasicBoardState<T: BitField> {
     attackers: T,
     defenders: T,
+    king: T,
     side_len: u8
 }
 
 impl<T: BitField> BoardState for BitfieldBasicBoardState<T> {
     
     type Iter = BitfieldIter<T>;
+    type TileSet = T;
 
-    fn get_king(&self) -> Tile {
-        let row = (self.defenders.to_be_bytes().as_ref()[0] & 0b1111_0000) >> 4;
-        let col = (self.attackers.to_be_bytes().as_ref()[0] & 0b1111_0000) >> 4;
-        Tile::new(row, col)
+    fn get_king(&self) -> Option<Tile> {
+        if self.king.is_empty() {
+            None
+        } else {
+            Some(T::bit_to_tile(self.king.trailing_zeros()))
+        }
     }
 
-    /// Store the given location as the position of the king. **NB**: Does not set the relevant bit
-    /// (or unset the bit corresponding to the king's previous location), which must be handled
-    /// separately.
     fn set_king(&mut self, t: Tile) {
-        let mut def_bytes = self.defenders.to_be_bytes();
-        let def_bytes_slice = def_bytes.as_mut();
-        def_bytes_slice[0] &= 0b0000_1111;  // Unset 4 most significant bits
-        def_bytes_slice[0] |= t.row << 4;  // Set 4 most significant bits to row
-        self.defenders = T::from_be_bytes_slice(def_bytes_slice);
-        let mut att_bytes = self.attackers.to_be_bytes();
-        let att_bytes_slice = att_bytes.as_mut();
-        att_bytes_slice[0] &= 0b0000_1111;
-        att_bytes_slice[0] |= t.col << 4;
-        self.attackers = T::from_be_bytes_slice(att_bytes_slice);
+        self.king.insert(t);
     }
 
     fn set_piece(&mut self, t: Tile, piece: Piece) {
-        let mask = T::tile_mask(t);
-        let imask = !mask;
-        match piece.side {
-            Side::Attacker => {
-                self.attackers |= mask;
-                self.defenders &= imask;
+        match piece {
+            Piece { piece_type: Soldier, side: Side::Attacker } => {
+                self.attackers.insert(t);
+                self.defenders.remove(t);
+                self.king.remove(t);
             },
-            Side::Defender => {
-                self.defenders |= mask;
-                self.attackers &= !mask;
-            }
-        }
-        if piece.piece_type == King {
-            self.set_king(t)
+            Piece { piece_type: Soldier, side: Side::Defender } => {
+                self.defenders.insert(t);
+                self.attackers.remove(t);
+                self.king.remove(t);
+            },
+            Piece { piece_type: King, side: Side::Defender } => {
+                self.king.insert(t);
+                self.attackers.remove(t);
+                self.defenders.remove(t);
+            },
+            // Attacking king. Should never happen. Just do nothing.
+            _ => ()
         }
     }
 
@@ -171,26 +169,24 @@ impl<T: BitField> BoardState for BitfieldBasicBoardState<T> {
         let mask = !T::tile_mask(t);
         self.attackers &= mask;
         self.defenders &= mask;
+        self.king &= mask;
     }
 
     fn get_piece(&self, t: Tile) -> Option<Piece> {
         let mask = T::tile_mask(t);
-        if (self.defenders & mask) > 0.into() {
-            if self.is_king(t) {
-                Some(Piece::king())
-            } else {
-                Some(Piece::defender(Soldier))
-            }
-        } else if (self.attackers & mask) > 0.into() {
+        if !(self.defenders & mask).is_empty() {
+            Some(Piece::defender(Soldier))
+        } else if !(self.king & mask).is_empty() {
+            Some(Piece::king())
+        } else if !(self.attackers & mask).is_empty() {
             Some(Piece::attacker(Soldier))
         } else {
             None
         }
-
     }
 
     fn tile_occupied(&self, t: Tile) -> bool {
-        let all_pieces = self.defenders | self.attackers;
+        let all_pieces = self.defenders | self.attackers | self.king;
         let mask = T::tile_mask(t);
         (all_pieces & mask) > 0.into()
     }
@@ -198,20 +194,15 @@ impl<T: BitField> BoardState for BitfieldBasicBoardState<T> {
     fn count_pieces(&self, side: Side) -> u8 {
         (match side {
             Side::Attacker => self.attackers,
-            Side::Defender => self.defenders
+            Side::Defender => self.defenders | self.king
         } << 4).count_ones() as u8
     }
 
     fn iter_occupied(&self, side: Side) -> Self::Iter {
-        let state_with_king = match side {
+        let state = match side {
             Side::Attacker => self.attackers,
-            Side::Defender => self.defenders
+            Side::Defender => self.defenders | self.king
         };
-        // unset bits which encode the position of the king
-        let mut state_bytes = state_with_king.to_be_bytes();
-        let state_bytes_slice = state_bytes.as_mut();
-        state_bytes_slice[0] &= 0b0000_1111;  // Unset 4 most significant bits
-        let state = T::from_be_bytes_slice(state_bytes_slice);
         Self::Iter {
             state,
             i: 0
@@ -379,11 +370,11 @@ mod tests {
         let res = SmallBasicBoardState::from_str(start_str);
         assert!(res.is_ok());
         let mut state = res.unwrap();
-        assert_eq!(state.get_king(), Tile::new(3, 3));
+        assert_eq!(state.get_king(), Some(Tile::new(3, 3)));
         state.set_piece(Tile::new(1, 5), Piece::attacker(Soldier));
         state.set_piece(Tile::new(4, 1), Piece::defender(Soldier));
         state.move_piece(Tile::new(3, 3), Tile::new(0, 4));
-        assert_eq!(state.get_king(), Tile::new(0, 4));
+        assert_eq!(state.get_king(), Some(Tile::new(0, 4)));
         assert_eq!(state.to_fen(), expected_str);
     
         let occupied = [
@@ -436,11 +427,11 @@ mod tests {
         let mut board = SmallBasicBoardState::from_str("5/1K3/5/5/3t1").unwrap();
         assert_eq!(board.get_piece(Tile::new(1, 1)), Some(Piece::new(King, Defender)));
         assert_eq!(board.get_piece(Tile::new(4, 3)), Some(Piece::new(Soldier, Attacker)));
-        assert_eq!(board.get_king(), Tile::new(1, 1));
+        assert_eq!(board.get_king(), Some(Tile::new(1, 1)));
         board.swap_pieces(Tile::new(1, 1), Tile::new(4, 3));
         assert_eq!(board.get_piece(Tile::new(4, 3)), Some(Piece::new(King, Defender)));
         assert_eq!(board.get_piece(Tile::new(1, 1)), Some(Piece::new(Soldier, Attacker)));
-        assert_eq!(board.get_king(), Tile::new(4, 3));
+        assert_eq!(board.get_king(), Some(Tile::new(4, 3)));
 
     }
     
