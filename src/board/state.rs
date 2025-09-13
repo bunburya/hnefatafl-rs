@@ -2,27 +2,26 @@ use crate::bitfield::BitField;
 use crate::error::ParseError;
 use crate::error::ParseError::BadLineLen;
 use crate::pieces::PieceType::{King, Soldier};
-use crate::pieces::{Piece, Side};
-use crate::tiles::{Tile, TileSet};
+use crate::pieces::{Piece, PieceSet, Side};
+use crate::tiles::Tile;
 use primitive_types::{U256, U512};
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::Hash;
 use std::str::FromStr;
 
+use crate::tileset::TileSet;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
 /// Store information on the current board state (ie, pieces).
 pub trait BoardState: Default + Clone + Copy + Display + FromStr + Debug + PartialEq {
-    
-    type Iter: Iterator<Item=Tile>;
 
-    type TileSet: TileSet;
+    type BitField: BitField;
 
     /// Get the tile on which the king is currently placed.
     fn get_king(&self) -> Option<Tile>;
 
-    /// Store the given location as the position of the king. 
+    /// Store the given location as the position of the king.
     fn set_king(&mut self, t: Tile);
 
     /// Check whether the given tile contains the king.
@@ -36,6 +35,9 @@ pub trait BoardState: Default + Clone + Copy + Display + FromStr + Debug + Parti
     /// Clear a tile.
     fn clear_tile(&mut self, t: Tile);
 
+    /// Clear all tiles in the given set.
+    fn clear_tiles(&mut self, tiles: TileSet<Self::BitField>);
+
     /// Get the piece that occupies the given tile, if any.
     fn get_piece(&self, t: Tile) -> Option<Piece>;
 
@@ -44,11 +46,11 @@ pub trait BoardState: Default + Clone + Copy + Display + FromStr + Debug + Parti
 
     /// Count the number of pieces of the given side left on the board. Includes the king for
     /// defenders.
-    fn count_pieces(&self, side: Side) -> u8;
+    fn count_pieces_of_side(&self, side: Side) -> u8;
 
     /// Return an iterator over the tiles that are occupied by pieces of the given side. Order of
     /// iteration is not guaranteed.
-    fn iter_occupied(&self, side: Side) -> Self::Iter;
+    fn occupied_by_side(&self, side: Side) -> TileSet<Self::BitField>;
 
     /// Move a piece from one position to another. This does not check whether a move is valid; it
     /// just unsets the bit at `from` and sets the bit at `to`. Returns the piece that was moved.
@@ -66,7 +68,7 @@ pub trait BoardState: Default + Clone + Copy + Display + FromStr + Debug + Parti
 
     /// Return a string representing the board state, in a format suitable for printing.
     fn to_display_str(&self) -> String;
-    
+
     /// Return the length of the board's side.
     fn side_len(&self) -> u8;
 
@@ -82,28 +84,16 @@ pub trait BoardState: Default + Clone + Copy + Display + FromStr + Debug + Parti
             }
         }
     }
-    
+
+    /// Return a set of all tiles occupied by any piece in the given set.
+    fn occupied_by(&self, piece_set: PieceSet) -> TileSet<Self::BitField>;
+
+    /// Return the set of all tiles occupied by any piece.
+    fn occupied_by_any(&self) -> TileSet<Self::BitField>;
+
 }
 
-pub struct BitfieldIter<T: BitField> {
-    /// Bitfield representing board state.
-    pub(crate) state: T,
-    /// Keeps track of current position in the bitfield.
-    pub(crate) i: u32,
-}
 
-impl<T: BitField> Iterator for BitfieldIter<T> {
-    type Item = Tile;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let skipped = self.state >> self.i;
-        if skipped.is_empty()  {
-            return None
-        }
-        self.i += skipped.trailing_zeros() + 1;
-        Some(T::bit_to_tile(self.i - 1))
-    }
-}
 
 /// Store information on the current board state (ie, pieces) using bitfields. This struct currently
 /// handles only a simple board, ie, a king and soldiers (no knights, commanders, etc).
@@ -119,23 +109,22 @@ impl<T: BitField> Iterator for BitfieldIter<T> {
 /// performance was an issue we could look at moving some of that logic to the bitfield level.
 #[derive(Copy, Clone, Hash, Eq, PartialEq, Default, Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct BitfieldBasicBoardState<T: BitField> {
-    attackers: T,
-    defenders: T,
-    king: T,
+pub struct BitfieldBasicBoardState<B: BitField> {
+    attackers: TileSet<B>,
+    defenders: TileSet<B>,
+    king: TileSet<B>,
     side_len: u8
 }
 
-impl<T: BitField> BoardState for BitfieldBasicBoardState<T> {
-    
-    type Iter = BitfieldIter<T>;
-    type TileSet = T;
+impl<B: BitField> BoardState for BitfieldBasicBoardState<B> {
+
+    type BitField = B;
 
     fn get_king(&self) -> Option<Tile> {
         if self.king.is_empty() {
             None
         } else {
-            Some(T::bit_to_tile(self.king.trailing_zeros()))
+            Some(self.king.first())
         }
     }
 
@@ -166,20 +155,25 @@ impl<T: BitField> BoardState for BitfieldBasicBoardState<T> {
     }
 
     fn clear_tile(&mut self, t: Tile) {
-        let mask = !T::tile_mask(t);
-        self.attackers &= mask;
-        self.defenders &= mask;
-        self.king &= mask;
+        self.attackers.remove(t);
+        self.defenders.remove(t);
+        self.king.remove(t);
+    }
+
+    fn clear_tiles(&mut self, tiles: TileSet<B>) {
+        let inv = !tiles;
+        self.attackers &= inv;
+        self.defenders &= inv;
+        self.king &= inv;
     }
 
     fn get_piece(&self, t: Tile) -> Option<Piece> {
-        let mask = T::tile_mask(t);
-        if !(self.defenders & mask).is_empty() {
-            Some(Piece::defender(Soldier))
-        } else if !(self.king & mask).is_empty() {
-            Some(Piece::king())
-        } else if !(self.attackers & mask).is_empty() {
+        if self.attackers.contains(t) {
             Some(Piece::attacker(Soldier))
+        } else if self.defenders.contains(t) {
+            Some(Piece::defender(Soldier))
+        } else if self.king.contains(t) {
+            Some(Piece::king())
         } else {
             None
         }
@@ -187,25 +181,20 @@ impl<T: BitField> BoardState for BitfieldBasicBoardState<T> {
 
     fn tile_occupied(&self, t: Tile) -> bool {
         let all_pieces = self.defenders | self.attackers | self.king;
-        let mask = T::tile_mask(t);
-        (all_pieces & mask) > 0.into()
+        all_pieces.contains(t)
     }
 
-    fn count_pieces(&self, side: Side) -> u8 {
+    fn count_pieces_of_side(&self, side: Side) -> u8 {
         (match side {
-            Side::Attacker => self.attackers,
-            Side::Defender => self.defenders | self.king
-        } << 4).count_ones() as u8
+            Side::Attacker => self.attackers.count(),
+            Side::Defender => (self.defenders | self.king).count()
+        }) as u8
     }
 
-    fn iter_occupied(&self, side: Side) -> Self::Iter {
-        let state = match side {
+    fn occupied_by_side(&self, side: Side) -> TileSet<B> {
+        match side {
             Side::Attacker => self.attackers,
             Side::Defender => self.defenders | self.king
-        };
-        Self::Iter {
-            state,
-            i: 0
         }
     }
 
@@ -307,6 +296,24 @@ impl<T: BitField> BoardState for BitfieldBasicBoardState<T> {
     fn side_len(&self) -> u8 {
         self.side_len
     }
+
+    fn occupied_by(&self, piece_set: PieceSet) -> TileSet<B> {
+        let mut s = TileSet::empty();
+        if piece_set.contains(Piece::attacker(Soldier)) {
+            s.extend(&self.attackers);
+        }
+        if piece_set.contains(Piece::defender(Soldier)) {
+            s.extend(&self.defenders);
+        }
+        if piece_set.contains(Piece::king()) {
+            s.extend(&self.king);
+        }
+        s
+    }
+
+    fn occupied_by_any(&self) -> TileSet<B> {
+        self.attackers | self.defenders | self.king
+    }
 }
 
 impl<T: BitField> FromStr for BitfieldBasicBoardState<T> {
@@ -341,7 +348,7 @@ mod tests {
     use crate::pieces::Side::{Attacker, Defender};
     use crate::preset::boards;
     use crate::tiles::Tile;
-    use std::collections::HashSet;
+    use crate::tileset::TileSet;
     use std::str::FromStr;
 
     #[test]
@@ -399,7 +406,7 @@ mod tests {
     #[test]
     fn test_iter_occupied() {
         let state = SmallBasicBoardState::from_str("3t3/3t3/3T3/ttTKTtt/3T3/3t3/3t3").unwrap();
-        let attackers: HashSet<Tile> = state.iter_occupied(Attacker).collect();
+        let attackers = state.occupied_by_side(Attacker);
         let expected = hashset!(
             Tile::new(0, 3),
             Tile::new(1, 3),
@@ -410,8 +417,8 @@ mod tests {
             Tile::new(3, 5),
             Tile::new(3, 6)
         );
-        assert_eq!(attackers, expected);
-        let defenders: HashSet<Tile> = state.iter_occupied(Defender).collect();
+        assert_eq!(attackers, TileSet::from(expected));
+        let defenders = state.occupied_by_side(Defender);
         let expected = hashset!(
             Tile::new(2, 3),
             Tile::new(3, 3),
@@ -419,7 +426,7 @@ mod tests {
             Tile::new(3, 2),
             Tile::new(3, 4)
         );
-        assert_eq!(defenders, expected);
+        assert_eq!(defenders, TileSet::from(expected));
     }
 
     #[test]
@@ -438,7 +445,7 @@ mod tests {
     #[test]
     fn test_count_pieces() {
         let board = MediumBasicBoardState::from_str(boards::COPENHAGEN).unwrap();
-        assert_eq!(board.count_pieces(Attacker), 24);
-        assert_eq!(board.count_pieces(Defender), 13);
+        assert_eq!(board.count_pieces_of_side(Attacker), 24);
+        assert_eq!(board.count_pieces_of_side(Defender), 13);
     }
 }

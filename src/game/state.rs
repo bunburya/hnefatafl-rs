@@ -1,11 +1,12 @@
-use std::cmp::PartialEq;
 use crate::board::state::{BoardState, HugeBasicBoardState, LargeBasicBoardState, MediumBasicBoardState, SmallBasicBoardState};
 use crate::error::ParseError;
 use crate::game::GameStatus;
 use crate::game::GameStatus::Ongoing;
 use crate::pieces::Side;
 use crate::play::{Play, PlayRecord};
+use std::cmp::PartialEq;
 
+use crate::bitfield::BitField;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -19,8 +20,8 @@ pub(crate) struct ShortPlayRecord {
     captures: bool
 }
 
-impl From<&PlayRecord> for ShortPlayRecord {
-    fn from(play_record: &PlayRecord) -> Self {
+impl<B: BitField> From<&PlayRecord<B>> for ShortPlayRecord {
+    fn from(play_record: &PlayRecord<B>) -> Self {
         Self {
             side: play_record.side,
             play: play_record.play,
@@ -146,9 +147,9 @@ impl RepetitionTracker {
 /// efficient play evaluation.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct GameState<T: BoardState> {
+pub struct GameState<B: BoardState> {
     /// Board state, ie, the current pieces on the board.
-    pub board: T,
+    pub board: B,
     /// The side whose turn it is.
     pub side_to_play: Side,
     /// Tracker for repetitions.
@@ -158,18 +159,21 @@ pub struct GameState<T: BoardState> {
     /// Current status of the game.
     pub status: GameStatus,
     /// Number of plays that have been taken by either side.
-    pub turn: usize
+    pub turn: usize,
+
+    _phantom: std::marker::PhantomData<B>
 }
 
-impl <T: BoardState> GameState<T> {
+impl <B: BoardState> GameState<B> {
     pub fn new(fen_str: &str, side_to_play: Side) -> Result<Self, ParseError> {
         Ok(Self {
-            board: T::from_fen(fen_str)?,
+            board: B::from_fen(fen_str)?,
             side_to_play,
             repetitions: RepetitionTracker::default(),
             plays_since_capture: 0,
             status: Ongoing,
-            turn: 0
+            turn: 0,
+            _phantom: Default::default(),
         })
     }
 }
@@ -185,10 +189,10 @@ pub type HugeBasicGameState = GameState<HugeBasicBoardState>;
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
     use crate::game::state::RepetitionTracker;
     use crate::pieces::Side;
     use crate::play::Play;
+    use std::str::FromStr;
 
     #[test]
     fn test_repetition_tracker() {

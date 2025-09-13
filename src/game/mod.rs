@@ -10,9 +10,10 @@ use crate::play::{Play, PlayRecord, ValidPlayIterator};
 use crate::rules::Ruleset;
 use crate::tiles::Tile;
 use std::cmp::PartialEq;
-
+use primitive_types::{U256, U512};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
+use crate::bitfield::BitField;
 
 /// The reason why a game has been won.
 #[derive(Eq, PartialEq, Debug, Copy, Clone, Hash)]
@@ -70,18 +71,18 @@ pub enum GameStatus {
 /// after each turn (to allow undoing plays).
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct Game<T: BoardState> {
+pub struct Game<B: BoardState> {
     pub logic: GameLogic,
-    pub state: GameState<T>,
-    pub play_history: Vec<PlayRecord>,
-    pub state_history: Vec<GameState<T>>
+    pub state: GameState<B>,
+    pub play_history: Vec<PlayRecord<B::BitField>>,
+    pub state_history: Vec<GameState<B>>
 }
 
-impl<T: BoardState> Game<T> {
+impl<B: BitField> Game<B> {
 
     /// Create a new [`Game`] from the given rules and starting positions.
     pub fn new(rules: Ruleset, starting_board: &str) -> Result<Self, ParseError> {
-        let state: GameState<T> = GameState::new(starting_board, rules.starting_side)?;
+        let state: GameState<B> = GameState::new(starting_board, rules.starting_side)?;
         let logic = GameLogic::new(rules, state.board.side_len());
             
         Ok(Self { state, logic, play_history: vec![], state_history: vec![state] })
@@ -106,20 +107,20 @@ impl<T: BoardState> Game<T> {
 
     /// Iterate over the possible plays that can be made by the piece at the given tile. Returns an
     /// error if there is no piece at the given tile. Order of iteration is not guaranteed.
-    pub fn iter_plays(&self, tile: Tile) -> Result<ValidPlayIterator<T>, BoardError> {
+    pub fn iter_plays(&self, tile: Tile) -> Result<ValidPlayIterator<B>, BoardError> {
         ValidPlayIterator::new(&self.logic, &self.state, tile)
     }
     
 }
 
 /// Game supporting basic pieces (soldier and king), suitable for boards up to 7x7.
-pub type SmallBasicGame = Game<SmallBasicBoardState>;
+pub type SmallBasicGame = Game<u64>;
 /// Game supporting basic pieces (soldier and king), suitable for boards up to 11x11.
-pub type MediumBasicGame = Game<MediumBasicBoardState>;
+pub type MediumBasicGame = Game<u128>;
 /// Game supporting basic pieces (soldier and king), suitable for boards up to 15x15.
-pub type LargeBasicGame = Game<LargeBasicBoardState>;
+pub type LargeBasicGame = Game<U256>;
 /// Game supporting basic pieces (soldier and king), suitable for boards up to 21x21.
-pub type HugeBasicGame = Game<HugeBasicBoardState>;
+pub type HugeBasicGame = Game<U512>;
 
 #[cfg(test)]
 mod tests {

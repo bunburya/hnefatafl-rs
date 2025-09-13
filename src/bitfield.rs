@@ -1,6 +1,7 @@
 use crate::tiles::Tile;
 use primitive_types::{U256, U512};
 use std::fmt::Debug;
+use std::hash::Hash;
 use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not, Shl, Shr};
 
 /// A very simple trait for numeric array types, giving them a `zero` method that returns an array
@@ -35,7 +36,9 @@ pub trait BitField:
     Shr<u32, Output=Self> +
     Shl<u32, Output=Self> +
     PartialOrd +
+    Eq +
     PartialEq +
+    Hash +
     Default +
     Debug
 {
@@ -91,7 +94,6 @@ pub trait BitField:
 
     /// Clear all bits in the bitfield.
     fn clear(&mut self);
-
 }
 
 /// Implement the [`BitField`] trait for the given integer type. First argument should be the type

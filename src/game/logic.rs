@@ -20,6 +20,7 @@ use crate::utils::UniqueStack;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
+use crate::tileset::TileSet;
 
 /// A space on the board that is enclosed by pieces.
 #[derive(Debug, Default)]
@@ -472,11 +473,11 @@ impl GameLogic {
         away_from_edge: i8,
         dir: i8,
         state: &GameState<T>
-    ) -> Option<HashSet<Tile>> {
+    ) -> Option<T::TileSet> {
         let mut t = play.to();
         // Key is an occupied tile at edge of the board (which is threatened with capture);
         // value is the tile, on the opposite side to the edge, occupied by the opposing piece.
-        let mut wall: HashSet<Tile> = HashSet::new();
+        let mut wall = T::TileSet::empty();
         loop {
             let step = Play::new(t, AxisOffset::new(axis, dir));
             // Move one tile along the edge
@@ -500,7 +501,7 @@ impl GameLogic {
                 // We have already broken out of this loop if the tile is unoccupied, unless it
                 // is a closing corner. Therefore, if `piece` is `None`, we must be at a
                 // closing corner.
-                return if wall.len() < 2 { None } else { Some(wall) };
+                return if wall.count() < 2 { None } else { Some(wall) };
             }
             let piece = piece_opt.expect("Tile should be occupied.");
             if piece.side == state.side_to_play.other() {
@@ -520,7 +521,7 @@ impl GameLogic {
             if (piece.side == state.side_to_play) ||
                 (self.board_geo.special_tiles.corners.contains(&t) && sw_rule.corners_may_close) {
                 // We've found a friendly piece or a corner that may close.
-                return if wall.len() < 2 { None } else { Some(wall) };
+                return if wall.count() < 2 { None } else { Some(wall) };
             }
         }
     }
@@ -528,7 +529,7 @@ impl GameLogic {
     /// Detect whether the given move has created a shieldwall according to the applicable rules.
     /// Returns `None` if no shieldwall is detected; otherwise returns a set of tiles that have been
     /// captured in the shieldwall.
-    pub fn detect_shieldwall<T: BoardState>(&self, valid_play: ValidPlay, state: &GameState<T>) -> Option<HashSet<Tile>> {
+    pub fn detect_shieldwall<T: BoardState>(&self, valid_play: ValidPlay, state: &GameState<T>) -> Option<T::TileSet> {
         let play = valid_play.play;
         let sw_rule = self.rules.shieldwall?;
         let to = play.to();
@@ -550,16 +551,13 @@ impl GameLogic {
             wall = self.dir_sw_search(play, sw_rule, axis, away_from_edge, 1, state);
         }
         if let Some(w) = wall {
-            if w.len() < 2 {
+            if w.count() < 2 {
                 // Can't capture 0 or 1 pieces with a shieldwall
                 return None
             }
             // We've found a shieldwall. Filter out tiles which contain pieces which cannot
             // be captured in a shieldwall.
-            Some(w.into_iter().filter(|t| sw_rule.captures.contains(
-                state.board.get_piece(*t)
-                    .expect("Tile in shieldwall should be occupied."))
-            ).collect())
+            Some(w.intersection(&state.board.occupied_by(sw_rule.captures)))
         } else {
             None
         }
@@ -603,8 +601,8 @@ impl GameLogic {
     }
 
     /// Get the tiles containing pieces captured by the given play.
-    pub fn get_captures<T: BoardState>(&self, valid_play: ValidPlay, moving_piece: Piece, state: &GameState<T>) -> HashSet<PlacedPiece> {
-        let mut captures: HashSet<PlacedPiece> = HashSet::new();
+    pub fn get_captures<T: BoardState>(&self, valid_play: ValidPlay, moving_piece: Piece, state: &GameState<T>) -> T::TileSet {
+        let mut captures: T::TileSet = T::TileSet::empty();
         let to = valid_play.play.to();
 
         // Detect normal captures
@@ -629,7 +627,7 @@ impl GameLogic {
                             t == &self.board_geo.special_tiles.throne
                                 || self.tile_hostile(*t, other_piece, &state.board)
                         ) {
-                            captures.insert(PlacedPiece { tile: n, piece: other_piece });
+                            captures.insert(n);
                             continue
                         }
 
@@ -674,7 +672,7 @@ impl GameLogic {
                                 continue
                             }
                         }
-                        captures.insert(PlacedPiece { tile: n, piece: other_piece });
+                        captures.insert(n);
                     } else if self.rules.linnaean_capture && state.side_to_play == Attacker {
                         if let Some(pp) = self.detect_linnaean_capture(
                             n,
@@ -682,7 +680,7 @@ impl GameLogic {
                             far_coords,
                             state
                         ) {
-                            captures.insert(pp);
+                            captures.insert(n);
                         }
                     }
                 }
@@ -691,10 +689,7 @@ impl GameLogic {
 
         // Detect shieldwall captures
         if let Some(walled) = self.detect_shieldwall(valid_play, state) {
-            captures.extend(walled.iter().map(|t| 
-                PlacedPiece { tile: *t, piece: state.board.get_piece(*t)
-                    .expect("No piece found on captured tile.") }
-            ));
+            captures.extend(&walled);
         }
         captures
 
@@ -705,10 +700,9 @@ impl GameLogic {
         &self,
         valid_play: ValidPlay,
         moving_piece: Piece,
-        caps: &HashSet<PlacedPiece>,
         state: &GameState<T>,
     ) -> Option<GameOutcome> {
-        if state.board.count_pieces(state.side_to_play.other()) == 0 {
+        if state.board.count_pieces_of_side(state.side_to_play.other()) == 0 {
             // All opposing pieces have been captured.
             return Some(Win(AllCaptured, state.side_to_play))
         }
@@ -723,7 +717,7 @@ impl GameLogic {
                         true,
                         &state.board
                     ) {
-                        if encl.occupied.len() == state.board.count_pieces(Defender) as usize
+                        if encl.occupied.len() == state.board.count_pieces_of_side(Defender) as usize
                             && self.enclosure_secure(&encl, false, true, &state.board) {
                             return Some(Win(Enclosed, Attacker))
                         }
@@ -791,16 +785,14 @@ impl GameLogic {
         let moving_piece = state.board.move_piece(play.from, play.to());
         // Then remove captured pieces
         let captures = self.get_captures(valid_play, moving_piece, &state);
-        for &c in &captures {
-            state.board.clear_tile(c.tile)
-        }
+        state.board.clear_tiles(&captures);
         // Update records of repetitions and non-capturing plays
         state.repetitions.track_play(state.side_to_play, play, !captures.is_empty());
         if captures.is_empty() {
             state.plays_since_capture += 1;
         }
         // Then assess the game outcome
-        let game_outcome = self.get_game_outcome(valid_play, moving_piece, &captures, &state);
+        let game_outcome = self.get_game_outcome(valid_play, moving_piece, &state);
 
         state.turn += 1;
         let game_status = match game_outcome {
@@ -837,7 +829,7 @@ impl GameLogic {
     
     /// Whether the given side could make any play given the current board.
     pub fn side_can_play<T: BoardState>(&self, side: Side, state: &GameState<T>) -> bool {
-        for tile in state.board.iter_occupied(side) {
+        for tile in state.board.occupied_by_side(side) {
             if self.iter_plays(tile, state)
                 .expect("Tile must not be empty.")
                 .next().is_some() {

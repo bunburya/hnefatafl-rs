@@ -96,3 +96,4 @@ pub mod preset;
 
 /// Code relating to the board, including board state and geometry.
 pub mod board;
+mod tileset;
