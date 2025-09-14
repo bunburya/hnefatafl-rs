@@ -100,16 +100,14 @@ pub trait BoardState: Default + Clone + Copy + Display + FromStr + Debug + Parti
 
 
 
-/// This struct stores information about piece placement, by piece type. It basically consists of a
-/// separate [`TileSet`] for each player and piece type. In this way it acts like a set of
-/// [`PlacedPiece`]s, though that is now how it is implemented internally. This struct currently
-/// handles only a simple board, i.e. a king and soldiers (no knights, commanders, etc.). It is
-/// primarily used to store the current state of the board in the context of a game, but can also be
-/// used in other instances where a set of placed pieces is required.
+/// This struct stores information about piece placement, by piece type. It is mainly a wrapper
+/// around a [`PieceMap`] though it also stored board length. This struct represents a simple board,
+/// i.e. a king and soldiers (no knights, commanders, etc.).
 ///
 /// The parameter `T` is a type that implements the [`BitField`] trait, ensuring that it supports
 /// the relevant bitwise operations.  For each player/piece type combination (e.g. attacking
 /// soldiers), a single integer of type `T` is used to record the positions of all relevant pieces.
+/// The integer type must be large enough to represent the board.
 ///
 /// Currently, only basic getting and setting are implemented at the bitfield level. More complex
 /// game logic (like checking move validity, etc.) is implemented elsewhere and uses [Tile] structs.

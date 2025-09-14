@@ -4,12 +4,6 @@
 - [ ] Improve center square logic.
   - [ ] Remove special case for strong king beside throne from game logic. The king can be captured by three pieces
     beside the throne if the empty throne is hostile to the king.
-- [ ] Use TileSet
-  - [ ] Captures
-  - [ ] Enclosures
-  - [ ] Corners
-  - [X] Move king to third bitfield in BitfieldBoardState
-  - [ ] Allow setting/unsetting by TileSet in BoardState
 - [ ] Optional database support.
 - [ ] Game protocol (JSON?)
   - [ ] Textual representation of game rules.

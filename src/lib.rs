@@ -24,27 +24,46 @@
 //! 
 //! You can roll your own ruleset and starting board setup, or you can choose from one of the common
 //! variants which are included in the [`preset::rules`] and [`preset::boards`] modules.
-//! 
-//! # Board state
-//! 
-//! There are various ways to represent the placement of pieces on the game board. For example, one
-//! could use bitfields, or an array, etc. These different representations have different trade-offs
-//! between performance, memory efficiency and code readability. To allow developers to roll their
-//! own implementations if they wish, the `GameState` struct (and therefore the `Game` struct as
-//! well) is generic over the parameter `T`, where `T` implements the [`board::state::BoardState`]
-//! trait.
-//! 
-//! `hnefatafl`'s default representation of the board state uses bitfields to represent piece
-//! placement (see [`board::state::BasicBoardState`]). This means that larger boards will require
-//! the use of larger integer types to represent them - for example, a 7x7 board can be represented
-//! by a couple of `u64`s, but an 11x11 board can't (at least, using our existing implementation).
-//! This crate therefore provides a number of different `BoardState` implementations which use
-//! differently-sized integers, so that you can represent larger boards if necessary, but if you
-//! only want to represent a smaller board, you don't need to use a very large integer type. 
 //!
-//! If none of this matters to you, and you just want to use a reasonable default representation,
-//! dealing with type parameters all the time can be annoying, so a few type aliases are provided to
-//! avoid having to specify them all the time.
+//! # Board state
+//!
+//! Board state, and other collections of pieces and tiles, are generally implemented using
+//! bitfields (integers). Larger boards require larger integer types to be able to display
+//! the board state. For example, a 7x7 board can be represented using `u64`s, but an 11x11 board
+//! would require `u128`s.
+//!
+//! In addition, board state generally uses a separate bitfield for each side and
+//! piece type that can be placed on the board. Therefore, for variants which support a wider range
+//! of pieces, more bitfields are required. To allow different board sizes and piece sets
+//! to be represented, while also allowing state for smaller, simpler games to be represented
+//! efficiently, `hnefatafl` uses a number of different traits and structs to represent board state.
+//!
+//! Some of the key traits and structs used to store game state are described below:
+//!
+//! * [`bitfield::BitField`] is a trait allowing access to a bitfield and basic conversions between [`Tile`]s
+//!   and bit indices. It is implemented on a number of different integer types. It is kind of the
+//!   building block of the other structs and traits used to represent board state.
+//! * [`collections::TileSet`] is a struct that represents a set of [`Tiles`] on a board. It is generic over
+//!   `BitField`.
+//! * [`collections::PieceMap`] is a trait allowing mapping of tiles to the pieces (if any) that occupy them.
+//!   `PieceMap` has an associated type `BitField` which is the bitfield type used to represent the
+//!   board state. Several of the collections returned by functions on `PieceMap` are generic over
+//!   that type.
+//! * [`collections::BasicPieceMap`] is a struct that implements `PieceMap` using `TileSet`s to represent
+//!   the "basic" pieces: attacking soldiers, defending soldiers and defending king.
+//! * [`board::state::BoardState`] is a trait allowing access to the board state. It has two associated types:
+//!   `BitField` and `PieceMap` (each of which is constrained by the trait of the same name) which
+//!   are used to store and represent board state internally.
+//! * [`board::state::BasicBoardState`] is a struct that implements `BoardState` for basic pieces. It is generic
+//!   over `BitField` and uses a `BasicPieceMap` to store state internally.
+//! * [`game::state::GameState`] is a struct that represents the current state of a game. It is generic over
+//!   `BoardState`, and includes both board state and other game state, such as the player whose
+//!   turn it is.
+//! * [`game::Game`] is a struct that represents a game. It groups together state, rules and history. It
+//!   is generic over `BoardState`.
+//!
+//! To reduce the complexity of having to deal with generics and associated types for simple use
+//! cases, some concrete implementations of these traits are provided. These are described below.
 //! 
 //! Default `GameState` implementations:
 //! - [`game::state::SmallBasicGameState`]
@@ -59,7 +78,7 @@
 //! - [`game::HugeBasicGame`]
 //! 
 //! So if you just want to play a game on a 7x7 board, you can use a `SmallBasicGame` instead of a
-//! `Game<BitfieldBoardState<u64>>`.
+//! `Game<BasicBoardState<u64>>`.
 //!
 //! # Serialization
 //!
