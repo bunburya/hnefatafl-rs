@@ -1,22 +1,24 @@
 use crate::bitfield::BitField;
 use crate::error::ParseError;
 use crate::error::ParseError::BadLineLen;
-use crate::pieces::PieceType::{King, Soldier};
-use crate::pieces::{Piece, PieceSet, Side};
+use crate::pieces::{Piece, Side};
 use crate::tiles::Tile;
 use primitive_types::{U256, U512};
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::Hash;
 use std::str::FromStr;
 
-use crate::tileset::TileSet;
+use crate::collections::tileset::TileSet;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
+use crate::collections::piecemap::{BasicPieceMap, PieceMap};
+use crate::collections::pieceset::PieceSet;
 
 /// Store information on the current board state (ie, pieces).
 pub trait BoardState: Default + Clone + Copy + Display + FromStr + Debug + PartialEq {
 
     type BitField: BitField;
+    type PieceMap: PieceMap;
 
     /// Get the tile on which the king is currently placed.
     fn get_king(&self) -> Option<Tile>;
@@ -36,7 +38,7 @@ pub trait BoardState: Default + Clone + Copy + Display + FromStr + Debug + Parti
     fn clear_tile(&mut self, t: Tile);
 
     /// Clear all tiles in the given set.
-    fn clear_tiles(&mut self, tiles: TileSet<Self::BitField>);
+    fn clear_tiles(&mut self, tiles: &TileSet<Self::BitField>);
 
     /// Get the piece that occupies the given tile, if any.
     fn get_piece(&self, t: Tile) -> Option<Piece>;
@@ -86,116 +88,97 @@ pub trait BoardState: Default + Clone + Copy + Display + FromStr + Debug + Parti
     }
 
     /// Return a set of all tiles occupied by any piece in the given set.
-    fn occupied_by(&self, piece_set: PieceSet) -> TileSet<Self::BitField>;
+    fn occupied_by(&self, piece_set: &PieceSet) -> TileSet<Self::BitField>;
 
     /// Return the set of all tiles occupied by any piece.
     fn occupied_by_any(&self) -> TileSet<Self::BitField>;
 
+    /// Remove all placed pieces represented by the given piece map from the board.
+    fn remove_placed_pieces(&mut self, piece_map: &Self::PieceMap);
+
 }
 
 
 
-/// Store information on the current board state (ie, pieces) using bitfields. This struct currently
-/// handles only a simple board, ie, a king and soldiers (no knights, commanders, etc).
+/// This struct stores information about piece placement, by piece type. It basically consists of a
+/// separate [`TileSet`] for each player and piece type. In this way it acts like a set of
+/// [`PlacedPiece`]s, though that is now how it is implemented internally. This struct currently
+/// handles only a simple board, i.e. a king and soldiers (no knights, commanders, etc.). It is
+/// primarily used to store the current state of the board in the context of a game, but can also be
+/// used in other instances where a set of placed pieces is required.
 ///
 /// The parameter `T` is a type that implements the [`BitField`] trait, ensuring that it supports
-/// the relevant bitwise operations.  A single integer of type `T` is used to record the positions
-/// of all attacker pieces, and another integer is used to record the positions of the defender
-/// bits. There should generally be some bits left over, which are used to encode the current
-/// position of the king.
+/// the relevant bitwise operations.  For each player/piece type combination (e.g. attacking
+/// soldiers), a single integer of type `T` is used to record the positions of all relevant pieces.
 ///
-/// Currently only basic getting and setting is implemented at the bitfield level. More complex game
-/// logic (like checking move validity, etc) is implemented elsewhere and uses [Tile] structs. If
-/// performance was an issue we could look at moving some of that logic to the bitfield level.
+/// Currently, only basic getting and setting are implemented at the bitfield level. More complex
+/// game logic (like checking move validity, etc.) is implemented elsewhere and uses [Tile] structs.
+/// If performance was an issue, we could look at moving some of that logic to the bitfield level.
 #[derive(Copy, Clone, Hash, Eq, PartialEq, Default, Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[cfg_attr(feature = "serde", serde(bound = "B: serde::Serialize + serde::de::DeserializeOwned"))]
-pub struct BitfieldBasicBoardState<B: BitField> {
-    attackers: TileSet<B>,
-    defenders: TileSet<B>,
-    king: TileSet<B>,
+pub struct BasicBoardState<B: BitField> {
+    pieces: BasicPieceMap<B>,
     side_len: u8
 }
 
-impl<B: BitField> BoardState for BitfieldBasicBoardState<B> {
+impl<B: BitField> BasicBoardState<B> {
+    fn empty(side_len: u8) -> Self {
+        Self {
+            pieces: BasicPieceMap::default(),
+            side_len
+        }
+    }
+}
+
+impl<B: BitField> BoardState for BasicBoardState<B> {
 
     type BitField = B;
+    type PieceMap = BasicPieceMap<B>;
 
     fn get_king(&self) -> Option<Tile> {
-        if self.king.is_empty() {
+        if self.pieces.king.is_empty() {
             None
         } else {
-            Some(self.king.first())
+            Some(self.pieces.king.first())
         }
     }
 
     fn set_king(&mut self, t: Tile) {
-        self.king.insert(t);
+        self.pieces.king.insert(t);
     }
 
     fn set_piece(&mut self, t: Tile, piece: Piece) {
-        match piece {
-            Piece { piece_type: Soldier, side: Side::Attacker } => {
-                self.attackers.insert(t);
-                self.defenders.remove(t);
-                self.king.remove(t);
-            },
-            Piece { piece_type: Soldier, side: Side::Defender } => {
-                self.defenders.insert(t);
-                self.attackers.remove(t);
-                self.king.remove(t);
-            },
-            Piece { piece_type: King, side: Side::Defender } => {
-                self.king.insert(t);
-                self.attackers.remove(t);
-                self.defenders.remove(t);
-            },
-            // Attacking king. Should never happen. Just do nothing.
-            _ => ()
-        }
+        self.pieces.set(t, piece);
     }
 
     fn clear_tile(&mut self, t: Tile) {
-        self.attackers.remove(t);
-        self.defenders.remove(t);
-        self.king.remove(t);
+        self.pieces.remove(t);
     }
 
-    fn clear_tiles(&mut self, tiles: TileSet<B>) {
-        let inv = !tiles;
-        self.attackers &= inv;
-        self.defenders &= inv;
-        self.king &= inv;
+    fn clear_tiles(&mut self, tiles: &TileSet<B>) {
+       self.pieces.remove_tiles(*tiles);
     }
 
     fn get_piece(&self, t: Tile) -> Option<Piece> {
-        if self.attackers.contains(t) {
-            Some(Piece::attacker(Soldier))
-        } else if self.defenders.contains(t) {
-            Some(Piece::defender(Soldier))
-        } else if self.king.contains(t) {
-            Some(Piece::king())
-        } else {
-            None
-        }
+        self.pieces.get(t)
     }
 
     fn tile_occupied(&self, t: Tile) -> bool {
-        let all_pieces = self.defenders | self.attackers | self.king;
-        all_pieces.contains(t)
+        self.pieces.occupied().contains(t)
     }
 
     fn count_pieces_of_side(&self, side: Side) -> u8 {
         (match side {
-            Side::Attacker => self.attackers.count(),
-            Side::Defender => (self.defenders | self.king).count()
+            Side::Attacker => self.pieces.attacking_soldier.count(),
+            Side::Defender => (self.pieces.defending_soldier | self.pieces.king).count()
         }) as u8
     }
 
     fn occupied_by_side(&self, side: Side) -> TileSet<B> {
         match side {
-            Side::Attacker => self.attackers,
-            Side::Defender => self.defenders | self.king
+            Side::Attacker => self.pieces.attacking_soldier,
+            Side::Defender => self.pieces.defending_soldier | self.pieces.king
         }
     }
 
@@ -298,58 +281,54 @@ impl<B: BitField> BoardState for BitfieldBasicBoardState<B> {
         self.side_len
     }
 
-    fn occupied_by(&self, piece_set: PieceSet) -> TileSet<B> {
-        let mut s = TileSet::empty();
-        if piece_set.contains(Piece::attacker(Soldier)) {
-            s.extend(&self.attackers);
-        }
-        if piece_set.contains(Piece::defender(Soldier)) {
-            s.extend(&self.defenders);
-        }
-        if piece_set.contains(Piece::king()) {
-            s.extend(&self.king);
-        }
-        s
+    fn occupied_by(&self, piece_set: &PieceSet) -> TileSet<B> {
+        self.pieces.occupied_by(*piece_set)
     }
 
     fn occupied_by_any(&self) -> TileSet<B> {
-        self.attackers | self.defenders | self.king
+        self.pieces.occupied()
+    }
+
+    fn remove_placed_pieces(&mut self, piece_map: &BasicPieceMap<Self::BitField>) {
+        self.pieces.attacking_soldier &= !piece_map.attacking_soldier;
+        self.pieces.defending_soldier &= !piece_map.defending_soldier;
+        self.pieces.king &= !piece_map.king;
     }
 }
 
-impl<T: BitField> FromStr for BitfieldBasicBoardState<T> {
+impl<T: BitField> FromStr for BasicBoardState<T> {
     type Err = ParseError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Self::from_fen(s)
     }
 }
 
-impl <T: BitField> Display for BitfieldBasicBoardState<T> {
+impl <T: BitField> Display for BasicBoardState<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.to_display_str())
     }
 }
 
 /// Board state supporting basic pieces (soldier and king), suitable for boards up to 7x7.
-pub type SmallBasicBoardState = BitfieldBasicBoardState<u64>;
+pub type SmallBasicBoardState = BasicBoardState<u64>;
 /// Board state supporting basic pieces (soldier and king), suitable for boards up to 11x11.
-pub type MediumBasicBoardState = BitfieldBasicBoardState<u128>;
+pub type MediumBasicBoardState = BasicBoardState<u128>;
 
 /// Board state supporting basic pieces (soldier and king), suitable for boards up to 15x15.
-pub type LargeBasicBoardState = BitfieldBasicBoardState<U256>;
+pub type LargeBasicBoardState = BasicBoardState<U256>;
 
 /// Board state supporting basic pieces (soldier and king), suitable for boards up to 21x21.
-pub type HugeBasicBoardState = BitfieldBasicBoardState<U512>;
+pub type HugeBasicBoardState = BasicBoardState<U512>;
 
 #[cfg(test)]
 mod tests {
     use crate::board::state::{BoardState, MediumBasicBoardState, SmallBasicBoardState};
+    use crate::collections::tileset::TileSet;
     use crate::pieces::Piece;
     use crate::pieces::PieceType::{King, Soldier};
     use crate::pieces::Side::{Attacker, Defender};
     use crate::preset::boards;
     use crate::tiles::Tile;
-    use crate::tileset::TileSet;
     use std::str::FromStr;
 
     #[test]

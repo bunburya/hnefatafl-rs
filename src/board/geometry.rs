@@ -5,7 +5,7 @@ use crate::tiles::{Coords, Tile, TileIterator};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 use crate::bitfield::BitField;
-use crate::tileset::TileSet;
+use crate::collections::tileset::TileSet;
 
 const NEIGHBOR_OFFSETS: [[i8; 2]; 4] = [[-1, 0], [1, 0], [0, -1], [0, 1]];
 

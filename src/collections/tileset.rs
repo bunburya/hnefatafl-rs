@@ -188,7 +188,7 @@ impl<'a, B: BitField, T: Iterator<Item=&'a Tile>> From<T> for TileSet<B> {
 macro_rules! tileset {
     ($( $x: expr ),* ) => {
         {
-            use crate::tileset::TileSet;
+            use crate::collections::tileset::TileSet;
             let mut tmp = TileSet::empty();
             $(
                 tmp.insert($x);

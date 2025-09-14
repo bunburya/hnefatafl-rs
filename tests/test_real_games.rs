@@ -8,11 +8,12 @@ use hnefatafl::play::Play;
 use hnefatafl::preset::{boards, rules};
 use hnefatafl::rules::Ruleset;
 use hnefatafl::tiles::Tile;
-use hnefatafl::tileset::TileSet;
+use hnefatafl::collections::tileset::TileSet;
 use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
 use std::str::FromStr;
+use hnefatafl::collections::piecemap::PieceMap;
 
 fn play_captures_from_str(s: &str) -> Result<(Play, HashSet<Tile>), ParseError> {
     if s.is_empty() {
@@ -69,7 +70,7 @@ fn test_real_games(rules: Ruleset, starting_posn: &str, fname: &str) {
                     // Test data doesn't report capture of king as a capture using "x" notation
                     let mut without_king = captures;
                     without_king.remove(g.state.board.get_king().unwrap());
-                    assert_eq!(without_king, TileSet::from(c.iter()));
+                    assert_eq!(without_king.occupied(), TileSet::from(c.iter()));
                 }
 
                 let game_status_res = g.do_play(p);

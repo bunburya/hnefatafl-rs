@@ -4,18 +4,17 @@ use crate::error::{BoardError, ParseError, PlayError};
 use crate::game::logic::GameLogic;
 use crate::game::state::GameState;
 use crate::game::GameOutcome;
-use crate::pieces::{Piece, Side};
+use crate::pieces::{Piece, PlacedPiece, Side};
 use crate::tiles::Axis::{Horizontal, Vertical};
 use crate::tiles::{Axis, AxisOffset, Coords, Tile};
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
-use crate::bitfield::BitField;
 use crate::board::state::BoardState;
 use crate::game::GameOutcome::{Draw, Win};
-use crate::tileset::TileSet;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
+use crate::collections::piecemap::PieceMap;
 
 /// A single move of a piece from one tile to another. (Named "Play" rather than "Move" as the lower-cased version of
 /// the latter would clash with the Rust keyword.)
@@ -121,7 +120,7 @@ impl Display for ValidPlay {
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct PlayEffects<B: BoardState> {
     /// Tiles containing pieces that have been captured by the move.
-    pub captures: TileSet<B::BitField>,
+    pub captures: B::PieceMap,
     /// The outcome of the game, if the move has brought the game to an end.
     pub game_outcome: Option<GameOutcome>
 }
@@ -151,8 +150,8 @@ impl<B: BoardState> Display for PlayRecord<B> {
         write!(f, "{}", self.play)?;
         if !self.effects.captures.is_empty() {
             write!(f, "x{}",
-                self.effects.captures.clone().into_iter().map(|t|
-                    t.to_string()).collect::<Vec<_>>().join("/"))?;
+                self.effects.captures.clone().into_iter().map(|pp: PlacedPiece |
+                    pp.tile.to_string()).collect::<Vec<_>>().join("/"))?;
         }
         match self.effects.game_outcome {
             Some(Win(_, side)) => {

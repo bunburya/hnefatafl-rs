@@ -5,8 +5,8 @@ use crate::game::GameStatus::Ongoing;
 use crate::pieces::Side;
 use crate::play::{Play, PlayRecord};
 use std::cmp::PartialEq;
+use crate::collections::piecemap::PieceMap;
 
-use crate::bitfield::BitField;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -160,8 +160,6 @@ pub struct GameState<B: BoardState> {
     pub status: GameStatus,
     /// Number of plays that have been taken by either side.
     pub turn: usize,
-
-    _phantom: std::marker::PhantomData<B>
 }
 
 impl <B: BoardState> GameState<B> {
@@ -173,7 +171,6 @@ impl <B: BoardState> GameState<B> {
             plays_since_capture: 0,
             status: Ongoing,
             turn: 0,
-            _phantom: Default::default(),
         })
     }
 }
