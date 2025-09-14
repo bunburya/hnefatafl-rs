@@ -10,13 +10,14 @@ keywords = ["tafl", "hnefatafl", "gamedev", "boardgames"]
 categories = ["game-development", "game-engines"]
 
 [dependencies]
-primitive-types = "0.13.1"
+primitive-types =  "0.13.1"
 serde = { version = "1.0.219", optional = true, features = ["derive"] }
 
 [dev-dependencies]
 bincode = { version = "2.0.1", features = ["serde"]}
 
 [features]
+serde = ["dep:serde", "primitive-types/serde"]
 demo = []
 
 [lib]

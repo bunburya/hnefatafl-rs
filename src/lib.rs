@@ -35,7 +35,7 @@
 //! trait.
 //! 
 //! `hnefatafl`'s default representation of the board state uses bitfields to represent piece
-//! placement (see [`board::state::BitfieldBasicBoardState`]). This means that larger boards will require
+//! placement (see [`board::state::BasicBoardState`]). This means that larger boards will require
 //! the use of larger integer types to represent them - for example, a 7x7 board can be represented
 //! by a couple of `u64`s, but an 11x11 board can't (at least, using our existing implementation).
 //! This crate therefore provides a number of different `BoardState` implementations which use
@@ -96,3 +96,6 @@ pub mod preset;
 
 /// Code relating to the board, including board state and geometry.
 pub mod board;
+
+/// Code relating to collections of pieces and tiles.
+pub mod collections;

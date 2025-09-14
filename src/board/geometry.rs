@@ -4,24 +4,25 @@ use crate::tiles::{Coords, Tile, TileIterator};
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
+use crate::bitfield::BitField;
+use crate::collections::tileset::TileSet;
 
 const NEIGHBOR_OFFSETS: [[i8; 2]; 4] = [[-1, 0], [1, 0], [0, -1], [0, 1]];
 
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct SpecialTiles {
+pub struct SpecialTiles<B: BoardState> {
     pub throne: Tile,
-    pub corners: [Tile; 4]
+    pub corners: TileSet<B::BitField>
 }
 
-impl From<u8> for SpecialTiles {
+impl<B: BoardState> From<u8> for SpecialTiles<B> {
     fn from(board_len: u8) -> Self {
-        let corners = [
-            Tile::new(0, 0),
-            Tile::new(0, board_len - 1),
-            Tile::new(board_len - 1, board_len - 1),
-            Tile::new(board_len - 1, 0)
-        ];
+        let mut corners = TileSet::empty();
+        corners.insert(Tile::new(0, 0));
+        corners.insert(Tile::new(0, board_len - 1));
+        corners.insert(Tile::new(board_len - 1, board_len - 1));
+        corners.insert(Tile::new(board_len - 1, 0));
         let throne = Tile::new(board_len / 2, board_len / 2);
         Self { corners, throne }
     }
@@ -32,12 +33,12 @@ impl From<u8> for SpecialTiles {
 /// other state that would be expected to change over the course of a game.
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct BoardGeometry {
+pub struct BoardGeometry<B: BoardState> {
     pub side_len: u8,
-    pub special_tiles: SpecialTiles
+    pub special_tiles: SpecialTiles<B>
 }
 
-impl BoardGeometry {
+impl<B: BoardState> BoardGeometry<B> {
 
     /// Create an empty board with the given side length.
     pub fn new(side_len: u8) -> Self {
@@ -161,12 +162,13 @@ impl BoardGeometry {
 #[cfg(test)]
 mod tests {
     use crate::board::geometry::BoardGeometry;
+    use crate::board::state::SmallBasicBoardState;
     use crate::tiles::Tile;
     use crate::utils::check_tile_vec;
 
     #[test]
     fn test_neighbors() {
-        let geo = BoardGeometry::new(7);
+        let geo: BoardGeometry<SmallBasicBoardState> = BoardGeometry::new(7);
         let n = geo.neighbors(Tile::new(0, 0));
         check_tile_vec(n, vec![
             Tile::new(0, 1),

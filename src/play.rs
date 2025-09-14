@@ -1,20 +1,20 @@
-use std::collections::HashSet;
+use crate::error::ParseError::{BadPlay, BadString};
+use crate::error::PlayError::DisjointTiles;
+use crate::error::{BoardError, ParseError, PlayError};
+use crate::game::logic::GameLogic;
+use crate::game::state::GameState;
+use crate::game::GameOutcome;
+use crate::pieces::{Piece, PlacedPiece, Side};
+use crate::tiles::Axis::{Horizontal, Vertical};
 use crate::tiles::{Axis, AxisOffset, Coords, Tile};
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
-use crate::board::state::BoardState;
-use crate::error::{BoardError, ParseError, PlayError};
-use crate::error::ParseError::{BadPlay, BadString};
-use crate::error::PlayError::DisjointTiles;
-use crate::game::logic::GameLogic;
-use crate::game::GameOutcome;
-use crate::game::state::GameState;
-use crate::pieces::{Piece, PlacedPiece, Side};
-use crate::tiles::Axis::{Horizontal, Vertical};
 
+use crate::board::state::BoardState;
+use crate::collections::piecemap::PieceMap;
+use crate::game::GameOutcome::{Draw, Win};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
-use crate::game::GameOutcome::{Draw, Win};
 
 /// A single move of a piece from one tile to another. (Named "Play" rather than "Move" as the lower-cased version of
 /// the latter would clash with the Rust keyword.)
@@ -118,9 +118,9 @@ impl Display for ValidPlay {
 /// any.
 #[derive(Eq, PartialEq, Debug, Default, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct PlayEffects {
+pub struct PlayEffects<B: BoardState> {
     /// Tiles containing pieces that have been captured by the move.
-    pub captures: HashSet<PlacedPiece>,
+    pub captures: B::PieceMap,
     /// The outcome of the game, if the move has brought the game to an end.
     pub game_outcome: Option<GameOutcome>
 }
@@ -128,16 +128,16 @@ pub struct PlayEffects {
 /// A record of a single play.
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct PlayRecord {
+pub struct PlayRecord<B: BoardState> {
     /// The side that made the play.
     pub side: Side,
     /// Details of the play (piece movement) itself.
     pub play: Play,
     /// Details of the effects of the play.
-    pub effects: PlayEffects
+    pub effects: PlayEffects<B>
 }
 
-impl PlayRecord {
+impl<B: BoardState> PlayRecord<B> {
     
     /// Whether these two records are equal, ignoring the outcomes of the moves.
     pub fn eq_ignore_outcome(&self, other: &Self) -> bool {
@@ -145,13 +145,13 @@ impl PlayRecord {
     }
 }
 
-impl Display for PlayRecord {
+impl<B: BoardState> Display for PlayRecord<B> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.play)?;
         if !self.effects.captures.is_empty() {
             write!(f, "x{}",
-                self.effects.captures.iter().map(|p|
-                    p.tile.to_string()).collect::<Vec<_>>().join("/"))?;
+                self.effects.captures.clone().into_iter().map(|pp: PlacedPiece |
+                    pp.tile.to_string()).collect::<Vec<_>>().join("/"))?;
         }
         match self.effects.game_outcome {
             Some(Win(_, side)) => {
@@ -171,18 +171,17 @@ impl Display for PlayRecord {
 /// An iterator over the possible plays that can be made by the piece at the given tile. Note that
 /// because this struct holds a reference to the [`GameLogic`] and [`GameState`], neither may be
 /// mutated while the iterator exists. Order of iteration is not guaranteed.
-
-pub struct ValidPlayIterator<'a, 'b, T: BoardState> {
-    game_logic: &'a GameLogic,
-    game_state: &'b GameState<T>,
+pub struct ValidPlayIterator<'a, 'b, B: BoardState> {
+    game_logic: &'a GameLogic<B>,
+    game_state: &'b GameState<B>,
     start_tile: Tile,
     piece: Piece,
     movement: AxisOffset,
 }
 
-impl<'logic, 'state, T: BoardState> ValidPlayIterator<'logic, 'state, T> {
+impl<'logic, 'state, B: BoardState> ValidPlayIterator<'logic, 'state, B> {
 
-    pub fn new(game_logic: &'logic GameLogic, game_state: &'state GameState<T>, tile: Tile)
+    pub fn new(game_logic: &'logic GameLogic<B>, game_state: &'state GameState<B>, tile: Tile)
         -> Result<Self, BoardError> {
         if let Some(piece) = game_state.board.get_piece(tile) {
             Ok(Self {
@@ -219,7 +218,7 @@ impl<'logic, 'state, T: BoardState> ValidPlayIterator<'logic, 'state, T> {
     }
 }
 
-impl<'logic, 'state, T: BoardState> Iterator for ValidPlayIterator<'logic, 'state, T> {
+impl<'logic, 'state, B: BoardState> Iterator for ValidPlayIterator<'logic, 'state, B> {
     type Item = ValidPlay;
 
     fn next(&mut self) -> Option<Self::Item> {
