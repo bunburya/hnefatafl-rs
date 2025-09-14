@@ -11,10 +11,10 @@ use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
 use crate::board::state::BoardState;
+use crate::collections::piecemap::PieceMap;
 use crate::game::GameOutcome::{Draw, Win};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
-use crate::collections::piecemap::PieceMap;
 
 /// A single move of a piece from one tile to another. (Named "Play" rather than "Move" as the lower-cased version of
 /// the latter would clash with the Rust keyword.)
@@ -171,7 +171,6 @@ impl<B: BoardState> Display for PlayRecord<B> {
 /// An iterator over the possible plays that can be made by the piece at the given tile. Note that
 /// because this struct holds a reference to the [`GameLogic`] and [`GameState`], neither may be
 /// mutated while the iterator exists. Order of iteration is not guaranteed.
-
 pub struct ValidPlayIterator<'a, 'b, B: BoardState> {
     game_logic: &'a GameLogic<B>,
     game_state: &'b GameState<B>,

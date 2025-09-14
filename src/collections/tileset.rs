@@ -197,3 +197,33 @@ macro_rules! tileset {
         }
     };
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tiles::Tile;
+
+    #[test]
+    fn basic_test() {
+        let mut tile_set = TileSet::<u64>::empty();
+        assert!(tile_set.is_empty());
+        assert_eq!(tile_set.count(), 0);
+        tile_set.insert(Tile::new(1, 3));
+        assert!(!tile_set.is_empty());
+        assert_eq!(tile_set.count(), 1);
+        assert!(tile_set.contains(Tile::new(1, 3)));
+        assert!(!tile_set.contains(Tile::new(1, 4)));
+
+        let other_tile_set = TileSet::<u64>::from(vec![
+            &Tile::new(4, 2),
+            &Tile::new(1, 3),
+            &Tile::new(6, 1)
+        ].into_iter());
+        assert_eq!(other_tile_set.count(), 3);
+        let intersection = tile_set.intersection(&other_tile_set);
+        assert!(intersection.contains(Tile::new(1, 3)));
+        assert!(!intersection.contains(Tile::new(4, 2)));
+        assert!(!intersection.contains(Tile::new(6, 1)));
+
+    }
+}
