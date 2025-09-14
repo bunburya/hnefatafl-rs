@@ -109,6 +109,7 @@ pub trait BoardState: Default + Clone + Copy + Display + FromStr + Debug + Parti
 /// performance was an issue we could look at moving some of that logic to the bitfield level.
 #[derive(Copy, Clone, Hash, Eq, PartialEq, Default, Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", serde(bound = "B: serde::Serialize + serde::de::DeserializeOwned"))]
 pub struct BitfieldBasicBoardState<B: BitField> {
     attackers: TileSet<B>,
     defenders: TileSet<B>,

@@ -20,7 +20,7 @@ pub(crate) struct ShortPlayRecord {
     captures: bool
 }
 
-impl<B: BitField> From<&PlayRecord<B>> for ShortPlayRecord {
+impl<B: BoardState> From<&PlayRecord<B>> for ShortPlayRecord {
     fn from(play_record: &PlayRecord<B>) -> Self {
         Self {
             side: play_record.side,

@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", serde(bound = "B: serde::Serialize + serde::de::DeserializeOwned"))]
 pub struct TileSet<B: BitField> {
     bitfield: B
 }

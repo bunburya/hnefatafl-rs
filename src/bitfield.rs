@@ -21,10 +21,7 @@ macro_rules! impl_zero_array {
     }
 }
 
-/// A trait for any integer type that can be used as a bitfield to store board state. See also the
-/// [`crate::impl_bitfield!`] and [`crate::impl_bitfield_bigint!`] macros that can help to implement
-/// this trait for a particular integer type.
-pub trait BitField:
+trait CommonBitFieldSuperTraits:
     Sized +
     Copy +
     From<u8> +
@@ -40,7 +37,24 @@ pub trait BitField:
     PartialEq +
     Hash +
     Default +
-    Debug
+    Debug {}
+
+#[cfg(feature = "serde")]
+pub trait BitFieldSuperTraits:
+    CommonBitFieldSuperTraits +
+    serde::Serialize +
+    for<'de> serde::Deserialize<'de> {}
+
+#[cfg(not(feature = "serde"))]
+trait BitFieldSuperTraits: CommonBitFieldSuperTraits {}
+
+impl<T: BitField> CommonBitFieldSuperTraits for T {}
+impl<T: BitField> BitFieldSuperTraits for T {}
+
+/// A trait for any integer type that can be used as a bitfield to store board state. See also the
+/// [`crate::impl_bitfield!`] and [`crate::impl_bitfield_bigint!`] macros that can help to implement
+/// this trait for a particular integer type.
+pub trait BitField: BitFieldSuperTraits
 {
     /// The type that is returned by `Self::to_be_bytes` and accepted by `Self::from_be_bytes`.
     /// In general this should be of the form `[u8; n]` where `n` is the size in bytes of the

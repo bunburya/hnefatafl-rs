@@ -1,6 +1,7 @@
 pub mod logic;
 pub mod state;
 
+use crate::bitfield::BitField;
 use crate::board::state::{BoardState, HugeBasicBoardState, LargeBasicBoardState, MediumBasicBoardState, SmallBasicBoardState};
 use crate::error::{BoardError, ParseError, PlayInvalid};
 use crate::game::logic::GameLogic;
@@ -9,11 +10,9 @@ use crate::pieces::Side;
 use crate::play::{Play, PlayRecord, ValidPlayIterator};
 use crate::rules::Ruleset;
 use crate::tiles::Tile;
-use std::cmp::PartialEq;
-use primitive_types::{U256, U512};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
-use crate::bitfield::BitField;
+use std::cmp::PartialEq;
 
 /// The reason why a game has been won.
 #[derive(Eq, PartialEq, Debug, Copy, Clone, Hash)]
@@ -72,13 +71,13 @@ pub enum GameStatus {
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Game<B: BoardState> {
-    pub logic: GameLogic,
+    pub logic: GameLogic<B>,
     pub state: GameState<B>,
-    pub play_history: Vec<PlayRecord<B::BitField>>,
+    pub play_history: Vec<PlayRecord<B>>,
     pub state_history: Vec<GameState<B>>
 }
 
-impl<B: BitField> Game<B> {
+impl<B: BoardState> Game<B> {
 
     /// Create a new [`Game`] from the given rules and starting positions.
     pub fn new(rules: Ruleset, starting_board: &str) -> Result<Self, ParseError> {
@@ -114,13 +113,13 @@ impl<B: BitField> Game<B> {
 }
 
 /// Game supporting basic pieces (soldier and king), suitable for boards up to 7x7.
-pub type SmallBasicGame = Game<u64>;
+pub type SmallBasicGame = Game<SmallBasicBoardState>;
 /// Game supporting basic pieces (soldier and king), suitable for boards up to 11x11.
-pub type MediumBasicGame = Game<u128>;
+pub type MediumBasicGame = Game<MediumBasicBoardState>;
 /// Game supporting basic pieces (soldier and king), suitable for boards up to 15x15.
-pub type LargeBasicGame = Game<U256>;
+pub type LargeBasicGame = Game<LargeBasicBoardState>;
 /// Game supporting basic pieces (soldier and king), suitable for boards up to 21x21.
-pub type HugeBasicGame = Game<U512>;
+pub type HugeBasicGame = Game<HugeBasicBoardState>;
 
 #[cfg(test)]
 mod tests {
