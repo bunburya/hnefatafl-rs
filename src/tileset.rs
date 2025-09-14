@@ -172,12 +172,28 @@ impl<B: BitField> From<TileSet<B>> for HashSet<Tile> {
     }
 }
 
-impl<B: BitField> From<HashSet<Tile>> for TileSet<B> {
-    fn from(set: HashSet<Tile>) -> Self {
+
+impl<'a, B: BitField, T: Iterator<Item=&'a Tile>> From<T> for TileSet<B> {
+    fn from(tiles: T) -> Self {
         let mut tile_set = Self::empty();
-        for t in set {
-            tile_set.insert(t);
+        for t in tiles {
+            tile_set.insert(*t);
         }
         tile_set
     }
+}
+
+/// Creates a [`TileSet`] containing the arguments, similar to [`vec!`].
+#[macro_export]
+macro_rules! tileset {
+    ($( $x: expr ),* ) => {
+        {
+            use crate::tileset::TileSet;
+            let mut tmp = TileSet::empty();
+            $(
+                tmp.insert($x);
+            )*
+            tmp
+        }
+    };
 }

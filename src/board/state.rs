@@ -418,7 +418,7 @@ mod tests {
             Tile::new(3, 5),
             Tile::new(3, 6)
         );
-        assert_eq!(attackers, TileSet::from(expected));
+        assert_eq!(attackers, TileSet::from(expected.iter()));
         let defenders = state.occupied_by_side(Defender);
         let expected = hashset!(
             Tile::new(2, 3),
@@ -427,7 +427,7 @@ mod tests {
             Tile::new(3, 2),
             Tile::new(3, 4)
         );
-        assert_eq!(defenders, TileSet::from(expected));
+        assert_eq!(defenders, TileSet::from(expected.iter()));
     }
 
     #[test]
