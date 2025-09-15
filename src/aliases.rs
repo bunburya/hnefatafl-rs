@@ -26,9 +26,9 @@ pub type LargeBasicBoardState = BasicBoardState<LargeBitfield>;
 pub type HugeBasicBoardState = BasicBoardState<HugeBitfield>;
 
 pub type SmallPlayRecord = PlayRecord<SmallBasicBoardState>;
-pub type MediumPlayRecord = PlayRecord<SmallBasicBoardState>;
-pub type LargePlayRecord = PlayRecord<SmallBasicBoardState>;
-pub type HugePlayRecord = PlayRecord<SmallBasicBoardState>;
+pub type MediumPlayRecord = PlayRecord<MediumBasicBoardState>;
+pub type LargePlayRecord = PlayRecord<LargeBasicBoardState>;
+pub type HugePlayRecord = PlayRecord<HugeBasicBoardState>;
 
 pub type SmallBasicGameState = GameState<SmallBasicBoardState>;
 pub type MediumBasicGameState = GameState<MediumBasicBoardState>;
