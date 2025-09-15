@@ -20,15 +20,15 @@ pub type MediumBitfield = u128;
 pub type LargeBitfield = U256;
 pub type HugeBitfield = U512;
 
-pub type SmallPlayRecord = PlayRecord<SmallBitfield>;
-pub type MediumPlayRecord = PlayRecord<MediumBitfield>;
-pub type LargePlayRecord = PlayRecord<LargeBitfield>;
-pub type HugePlayRecord = PlayRecord<HugeBitfield>;
-
 pub type SmallBasicBoardState = BasicBoardState<SmallBitfield>;
 pub type MediumBasicBoardState = BasicBoardState<MediumBitfield>;
 pub type LargeBasicBoardState = BasicBoardState<LargeBitfield>;
 pub type HugeBasicBoardState = BasicBoardState<HugeBitfield>;
+
+pub type SmallPlayRecord = PlayRecord<SmallBasicBoardState>;
+pub type MediumPlayRecord = PlayRecord<SmallBasicBoardState>;
+pub type LargePlayRecord = PlayRecord<SmallBasicBoardState>;
+pub type HugePlayRecord = PlayRecord<SmallBasicBoardState>;
 
 pub type SmallBasicGameState = GameState<SmallBasicBoardState>;
 pub type MediumBasicGameState = GameState<MediumBasicBoardState>;
