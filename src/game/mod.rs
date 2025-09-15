@@ -1,8 +1,7 @@
 pub mod logic;
 pub mod state;
 
-use crate::bitfield::BitField;
-use crate::board::state::{BoardState, HugeBasicBoardState, LargeBasicBoardState, MediumBasicBoardState, SmallBasicBoardState};
+use crate::board::state::BoardState;
 use crate::error::{BoardError, ParseError, PlayInvalid};
 use crate::game::logic::GameLogic;
 use crate::game::state::GameState;
@@ -112,23 +111,14 @@ impl<B: BoardState> Game<B> {
     
 }
 
-/// Game supporting basic pieces (soldier and king), suitable for boards up to 7x7.
-pub type SmallBasicGame = Game<SmallBasicBoardState>;
-/// Game supporting basic pieces (soldier and king), suitable for boards up to 11x11.
-pub type MediumBasicGame = Game<MediumBasicBoardState>;
-/// Game supporting basic pieces (soldier and king), suitable for boards up to 15x15.
-pub type LargeBasicGame = Game<LargeBasicBoardState>;
-/// Game supporting basic pieces (soldier and king), suitable for boards up to 21x21.
-pub type HugeBasicGame = Game<HugeBasicBoardState>;
-
 #[cfg(test)]
 mod tests {
-    use crate::board::state::SmallBasicBoardState;
     use crate::game::Game;
     use crate::play::Play;
     use crate::preset::{boards, rules};
     use crate::tiles::Tile;
     use std::collections::HashSet;
+    use crate::aliases::SmallBasicBoardState;
 
     #[test]
     fn test_iter_plays() {
@@ -233,12 +223,13 @@ mod tests {
 
 #[cfg(all(test, feature = "serde"))]
 mod serde_tests {
-    use crate::game::{Game, MediumBasicGame};
+    use crate::game::Game;
     use crate::play::Play;
     use crate::preset::{boards, rules};
     use bincode;
     use bincode::serde::{decode_from_slice, encode_to_vec};
     use std::str::FromStr;
+    use crate::aliases::MediumBasicGame;
 
     #[test]
     fn test_round_trip() {

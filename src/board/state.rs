@@ -3,16 +3,15 @@ use crate::error::ParseError;
 use crate::error::ParseError::BadLineLen;
 use crate::pieces::{Piece, Side};
 use crate::tiles::Tile;
-use primitive_types::{U256, U512};
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::Hash;
 use std::str::FromStr;
 
+use crate::collections::piecemap::{BasicPieceMap, PieceMap};
+use crate::collections::pieceset::PieceSet;
 use crate::collections::tileset::TileSet;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
-use crate::collections::piecemap::{BasicPieceMap, PieceMap};
-use crate::collections::pieceset::PieceSet;
 
 /// Store information on the current board state (ie, pieces).
 pub trait BoardState: Default + Clone + Copy + Display + FromStr + Debug + PartialEq {
@@ -98,15 +97,13 @@ pub trait BoardState: Default + Clone + Copy + Display + FromStr + Debug + Parti
 
 }
 
-
-
 /// This struct stores information about piece placement, by piece type. It is mainly a wrapper
-/// around a [`PieceMap`] though it also stored board length. This struct represents a simple board,
+/// around a [`PieceMap`] though it also stores board length. This struct represents a simple board,
 /// i.e. a king and soldiers (no knights, commanders, etc.).
 ///
-/// The parameter `T` is a type that implements the [`BitField`] trait, ensuring that it supports
+/// The parameter `B` is a type that implements the [`BitField`] trait, ensuring that it supports
 /// the relevant bitwise operations.  For each player/piece type combination (e.g. attacking
-/// soldiers), a single integer of type `T` is used to record the positions of all relevant pieces.
+/// soldiers), a single integer of type `B` is used to record the positions of all relevant pieces.
 /// The integer type must be large enough to represent the board.
 ///
 /// Currently, only basic getting and setting are implemented at the bitfield level. More complex
@@ -307,20 +304,10 @@ impl <T: BitField> Display for BasicBoardState<T> {
     }
 }
 
-/// Board state supporting basic pieces (soldier and king), suitable for boards up to 7x7.
-pub type SmallBasicBoardState = BasicBoardState<u64>;
-/// Board state supporting basic pieces (soldier and king), suitable for boards up to 11x11.
-pub type MediumBasicBoardState = BasicBoardState<u128>;
-
-/// Board state supporting basic pieces (soldier and king), suitable for boards up to 15x15.
-pub type LargeBasicBoardState = BasicBoardState<U256>;
-
-/// Board state supporting basic pieces (soldier and king), suitable for boards up to 21x21.
-pub type HugeBasicBoardState = BasicBoardState<U512>;
-
 #[cfg(test)]
 mod tests {
-    use crate::board::state::{BoardState, MediumBasicBoardState, SmallBasicBoardState};
+    use crate::aliases::{MediumBasicBoardState, SmallBasicBoardState};
+    use crate::board::state::BoardState;
     use crate::collections::tileset::TileSet;
     use crate::pieces::Piece;
     use crate::pieces::PieceType::{King, Soldier};

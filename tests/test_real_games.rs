@@ -1,4 +1,4 @@
-use hnefatafl::board::state::{BoardState, MediumBasicBoardState};
+use hnefatafl::board::state::BoardState;
 use hnefatafl::error::ParseError;
 use hnefatafl::error::ParseError::EmptyString;
 use hnefatafl::game::Game;
@@ -13,6 +13,7 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
 use std::str::FromStr;
+use hnefatafl::aliases::MediumBasicBoardState;
 use hnefatafl::collections::piecemap::PieceMap;
 
 fn play_captures_from_str(s: &str) -> Result<(Play, HashSet<Tile>), ParseError> {

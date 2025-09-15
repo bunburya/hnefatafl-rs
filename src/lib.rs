@@ -40,10 +40,10 @@
 //!
 //! Some of the key traits and structs used to store game state are described below:
 //!
-//! * [`bitfield::BitField`] is a trait allowing access to a bitfield and basic conversions between [`Tile`]s
+//! * [`bitfield::BitField`] is a trait allowing access to a bitfield and basic conversions between `Tile`s
 //!   and bit indices. It is implemented on a number of different integer types. It is kind of the
 //!   building block of the other structs and traits used to represent board state.
-//! * [`collections::TileSet`] is a struct that represents a set of [`Tiles`] on a board. It is generic over
+//! * [`collections::TileSet`] is a struct that represents a set of `Tiles` on a board. It is generic over
 //!   `BitField`.
 //! * [`collections::PieceMap`] is a trait allowing mapping of tiles to the pieces (if any) that occupy them.
 //!   `PieceMap` has an associated type `BitField` which is the bitfield type used to represent the
@@ -63,22 +63,9 @@
 //!   is generic over `BoardState`.
 //!
 //! To reduce the complexity of having to deal with generics and associated types for simple use
-//! cases, some concrete implementations of these traits are provided. These are described below.
-//! 
-//! Default `GameState` implementations:
-//! - [`game::state::SmallBasicGameState`]
-//! - [`game::state::MediumBasicGameState`]
-//! - [`game::state::LargeBasicGameState`]
-//! - [`game::state::HugeBasicGameState`]
-//! 
-//! And `Game` implementations which are based on them:
-//! - [`game::SmallBasicGame`]
-//! - [`game::MediumBasicGame`]
-//! - [`game::LargeBasicGame`]
-//! - [`game::HugeBasicGame`]
-//! 
-//! So if you just want to play a game on a 7x7 board, you can use a `SmallBasicGame` instead of a
-//! `Game<BasicBoardState<u64>>`.
+//! cases, some concrete implementations of these traits are provided. These are found in the
+//! [`aliases`] module. So, for example, if you just want to play a game on a 7x7 board, you can use
+//! a `SmallBasicGame` instead of a `Game<BasicBoardState<u64>>`.
 //!
 //! # Serialization
 //!
@@ -118,3 +105,6 @@ pub mod board;
 
 /// Code relating to collections of pieces and tiles.
 pub mod collections;
+
+/// Type aliases for concrete implementations of generic structs.
+pub mod aliases;

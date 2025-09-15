@@ -1,11 +1,11 @@
-use crate::board::state::{BoardState, HugeBasicBoardState, LargeBasicBoardState, MediumBasicBoardState, SmallBasicBoardState};
+use crate::board::state::BoardState;
+use crate::collections::piecemap::PieceMap;
 use crate::error::ParseError;
 use crate::game::GameStatus;
 use crate::game::GameStatus::Ongoing;
 use crate::pieces::Side;
 use crate::play::{Play, PlayRecord};
 use std::cmp::PartialEq;
-use crate::collections::piecemap::PieceMap;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -174,15 +174,6 @@ impl <B: BoardState> GameState<B> {
         })
     }
 }
-
-/// Game state supporting basic pieces (soldier and king), suitable for boards up to 7x7.
-pub type SmallBasicGameState = GameState<SmallBasicBoardState>;
-/// Game state supporting basic pieces (soldier and king), suitable for boards up to 11x11.
-pub type MediumBasicGameState = GameState<MediumBasicBoardState>;
-/// Game state supporting basic pieces (soldier and king), suitable for boards up to 15x15.
-pub type LargeBasicGameState = GameState<LargeBasicBoardState>;
-/// Game state supporting basic pieces (soldier and king), suitable for boards up to 21x21.
-pub type HugeBasicGameState = GameState<HugeBasicBoardState>;
 
 #[cfg(test)]
 mod tests {

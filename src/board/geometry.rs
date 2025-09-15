@@ -161,8 +161,8 @@ impl<B: BoardState> BoardGeometry<B> {
 
 #[cfg(test)]
 mod tests {
+    use crate::aliases::SmallBasicBoardState;
     use crate::board::geometry::BoardGeometry;
-    use crate::board::state::SmallBasicBoardState;
     use crate::tiles::Tile;
     use crate::utils::check_tile_vec;
 

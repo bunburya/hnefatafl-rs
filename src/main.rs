@@ -5,8 +5,9 @@ use std::io::stdin;
 use std::str::FromStr;
 use hnefatafl::game::GameOutcome::{Draw, Win};
 use hnefatafl::game::GameStatus::Over;
-use hnefatafl::game::{Game, SmallBasicGame};
+use hnefatafl::game::Game;
 use hnefatafl::play::Play;
+use hnefatafl::aliases::SmallBasicGame;
 
 fn input(prompt: &str) -> std::io::Result<String> {
     println!("{prompt}");

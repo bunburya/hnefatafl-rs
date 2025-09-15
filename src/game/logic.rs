@@ -885,11 +885,11 @@ impl<B: BoardState> GameLogic<B> {
 #[cfg(test)]
 mod tests {
     use std::collections::HashSet;
-    use crate::board::state::{BoardState, HugeBasicBoardState, LargeBasicBoardState, MediumBasicBoardState, SmallBasicBoardState};
+    use crate::board::state::BoardState;
     use crate::error::PlayInvalid;
     use crate::error::PlayInvalid::{BlockedByPiece, MoveOntoBlockedTile, MoveThroughBlockedTile, NoPiece, OutOfBounds, TooFar};
     use crate::game::logic::GameLogic;
-    use crate::game::state::{GameState, MediumBasicGameState, SmallBasicGameState};
+    use crate::game::state::GameState;
     use crate::game::Game;
     use crate::game::GameOutcome::Win;
     use crate::game::GameStatus::{Ongoing, Over};
@@ -905,6 +905,7 @@ mod tests {
 
     use crate::utils::check_tile_vec;
     use std::str::FromStr;
+    use crate::aliases::{HugeBasicBoardState, LargeBasicBoardState, MediumBasicBoardState, MediumBasicGameState, SmallBasicBoardState, SmallBasicGameState};
     use crate::collections::piecemap::PieceMap;
 
     const TEST_RULES: Ruleset = Ruleset {
