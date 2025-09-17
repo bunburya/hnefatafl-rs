@@ -13,6 +13,7 @@ use crate::board::state::BasicBoardState;
 use crate::game::Game;
 use crate::play::PlayRecord;
 use primitive_types::{U256, U512};
+use crate::game::logic::GameLogic;
 use crate::game::state::GameState;
 
 pub type SmallBitfield = u64;
@@ -34,6 +35,11 @@ pub type SmallBasicGameState = GameState<SmallBasicBoardState>;
 pub type MediumBasicGameState = GameState<MediumBasicBoardState>;
 pub type LargeBasicGameState = GameState<LargeBasicBoardState>;
 pub type HugeBasicGameState = GameState<HugeBasicBoardState>;
+
+pub type SmallBasicGameLogic = GameLogic<SmallBasicBoardState>;
+pub type MediumBasicGameLogic = GameLogic<MediumBasicBoardState>;
+pub type LargeBasicGameLogic = GameLogic<LargeBasicBoardState>;
+pub type HugeBasicGameLogic = GameLogic<HugeBasicBoardState>;
 
 
 pub type SmallBasicGame = Game<SmallBasicBoardState>;
