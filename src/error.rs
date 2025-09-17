@@ -1,6 +1,5 @@
 use std::num::ParseIntError;
 use crate::error::ParseError::BadInt;
-use crate::play::Play;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};

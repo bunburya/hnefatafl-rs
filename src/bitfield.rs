@@ -21,7 +21,7 @@ macro_rules! impl_zero_array {
     }
 }
 
-trait CommonBitFieldSuperTraits:
+pub trait CommonBitFieldSuperTraits:
     Sized +
     Copy +
     From<u8> +
@@ -46,7 +46,7 @@ pub trait BitFieldSuperTraits:
     for<'de> serde::Deserialize<'de> {}
 
 #[cfg(not(feature = "serde"))]
-trait BitFieldSuperTraits: CommonBitFieldSuperTraits {}
+pub trait BitFieldSuperTraits: CommonBitFieldSuperTraits {}
 
 impl<T: BitField> CommonBitFieldSuperTraits for T {}
 impl<T: BitField> BitFieldSuperTraits for T {}

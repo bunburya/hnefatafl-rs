@@ -105,7 +105,7 @@ impl<B: BoardState> Game<B> {
 
     /// Iterate over the possible plays that can be made by the piece at the given tile. Returns an
     /// error if there is no piece at the given tile. Order of iteration is not guaranteed.
-    pub fn iter_plays(&self, tile: Tile) -> Result<ValidPlayIterator<B>, BoardError> {
+    pub fn iter_plays(&self, tile: Tile) -> Result<ValidPlayIterator<'_, '_, B>, BoardError> {
         ValidPlayIterator::new(&self.logic, &self.state, tile)
     }
     

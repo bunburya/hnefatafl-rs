@@ -2,9 +2,8 @@ use crate::error::ParseError::{BadChar, EmptyString};
 use crate::error::ParseError;
 use crate::tiles::Axis::{Horizontal, Vertical};
 use std::fmt::{Debug, Display, Formatter};
-use std::ops::{Add, BitAnd, BitOr};
+use std::ops::Add;
 use std::str::FromStr;
-use crate::bitfield::BitField;
 
 
 #[cfg(feature = "serde")]
