@@ -116,7 +116,7 @@ impl Display for ValidPlay {
 
 /// The effects of a single play, including captures and the game outcome caused by the play, if
 /// any.
-#[derive(Eq, PartialEq, Debug, Default, Clone)]
+#[derive(Eq, PartialEq, Debug, Default, Clone, Copy)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct PlayEffects<B: BoardState> {
     /// Tiles containing pieces that have been captured by the move.
@@ -126,7 +126,7 @@ pub struct PlayEffects<B: BoardState> {
 }
 
 /// A record of a single play.
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct PlayRecord<B: BoardState> {
     /// The side that made the play.
