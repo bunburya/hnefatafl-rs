@@ -800,6 +800,8 @@ impl<B: BoardState> GameLogic<B> {
         state.repetitions.track_play(state.side_to_play, play, !captures.is_empty());
         if captures.is_empty() {
             state.plays_since_capture += 1;
+        } else {
+            state.plays_since_capture = 0;
         }
         // Then assess the game outcome
         let game_outcome = self.get_game_outcome(valid_play, moving_piece, &state);
