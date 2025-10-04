@@ -10,6 +10,8 @@ use crate::collections::tileset::{BitfieldTileIter, TileSet};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use crate::collections::pieceset::PieceSet;
+use crate::error::ParseError;
+use crate::error::ParseError::BadLineLen;
 
 pub trait CommonPieceMapSuperTraits:
     Default +
@@ -17,6 +19,7 @@ pub trait CommonPieceMapSuperTraits:
     PartialEq +
     Eq +
     Clone +
+    Copy +
     IntoIterator<Item=PlacedPiece> +
     FromIterator<PlacedPiece> {}
 
@@ -69,6 +72,12 @@ pub trait PieceMap: PieceMapSuperTraits {
 
     /// Check whether this map is empty.
     fn is_empty(&self) -> bool;
+
+    /// Parse board state from (the relevant part of) a string in FEN format.
+    fn from_fen(s: &str) -> Result<(Self, u8), ParseError>;
+
+    /// Return a string in FEN format representing the board state.
+    fn to_fen(&self, side_len: u8) -> String;
 }
 
 /// A [`PieceMap`] implemented using bitfields which is capable of representing the basic pieces
@@ -211,6 +220,62 @@ impl<B: BitField> PieceMap for BasicPieceMap<B> {
     fn is_empty(&self) -> bool {
         self.attacking_soldier.is_empty() && self.defending_soldier.is_empty() && self.king.is_empty()
     }
+
+    fn from_fen(fen: &str) -> Result<(Self, u8), ParseError> {
+        let mut pm = Self::default();
+        let mut side_len = 0;
+        for (r, line) in fen.split('/').enumerate() {
+            let mut n_empty = 0;
+            let mut c = 0u8;
+            for chr in line.chars() {
+                if chr.is_digit(10) {
+                    n_empty = (n_empty * 10) + (chr as u8 - '0' as u8);
+                } else {
+                    c += n_empty;
+                    n_empty = 0;
+                    pm.set(Tile::new(r as u8, c), Piece::try_from(chr)?);
+                    c += 1;
+                }
+            }
+            if n_empty > 0 {
+                c += n_empty;
+            }
+            if side_len == 0 {
+                side_len = c;
+            } else if side_len != c {
+                return Err(BadLineLen(c as usize))
+            }
+        }
+        Ok((pm, side_len))
+    }
+
+    fn to_fen(&self, side_len: u8) -> String {
+        let mut s = String::new();
+        for row in 0..side_len {
+            let mut n_empty = 0;
+            for col in 0..side_len {
+                let t = Tile::new(row, col);
+                if let Some(piece) = self.get(t) {
+                    if n_empty > 0 {
+                        s.push_str(n_empty.to_string().as_str());
+                        n_empty = 0;
+                    }
+                    s.push(piece.into());
+                } else {
+                    n_empty += 1;
+                }
+            }
+            if n_empty > 0 {
+                s.push_str(n_empty.to_string().as_str());
+            }
+            if row < side_len - 1 {
+                s.push('/');
+            }
+        }
+        s
+    }
+
+
 }
 
 pub struct BasicPieceMapIterator<B: BitField> {
