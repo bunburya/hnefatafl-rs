@@ -117,15 +117,6 @@ pub struct BasicBoardState<B: BitField> {
     side_len: u8
 }
 
-impl<B: BitField> BasicBoardState<B> {
-    fn empty(side_len: u8) -> Self {
-        Self {
-            pieces: BasicPieceMap::default(),
-            side_len
-        }
-    }
-}
-
 impl<B: BitField> BoardState for BasicBoardState<B> {
 
     type BitField = B;
@@ -185,30 +176,8 @@ impl<B: BitField> BoardState for BasicBoardState<B> {
     }
 
     fn from_fen(fen: &str) -> Result<Self, ParseError> {
-        let mut state = Self::default();
-        for (r, line) in fen.split('/').enumerate() {
-            let mut n_empty = 0;
-            let mut c = 0u8;
-            for chr in line.chars() {
-                if chr.is_digit(10) {
-                    n_empty = (n_empty * 10) + (chr as u8 - '0' as u8);
-                } else {
-                    c += n_empty;
-                    n_empty = 0;
-                    state.set_piece(Tile::new(r as u8, c), Piece::try_from(chr)?);
-                    c += 1;
-                }
-            }
-            if n_empty > 0 {
-                c += n_empty;
-            }
-            if state.side_len == 0 {
-                state.side_len = c;
-            } else if state.side_len != c {
-                return Err(BadLineLen(c as usize))
-            }
-        }
-        Ok(state)
+        let (pieces, side_len) = BasicPieceMap::from_fen(fen)?;
+        Ok(Self { pieces, side_len })
     }
 
     fn from_display_str(display_str: &str) -> Result<Self, ParseError> {
@@ -231,29 +200,7 @@ impl<B: BitField> BoardState for BasicBoardState<B> {
     }
 
     fn to_fen(&self) -> String {
-        let mut s = String::new();
-        for row in 0..self.side_len {
-            let mut n_empty = 0;
-            for col in 0..self.side_len {
-                let t = Tile::new(row, col);
-                if let Some(piece) = self.get_piece(t) {
-                    if n_empty > 0 {
-                        s.push_str(n_empty.to_string().as_str());
-                        n_empty = 0;
-                    }
-                    s.push(piece.into());
-                } else {
-                    n_empty += 1;
-                }
-            }
-            if n_empty > 0 {
-                s.push_str(n_empty.to_string().as_str());
-            }
-            if row < self.side_len - 1 {
-                s.push('/');
-            }
-        }
-        s
+        self.pieces.to_fen(self.side_len)
     }
 
     fn to_display_str(&self) -> String {
