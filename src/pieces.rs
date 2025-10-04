@@ -1,4 +1,6 @@
+use std::fmt::Display;
 use std::ops::{BitOr, Shl};
+use std::str::FromStr;
 use crate::error::ParseError;
 use crate::error::ParseError::BadChar;
 use crate::pieces::PieceType::{Commander, Guard, King, Knight, Mercenary, Soldier};
@@ -34,6 +36,27 @@ impl Side {
             Defender => Attacker
         }
     }
+}
+
+impl FromStr for Side {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_ascii_lowercase().as_str() {
+            "attacker" => Ok(Attacker),
+            "defender" => Ok(Defender),
+            other => Err(ParseError::BadString(other.to_string()))
+        }
+    }
+}
+
+impl Display for Side {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Attacker => write!(f, "attacker"),
+            Defender => write!(f, "defender")
+        }
+    }   
 }
 
 /// The different types of pieces that can occupy a board.
