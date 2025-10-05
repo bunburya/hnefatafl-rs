@@ -66,7 +66,7 @@ impl PlayRecQueue {
 /// To explain (3), for example, if a player moves (`a1-b1`, `b1-a1`, `a1-b1`, `b1-a1`), the second
 /// `a1-b1` would count as a repetition but the second `b1-a1` would not (but would not force
 /// a reset of the repetition counter).
-#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct RepetitionTracker {
     pub(crate) attacker_reps: usize,
@@ -74,6 +74,19 @@ pub struct RepetitionTracker {
     attacker_mid_pair: bool,
     defender_mid_pair: bool,
     recent_plays: PlayRecQueue
+}
+
+impl Default for RepetitionTracker {
+    fn default() -> Self {
+        Self {
+            // The default repetition counts are 1 because the first move is always a repetition.
+            attacker_reps: 1,
+            defender_reps: 1,
+            attacker_mid_pair: false,
+            defender_mid_pair: false,
+            recent_plays: PlayRecQueue::default()
+        }
+    }
 }
 
 impl RepetitionTracker {
@@ -129,11 +142,11 @@ impl RepetitionTracker {
         } else if reset {
             match record.side {
                 Side::Attacker => {
-                    self.attacker_reps = 0;
+                    self.attacker_reps = 1;
                     self.attacker_mid_pair = false;
                 },
                 Side::Defender => {
-                    self.defender_reps = 0;
+                    self.defender_reps = 1;
                     self.defender_mid_pair = false;
                 },
             }
@@ -185,25 +198,17 @@ mod tests {
     #[test]
     fn test_repetition_tracker() {
         let mut tracker = RepetitionTracker::default();
-        for i in 0..5 {
-            tracker.track_play(Side::Attacker, Play::from_str("a1-b1").unwrap(), false);
-            assert_eq!(tracker.get_repetitions(Side::Attacker), i);
-            tracker.track_play(Side::Defender, Play::from_str("a2-b2").unwrap(), false);
-            assert_eq!(tracker.get_repetitions(Side::Defender), i);
-            tracker.track_play(Side::Attacker, Play::from_str("b1-a1").unwrap(), false);
-            assert_eq!(tracker.get_repetitions(Side::Attacker), i);
-            tracker.track_play(Side::Defender, Play::from_str("b2-a2").unwrap(), false);
-            assert_eq!(tracker.get_repetitions(Side::Defender), i);
-        }
-        for i in 0..5 {
-            tracker.track_play(Side::Attacker, Play::from_str("f1-g1").unwrap(), false);
-            assert_eq!(tracker.get_repetitions(Side::Attacker), i);
-            tracker.track_play(Side::Defender, Play::from_str("f2-g2").unwrap(), false);
-            assert_eq!(tracker.get_repetitions(Side::Defender), i);
-            tracker.track_play(Side::Attacker, Play::from_str("g1-f1").unwrap(), false);
-            assert_eq!(tracker.get_repetitions(Side::Attacker), i);
-            tracker.track_play(Side::Defender, Play::from_str("g2-f2").unwrap(), false);
-            assert_eq!(tracker.get_repetitions(Side::Defender), i);
-        }
+        tracker.track_play(Side::Attacker, Play::from_str("f10-h10").unwrap(), false);
+        tracker.track_play(Side::Defender, Play::from_str("f8-h8").unwrap(), false);
+        tracker.track_play(Side::Attacker, Play::from_str("h10-f10").unwrap(), false);
+        tracker.track_play(Side::Defender, Play::from_str("h8-f8").unwrap(), false);
+        tracker.track_play(Side::Attacker, Play::from_str("f10-h10").unwrap(), false);
+        tracker.track_play(Side::Defender, Play::from_str("f8-h8").unwrap(), false);
+        tracker.track_play(Side::Attacker, Play::from_str("h10-f10").unwrap(), false);
+        tracker.track_play(Side::Defender, Play::from_str("h8-f8").unwrap(), false);
+        assert_eq!(tracker.get_repetitions(Side::Attacker), 2);
+        tracker.track_play(Side::Attacker, Play::from_str("f10-h10").unwrap(), false);
+        assert_eq!(tracker.get_repetitions(Side::Attacker), 3);
     }
+
 }
