@@ -31,6 +31,16 @@ impl<B: BitField> TileSet<B> {
         !(B::tile_mask(t) & self.bitfield).is_empty()
     }
 
+    /// Check whether the tile represented by the given mask is in the set
+    /// (see [`BitField::tile_mask`]).
+    ///
+    /// **NOTE**: [`TileSet::contains`] works on tiles directly and is generally preferable; this
+    /// function is included to allow certain performance optimisations (e.g. where we need to check
+    /// if the same tile is in multiple sets).
+    pub fn contains_mask(&self, mask: B) -> bool {
+        !(mask & self.bitfield).is_empty()
+    }
+
     /// Check whether the set is empty.
     pub fn is_empty(&self) -> bool {
         self.bitfield.is_empty()

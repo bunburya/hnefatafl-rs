@@ -122,11 +122,12 @@ impl<B: BitField> PieceMap for BasicPieceMap<B> {
     }
 
     fn get(&self, t: Tile) -> Option<Piece> {
-        if self.attacking_soldier.contains(t) {
+        let mask = B::tile_mask(t);
+        if self.attacking_soldier.contains_mask(mask) {
             Some(Piece::attacker(Soldier))
-        } else if self.defending_soldier.contains(t) {
+        } else if self.defending_soldier.contains_mask(mask) {
             Some(Piece::defender(Soldier))
-        } else if self.king.contains(t) {
+        } else if self.king.contains_mask(mask) {
             Some(Piece::king())
         } else {
             None
