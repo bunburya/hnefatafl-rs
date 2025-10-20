@@ -8,7 +8,7 @@ use std::hash::Hash;
 #[derive(Default)]
 pub(crate) struct UniqueStack<T: Hash + Eq + Copy> {
     stack: Vec<T>,
-    added: std::collections::HashSet<T>
+    added: std::collections::HashSet<T>,
 }
 
 impl<T: Hash + Eq + Copy> UniqueStack<T> {
@@ -18,12 +18,11 @@ impl<T: Hash + Eq + Copy> UniqueStack<T> {
             self.added.insert(value);
         }
     }
-    
+
     pub(crate) fn pop(&mut self) -> Option<T> {
         self.stack.pop()
     }
 }
-
 
 #[cfg(test)]
 /// Creates a [`std::collections::HashSet`] containing the arguments, similar to [`vec!`].

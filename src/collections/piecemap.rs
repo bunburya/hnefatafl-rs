@@ -1,27 +1,29 @@
+use crate::bitfield::BitField;
+use crate::collections::tileset::{BitfieldTileIter, TileSet};
+use crate::pieces::PieceType::{King, Soldier};
+use crate::pieces::Side::{Attacker, Defender};
+use crate::pieces::{Piece, PlacedPiece, Side};
+use crate::tiles::Tile;
 use std::fmt::Debug;
 use std::hash::Hash;
-use crate::bitfield::BitField;
-use crate::pieces::{Piece, PlacedPiece, Side};
-use crate::pieces::PieceType::{Soldier, King};
-use crate::pieces::Side::{Attacker, Defender};
-use crate::tiles::Tile;
-use crate::collections::tileset::{BitfieldTileIter, TileSet};
 
-#[cfg(feature = "serde")]
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use crate::collections::pieceset::PieceSet;
 use crate::error::ParseError;
 use crate::error::ParseError::BadLineLen;
+#[cfg(feature = "serde")]
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 pub trait CommonPieceMapSuperTraits:
-    Default +
-    Debug +
-    PartialEq +
-    Eq +
-    Clone +
-    Copy +
-    IntoIterator<Item=PlacedPiece> +
-    FromIterator<PlacedPiece> {}
+    Default
+    + Debug
+    + PartialEq
+    + Eq
+    + Clone
+    + Copy
+    + IntoIterator<Item = PlacedPiece>
+    + FromIterator<PlacedPiece>
+{
+}
 
 #[cfg(feature = "serde")]
 pub trait PieceMapSuperTraits: CommonPieceMapSuperTraits + Serialize + DeserializeOwned {}
@@ -84,7 +86,10 @@ pub trait PieceMap: PieceMapSuperTraits {
 /// (attacking and defending soldiers, and defending king).
 #[derive(Copy, Clone, Hash, Eq, PartialEq, Default, Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-#[cfg_attr(feature = "serde", serde(bound = "B: serde::Serialize + serde::de::DeserializeOwned"))]
+#[cfg_attr(
+    feature = "serde",
+    serde(bound = "B: serde::Serialize + serde::de::DeserializeOwned")
+)]
 pub struct BasicPieceMap<B: BitField> {
     pub attacking_soldier: TileSet<B>,
     pub defending_soldier: TileSet<B>,
@@ -94,8 +99,7 @@ pub struct BasicPieceMap<B: BitField> {
 impl<B: BitField> CommonPieceMapSuperTraits for BasicPieceMap<B> {}
 
 #[cfg(feature = "serde")]
-impl<B: BitField> PieceMapSuperTraits for BasicPieceMap<B> 
-where B: Serialize + DeserializeOwned {}
+impl<B: BitField> PieceMapSuperTraits for BasicPieceMap<B> where B: Serialize + DeserializeOwned {}
 
 #[cfg(not(feature = "serde"))]
 impl<B: BitField> PieceMapSuperTraits for BasicPieceMap<B> {}
@@ -136,10 +140,19 @@ impl<B: BitField> PieceMap for BasicPieceMap<B> {
 
     fn contains_piece(&self, t: Tile, piece: Piece) -> bool {
         let ts = match piece {
-            Piece { side: Attacker, piece_type: Soldier } => self.attacking_soldier,
-            Piece { side: Defender, piece_type: Soldier} => self.defending_soldier,
-            Piece { side: Defender, piece_type: King } => self.king,
-            _ => return false
+            Piece {
+                side: Attacker,
+                piece_type: Soldier,
+            } => self.attacking_soldier,
+            Piece {
+                side: Defender,
+                piece_type: Soldier,
+            } => self.defending_soldier,
+            Piece {
+                side: Defender,
+                piece_type: King,
+            } => self.king,
+            _ => return false,
         };
         ts.contains(t)
     }
@@ -150,22 +163,31 @@ impl<B: BitField> PieceMap for BasicPieceMap<B> {
 
     fn set(&mut self, t: Tile, piece: Piece) {
         match piece {
-            Piece { piece_type: Soldier, side: Side::Attacker } => {
+            Piece {
+                piece_type: Soldier,
+                side: Side::Attacker,
+            } => {
                 self.attacking_soldier.insert(t);
                 self.defending_soldier.remove(t);
                 self.king.remove(t);
-            },
-            Piece { piece_type: Soldier, side: Side::Defender } => {
+            }
+            Piece {
+                piece_type: Soldier,
+                side: Side::Defender,
+            } => {
                 self.defending_soldier.insert(t);
                 self.attacking_soldier.remove(t);
                 self.king.remove(t);
-            },
-            Piece { piece_type: King, side: Side::Defender } => {
+            }
+            Piece {
+                piece_type: King,
+                side: Side::Defender,
+            } => {
                 self.king.insert(t);
                 self.attacking_soldier.remove(t);
                 self.defending_soldier.remove(t);
-            },
-            other => panic!("Invalid piece type: {:?}.", other)
+            }
+            other => panic!("Invalid piece type: {:?}.", other),
         }
     }
 
@@ -219,7 +241,9 @@ impl<B: BitField> PieceMap for BasicPieceMap<B> {
     }
 
     fn is_empty(&self) -> bool {
-        self.attacking_soldier.is_empty() && self.defending_soldier.is_empty() && self.king.is_empty()
+        self.attacking_soldier.is_empty()
+            && self.defending_soldier.is_empty()
+            && self.king.is_empty()
     }
 
     fn from_fen(fen: &str) -> Result<(Self, u8), ParseError> {
@@ -244,7 +268,7 @@ impl<B: BitField> PieceMap for BasicPieceMap<B> {
             if side_len == 0 {
                 side_len = c;
             } else if side_len != c {
-                return Err(BadLineLen(c as usize))
+                return Err(BadLineLen(c as usize));
             }
         }
         Ok((pm, side_len))
@@ -275,8 +299,6 @@ impl<B: BitField> PieceMap for BasicPieceMap<B> {
         }
         s
     }
-
-
 }
 
 pub struct BasicPieceMapIterator<B: BitField> {
@@ -296,19 +318,37 @@ impl<'a, B: BitField> BasicPieceMapIterator<B> {
 
     fn next_piece(&self) -> Option<Piece> {
         match self.current_piece {
-            Piece { side: Attacker, piece_type: Soldier } => Some(Piece::defender(Soldier)),
-            Piece { side: Defender, piece_type: Soldier } => Some(Piece::king()),
-            Piece { side: Defender, piece_type: King } => None,
-            other => panic!("Invalid piece type: {:?}", other)
+            Piece {
+                side: Attacker,
+                piece_type: Soldier,
+            } => Some(Piece::defender(Soldier)),
+            Piece {
+                side: Defender,
+                piece_type: Soldier,
+            } => Some(Piece::king()),
+            Piece {
+                side: Defender,
+                piece_type: King,
+            } => None,
+            other => panic!("Invalid piece type: {:?}", other),
         }
     }
 
     fn get_iter(&self) -> BitfieldTileIter<B> {
         match self.current_piece {
-            Piece { side: Attacker, piece_type: Soldier } => self.piece_map.attacking_soldier.into_iter(),
-            Piece { side: Defender, piece_type: Soldier } => self.piece_map.defending_soldier.into_iter(),
-            Piece { side: Defender, piece_type: King } => self.piece_map.king.into_iter(),
-            _ => panic!("Invalid piece type: {:?}", self.current_piece)
+            Piece {
+                side: Attacker,
+                piece_type: Soldier,
+            } => self.piece_map.attacking_soldier.into_iter(),
+            Piece {
+                side: Defender,
+                piece_type: Soldier,
+            } => self.piece_map.defending_soldier.into_iter(),
+            Piece {
+                side: Defender,
+                piece_type: King,
+            } => self.piece_map.king.into_iter(),
+            _ => panic!("Invalid piece type: {:?}", self.current_piece),
         }
     }
 }
@@ -318,7 +358,10 @@ impl<B: BitField> Iterator for BasicPieceMapIterator<B> {
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             if let Some(tile) = self.current_iter.next() {
-                return Some(PlacedPiece { tile, piece: self.current_piece });
+                return Some(PlacedPiece {
+                    tile,
+                    piece: self.current_piece,
+                });
             } else {
                 self.current_piece = self.next_piece()?;
                 self.current_iter = self.get_iter()
@@ -344,7 +387,7 @@ impl<'a, B: BitField> IntoIterator for &'a BasicPieceMap<B> {
 }
 
 impl<B: BitField> FromIterator<PlacedPiece> for BasicPieceMap<B> {
-    fn from_iter<T: IntoIterator<Item=PlacedPiece>>(iter: T) -> Self {
+    fn from_iter<T: IntoIterator<Item = PlacedPiece>>(iter: T) -> Self {
         let mut tmp = Self::default();
         for p in iter {
             tmp.set_placed_piece(p);

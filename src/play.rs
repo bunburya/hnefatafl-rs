@@ -33,7 +33,6 @@ pub struct Play {
 }
 
 impl Play {
-
     pub fn new(from: Tile, movement: AxisOffset) -> Self {
         Self { from, movement }
     }
@@ -49,7 +48,7 @@ impl Play {
             axis = Vertical;
             displacement = (dst.row as i8) - (src.row as i8);
         } else {
-            return Err(DisjointTiles)
+            return Err(DisjointTiles);
         };
         Ok(Self::new(src, AxisOffset::new(axis, displacement)))
     }
@@ -67,7 +66,7 @@ impl Play {
         Tile::new(coords.row as u8, coords.col as u8)
     }
 
-    /// The row and column of the move's destination tile, as [`Coords`]. 
+    /// The row and column of the move's destination tile, as [`Coords`].
     pub fn to_coords(&self) -> Coords {
         Coords::from(self.from) + self.movement
     }
@@ -78,15 +77,12 @@ impl FromStr for Play {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let tokens: Vec<&str> = s.split('-').collect();
         if tokens.len() != 2 {
-            return Err(BadString(String::from(s)))
+            return Err(BadString(String::from(s)));
         };
-        let m_res = Play::from_tiles(
-            Tile::from_str(tokens[0])?,
-            Tile::from_str(tokens[1])?
-        );
+        let m_res = Play::from_tiles(Tile::from_str(tokens[0])?, Tile::from_str(tokens[1])?);
         match m_res {
             Ok(m) => Ok(m),
-            Err(e) => Err(BadPlay(e))
+            Err(e) => Err(BadPlay(e)),
         }
     }
 }
@@ -99,14 +95,16 @@ impl Display for Play {
 
 /// A thin wrapper around a [`Play`], intended to indicate that the `Play` is known to be a valid
 /// play in the current game.
-/// 
+///
 /// **NOTE:** A `ValidPlay` should only be constructed with a `Play` that is known to be valid.
 /// Passing a `ValidPlay` around an invalid `Play` to a function can cause panics or bad program
 /// state. It is generally preferable to create a `ValidPlay` by passing a `Play` to the
 /// [`GameLogic::validate_play`] method.
 #[derive(Debug, Eq, PartialEq, Clone, Copy, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct ValidPlay { pub play: Play }
+pub struct ValidPlay {
+    pub play: Play,
+}
 
 impl Display for ValidPlay {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -122,7 +120,7 @@ pub struct PlayEffects<B: BoardState> {
     /// Tiles containing pieces that have been captured by the move.
     pub captures: B::PieceMap,
     /// The outcome of the game, if the move has brought the game to an end.
-    pub game_outcome: Option<GameOutcome>
+    pub game_outcome: Option<GameOutcome>,
 }
 
 /// A record of a single play.
@@ -134,11 +132,10 @@ pub struct PlayRecord<B: BoardState> {
     /// Details of the play (piece movement) itself.
     pub play: Play,
     /// Details of the effects of the play.
-    pub effects: PlayEffects<B>
+    pub effects: PlayEffects<B>,
 }
 
 impl<B: BoardState> PlayRecord<B> {
-    
     /// Whether these two records are equal, ignoring the outcomes of the moves.
     pub fn eq_ignore_outcome(&self, other: &Self) -> bool {
         self.side == other.side && self.play == other.play
@@ -149,9 +146,17 @@ impl<B: BoardState> Display for PlayRecord<B> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.play)?;
         if !self.effects.captures.is_empty() {
-            write!(f, "x{}",
-                self.effects.captures.clone().into_iter().map(|pp: PlacedPiece |
-                    pp.tile.to_string()).collect::<Vec<_>>().join("/"))?;
+            write!(
+                f,
+                "x{}",
+                self.effects
+                    .captures
+                    .clone()
+                    .into_iter()
+                    .map(|pp: PlacedPiece| pp.tile.to_string())
+                    .collect::<Vec<_>>()
+                    .join("/")
+            )?;
         }
         match self.effects.game_outcome {
             Some(Win(_, side)) => {
@@ -160,7 +165,7 @@ impl<B: BoardState> Display for PlayRecord<B> {
                 } else {
                     write!(f, "--")?;
                 }
-            },
+            }
             Some(Draw(_)) => write!(f, "==")?,
             None => {}
         }
@@ -180,16 +185,21 @@ pub struct ValidPlayIterator<'a, 'b, B: BoardState> {
 }
 
 impl<'logic, 'state, B: BoardState> ValidPlayIterator<'logic, 'state, B> {
-
-    pub fn new(game_logic: &'logic GameLogic<B>, game_state: &'state GameState<B>, tile: Tile)
-        -> Result<Self, BoardError> {
+    pub fn new(
+        game_logic: &'logic GameLogic<B>,
+        game_state: &'state GameState<B>,
+        tile: Tile,
+    ) -> Result<Self, BoardError> {
         if let Some(piece) = game_state.board.get_piece(tile) {
             Ok(Self {
                 game_logic,
                 game_state,
                 start_tile: tile,
                 piece,
-                movement: AxisOffset { axis: Vertical, displacement: 1 }
+                movement: AxisOffset {
+                    axis: Vertical,
+                    displacement: 1,
+                },
             })
         } else {
             Err(BoardError::NoPiece)
@@ -202,14 +212,23 @@ impl<'logic, 'state, B: BoardState> ValidPlayIterator<'logic, 'state, B> {
         match self.movement.axis {
             Vertical => {
                 if self.movement.displacement > 0 {
-                    Some(AxisOffset { axis: Vertical, displacement: -1 })
+                    Some(AxisOffset {
+                        axis: Vertical,
+                        displacement: -1,
+                    })
                 } else {
-                    Some(AxisOffset { axis: Horizontal, displacement: 1 })
+                    Some(AxisOffset {
+                        axis: Horizontal,
+                        displacement: 1,
+                    })
                 }
-            },
+            }
             Horizontal => {
                 if self.movement.displacement > 0 {
-                    Some(AxisOffset { axis: Horizontal, displacement: -1 })
+                    Some(AxisOffset {
+                        axis: Horizontal,
+                        displacement: -1,
+                    })
                 } else {
                     None
                 }
@@ -229,32 +248,35 @@ impl<'logic, 'state, B: BoardState> Iterator for ValidPlayIterator<'logic, 'stat
                 // New tile is in bounds
 
                 // Increase the step for the next iteration.
-                self.movement.displacement +=
-                    if self.movement.displacement.is_positive() { 1 } else { -1 };
-                let (can_occupy, can_pass) = self.game_logic.can_occupy_or_pass(
-                    play, self.piece, self.game_state
-                );
+                self.movement.displacement += if self.movement.displacement.is_positive() {
+                    1
+                } else {
+                    -1
+                };
+                let (can_occupy, can_pass) =
+                    self.game_logic
+                        .can_occupy_or_pass(play, self.piece, self.game_state);
                 if can_occupy {
                     // We found a tile we can occupy, so return that
-                    return Some(ValidPlay { 
+                    return Some(ValidPlay {
                         play: Play::from_tiles(self.start_tile, dest_tile)
-                            .expect("Tiles should be on same axis.")
-                    })
+                            .expect("Tiles should be on same axis."),
+                    });
                 } else if can_pass {
                     // We can't occupy this tile, but we can pass it, so go back to the start of the
                     // loop to continue in the same direction
-                    continue
+                    continue;
                 } else {
                     // We can neither occupy nor pass this tile so move on to trying the next
                     // direction. If we have already tried all the directions, there are no more
                     // plays available so return `None`.
                     self.movement = self.next_direction()?;
-                    continue
+                    continue;
                 }
             } else {
                 // New tile would be out of bounds so move on to trying the next direction.
                 self.movement = self.next_direction()?;
-                continue
+                continue;
             }
         }
     }

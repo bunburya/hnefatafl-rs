@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 pub(crate) struct ShortPlayRecord {
     side: Side,
     play: Play,
-    captures: bool
+    captures: bool,
 }
 
 impl<B: BoardState> From<&PlayRecord<B>> for ShortPlayRecord {
@@ -25,7 +25,7 @@ impl<B: BoardState> From<&PlayRecord<B>> for ShortPlayRecord {
         Self {
             side: play_record.side,
             play: play_record.play,
-            captures: !play_record.effects.captures.is_empty()
+            captures: !play_record.effects.captures.is_empty(),
         }
     }
 }
@@ -36,11 +36,10 @@ impl<B: BoardState> From<&PlayRecord<B>> for ShortPlayRecord {
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 struct PlayRecQueue {
     queue: [Option<ShortPlayRecord>; 4],
-    first_i: usize
+    first_i: usize,
 }
 
 impl PlayRecQueue {
-
     pub(crate) fn push(&mut self, value: Option<ShortPlayRecord>) {
         self.queue[self.first_i] = value;
         self.first_i = if self.first_i == 3 {
@@ -53,7 +52,6 @@ impl PlayRecQueue {
     pub(crate) fn first(&self) -> &Option<ShortPlayRecord> {
         &self.queue[self.first_i]
     }
-
 }
 
 /// Keeps track of the number of consecutive times each side has repeated its last move.
@@ -73,7 +71,7 @@ pub struct RepetitionTracker {
     pub(crate) defender_reps: usize,
     attacker_mid_pair: bool,
     defender_mid_pair: bool,
-    recent_plays: PlayRecQueue
+    recent_plays: PlayRecQueue,
 }
 
 impl Default for RepetitionTracker {
@@ -84,17 +82,16 @@ impl Default for RepetitionTracker {
             defender_reps: 1,
             attacker_mid_pair: false,
             defender_mid_pair: false,
-            recent_plays: PlayRecQueue::default()
+            recent_plays: PlayRecQueue::default(),
         }
     }
 }
 
 impl RepetitionTracker {
-
     fn is_mid_pair(&self, side: Side) -> bool {
         match side {
             Side::Attacker => self.attacker_mid_pair,
-            Side::Defender => self.defender_mid_pair
+            Side::Defender => self.defender_mid_pair,
         }
     }
 
@@ -111,7 +108,6 @@ impl RepetitionTracker {
     /// Returns a tuple of `bool`s. The first bool is whether to increment the repetition counter.
     /// The second is whether to reset the repetition counter.
     fn check_repetition(&mut self, record: ShortPlayRecord) -> (bool, bool) {
-
         if (!record.captures) && (Some(record) == *self.recent_plays.first()) {
             let is_rep = !self.is_mid_pair(record.side);
             self.toggle_mid_pair(record.side);
@@ -132,7 +128,11 @@ impl RepetitionTracker {
     /// Track the given play, adding to the given player's repetition count if it is a repetition
     /// and resetting both counters back to zero otherwise.
     pub fn track_play(&mut self, side: Side, play: Play, captures: bool) {
-        let record = ShortPlayRecord { side, play, captures };
+        let record = ShortPlayRecord {
+            side,
+            play,
+            captures,
+        };
         let (incr, reset) = self.check_repetition(record);
         if incr {
             match record.side {
@@ -144,11 +144,11 @@ impl RepetitionTracker {
                 Side::Attacker => {
                     self.attacker_reps = 1;
                     self.attacker_mid_pair = false;
-                },
+                }
                 Side::Defender => {
                     self.defender_reps = 1;
                     self.defender_mid_pair = false;
-                },
+                }
             }
         }
         self.recent_plays.push(Some(record));
@@ -175,7 +175,7 @@ pub struct GameState<B: BoardState> {
     pub turn: usize,
 }
 
-impl <B: BoardState> GameState<B> {
+impl<B: BoardState> GameState<B> {
     pub fn new(fen_str: &str, side_to_play: Side) -> Result<Self, ParseError> {
         Ok(Self {
             board: B::from_fen(fen_str)?,
@@ -210,5 +210,4 @@ mod tests {
         tracker.track_play(Side::Attacker, Play::from_str("f10-h10").unwrap(), false);
         assert_eq!(tracker.get_repetitions(Side::Attacker), 3);
     }
-
 }

@@ -2,12 +2,12 @@
 //! [tafl](https://en.wikipedia.org/wiki/Tafl_games) family of board games. It includes structs,
 //! enums and traits that encapsulate game data and logic, helpful to build games, AIs, etc. It is
 //! not a goal of this crate to provide any concrete implementations of game clients or AIs.
-//! 
+//!
 //! # Getting started
-//! 
+//!
 //! As a starting point, you will likely want to use the following structs if you are implementing a
 //! game engine or similar:
-//! 
+//!
 //! - [`rules::Ruleset`]: Specifies the rules for the game.
 //! - [`game::logic::GameLogic`]: Keeps a copy of the game rules, and implements the logic required
 //!   to assess the validity and outcome of a given move. The data stored in this struct is expected
@@ -21,7 +21,7 @@
 //!   couple of `Vec`s which keep track of previous moves (to allow move history to be shown to the
 //!   user) and previous game states (to allow move undoing). Therefore, it is a helpful struct when
 //!   building a game client, for example.
-//! 
+//!
 //! You can roll your own ruleset and starting board setup, or you can choose from one of the common
 //! variants which are included in the [`preset::rules`] and [`preset::boards`] modules.
 //!

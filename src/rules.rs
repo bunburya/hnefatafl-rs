@@ -2,7 +2,7 @@ use crate::pieces::{PieceSet, Side};
 use std::cmp::PartialEq;
 
 #[cfg(feature = "serde")]
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 /// Rules relating to whether and when the king is strong (must be surrounded by hostile tiles on
 /// all four sides to be captured).
@@ -15,7 +15,7 @@ pub enum KingStrength {
     /// are necessary.
     StrongByThrone,
     /// King may be captured by two hostile pieces or tiles, in the same way as other pieces.
-    Weak
+    Weak,
 }
 
 /// Whether king may participate in captures.
@@ -28,9 +28,8 @@ pub enum KingAttack {
     /// captures.
     Anvil,
     /// King may initiate captures but cannot be captured against.
-    Hammer
+    Hammer,
 }
-
 
 /// What pieces certain special tiles are considered hostile to.
 ///
@@ -41,7 +40,7 @@ pub enum KingAttack {
 pub struct HostilityRules {
     pub throne: PieceSet,
     pub corners: PieceSet,
-    pub edge: PieceSet
+    pub edge: PieceSet,
 }
 
 /// What pieces may occupy special tiles.
@@ -49,7 +48,7 @@ pub struct HostilityRules {
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct OccupyRules {
     pub throne: PieceSet,
-    pub corners: PieceSet
+    pub corners: PieceSet,
 }
 
 /// What pieces may pass through special tiles.
@@ -66,14 +65,14 @@ pub struct ShieldwallRules {
     /// Whether a shieldwall may be closed at one end by a corner.
     pub corners_may_close: bool,
     /// The pieces that may be captured by a shieldwall.
-    pub captures: PieceSet
+    pub captures: PieceSet,
 }
 
 /// Circumstances in which attacker wins as a result of enclosing all defenders.
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum EnclosureWinRules {
-    /// Attacker wins if defender is entirely surrounded, even if defender has edge access. 
+    /// Attacker wins if defender is entirely surrounded, even if defender has edge access.
     WithEdgeAccess,
     /// Attacker wins if defender is entirely surrounded without edge access.
     WithoutEdgeAccess,
@@ -83,11 +82,11 @@ pub enum EnclosureWinRules {
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct RepetitionRule {
-    /// Number of repetitions that will trigger the rule. 
+    /// Number of repetitions that will trigger the rule.
     pub n_repetitions: usize,
     /// Whether repetitions result in a loss for the repeating player. If this is `false`, then
     /// repetitions will result in a draw.
-    pub is_loss: bool
+    pub is_loss: bool,
 }
 
 /// A set of rules for a tafl game.
@@ -130,4 +129,3 @@ pub struct Ruleset {
     /// occupied throne).
     pub linnaean_capture: bool,
 }
-

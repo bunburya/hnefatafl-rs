@@ -1,11 +1,13 @@
 pub mod rules {
-    use crate::pieces::{PieceSet, BASIC_PIECES, KING};
     use crate::pieces::PieceType::{King, Soldier};
     use crate::pieces::Side::Attacker;
-    use crate::rules::KingAttack::Armed;
-    use crate::rules::{HostilityRules, OccupyRules, PassRules, RepetitionRule, Ruleset, ShieldwallRules};
+    use crate::pieces::{PieceSet, BASIC_PIECES, KING};
     use crate::rules::EnclosureWinRules::WithoutEdgeAccess;
+    use crate::rules::KingAttack::Armed;
     use crate::rules::KingStrength::{Strong, StrongByThrone};
+    use crate::rules::{
+        HostilityRules, OccupyRules, PassRules, RepetitionRule, Ruleset, ShieldwallRules,
+    };
 
     /// Rules for Copenhagen Hnefatafl.
     pub const COPENHAGEN: Ruleset = Ruleset {
@@ -15,25 +17,28 @@ pub mod rules {
         king_attack: Armed,
         shieldwall: Some(ShieldwallRules {
             corners_may_close: true,
-            captures: PieceSet::from_piece_type(Soldier)
+            captures: PieceSet::from_piece_type(Soldier),
         }),
         exit_fort: true,
         hostile_tiles: HostilityRules {
             throne: PieceSet::all(),
             corners: PieceSet::from_piece_type(Soldier),
-            edge: PieceSet::none()
+            edge: PieceSet::none(),
         },
         occupiable_tiles: OccupyRules {
             throne: PieceSet::from_piece(KING),
-            corners: PieceSet::from_piece(KING)
+            corners: PieceSet::from_piece(KING),
         },
         passable_tiles: PassRules {
-            throne: PieceSet::all()
+            throne: PieceSet::all(),
         },
         slow_pieces: PieceSet::none(),
         starting_side: Attacker,
         enclosure_win: Some(WithoutEdgeAccess),
-        repetition_rule: Some(RepetitionRule { n_repetitions: 3, is_loss: true }),
+        repetition_rule: Some(RepetitionRule {
+            n_repetitions: 3,
+            is_loss: true,
+        }),
         draw_on_no_plays: false,
         linnaean_capture: false,
     };
@@ -49,21 +54,24 @@ pub mod rules {
         hostile_tiles: HostilityRules {
             throne: PieceSet::from_piece_type(Soldier),
             corners: PieceSet::all(),
-            edge: PieceSet::none()
+            edge: PieceSet::none(),
         },
         occupiable_tiles: OccupyRules {
             throne: PieceSet::from_piece(KING),
-            corners: PieceSet::from_piece(KING)
+            corners: PieceSet::from_piece(KING),
         },
         passable_tiles: PassRules {
-            throne: PieceSet::all()
+            throne: PieceSet::all(),
         },
         slow_pieces: PieceSet::none(),
         starting_side: Attacker,
         enclosure_win: Some(WithoutEdgeAccess),
-        repetition_rule: Some(RepetitionRule { n_repetitions: 3, is_loss: true }),
+        repetition_rule: Some(RepetitionRule {
+            n_repetitions: 3,
+            is_loss: true,
+        }),
         draw_on_no_plays: false,
-        linnaean_capture: false
+        linnaean_capture: false,
     };
 
     /// Rules for Magpie.
@@ -81,17 +89,17 @@ pub mod rules {
         },
         occupiable_tiles: OccupyRules {
             throne: PieceSet::from_piece(KING),
-            corners: PieceSet::from_piece(KING)
+            corners: PieceSet::from_piece(KING),
         },
         passable_tiles: PassRules {
-            throne: PieceSet::from_piece(KING)
+            throne: PieceSet::from_piece(KING),
         },
         slow_pieces: PieceSet::from_piece_type(King),
         starting_side: Attacker,
         enclosure_win: None,
         repetition_rule: None,
         draw_on_no_plays: false,
-        linnaean_capture: false
+        linnaean_capture: false,
     };
 
     /// Rules for Linnaeus Tablut.
@@ -105,21 +113,24 @@ pub mod rules {
         hostile_tiles: HostilityRules {
             throne: PieceSet::all(),
             corners: PieceSet::none(),
-            edge: PieceSet::none()
+            edge: PieceSet::none(),
         },
         occupiable_tiles: OccupyRules {
             throne: PieceSet::none(),
-            corners: PieceSet::all()
+            corners: PieceSet::all(),
         },
         passable_tiles: PassRules {
-            throne: PieceSet::none()
+            throne: PieceSet::none(),
         },
         slow_pieces: PieceSet::none(),
         starting_side: Attacker,
         enclosure_win: None,
-        repetition_rule: Some(RepetitionRule { n_repetitions: 3, is_loss: false }),
+        repetition_rule: Some(RepetitionRule {
+            n_repetitions: 3,
+            is_loss: false,
+        }),
         draw_on_no_plays: true,
-        linnaean_capture: true
+        linnaean_capture: true,
     };
 }
 
@@ -130,6 +141,6 @@ pub mod boards {
     pub const BRANDUBH: &str = "3t3/3t3/3T3/ttTKTtt/3T3/3t3/3t3";
 
     pub const MAGPIE: &str = "3t3/1t3t1/3T3/t1TKT1t/3T3/1t3t1/3t3";
-    
+
     pub const TABLUT: &str = "3ttt3/4t4/4T4/t3T3t/ttTTKTTtt/t3T3t/4T4/4t4/3ttt3";
 }

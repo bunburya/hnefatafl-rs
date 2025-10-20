@@ -1,18 +1,21 @@
+use crate::bitfield::BitField;
+use crate::tiles::Tile;
 use std::collections::HashSet;
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
-use crate::bitfield::BitField;
-use crate::tiles::Tile;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-#[cfg_attr(feature = "serde", serde(bound = "B: serde::Serialize + serde::de::DeserializeOwned"))]
+#[cfg_attr(
+    feature = "serde",
+    serde(bound = "B: serde::Serialize + serde::de::DeserializeOwned")
+)]
 pub struct TileSet<B: BitField> {
-    bitfield: B
+    bitfield: B,
 }
 
 impl<B: BitField> TileSet<B> {
@@ -68,17 +71,23 @@ impl<B: BitField> TileSet<B> {
 
     /// Return a set containing each tile in `self` or `other`.
     pub fn union(&self, other: &Self) -> Self {
-        Self { bitfield: self.bitfield | other.bitfield }
+        Self {
+            bitfield: self.bitfield | other.bitfield,
+        }
     }
 
     /// Return a set containing each tile that is in `self` but not in `other`.
     pub fn difference(&self, other: &Self) -> Self {
-        Self { bitfield: self.bitfield & !other.bitfield }
+        Self {
+            bitfield: self.bitfield & !other.bitfield,
+        }
     }
 
     /// Return a set containing each tile that is in both `self` and `other`.
     pub fn intersection(&self, other: &Self) -> Self {
-        Self { bitfield: self.bitfield & other.bitfield }
+        Self {
+            bitfield: self.bitfield & other.bitfield,
+        }
     }
 
     /// Return the first tile in the set. (Order is not generally guaranteed so in practice this
@@ -87,7 +96,6 @@ impl<B: BitField> TileSet<B> {
         B::bit_to_tile(self.bitfield.trailing_zeros())
     }
 }
-
 
 impl<B: BitField> IntoIterator for TileSet<B> {
     type Item = Tile;
@@ -138,11 +146,11 @@ impl<B: BitField> Not for TileSet<B> {
     type Output = Self;
 
     fn not(self) -> Self::Output {
-        Self { bitfield: !self.bitfield }
+        Self {
+            bitfield: !self.bitfield,
+        }
     }
 }
-
-
 
 /// An iterator over set bits in a [`BitField`]. The index of each set bit is converted to a
 /// [`Tile`] before being yielded.
@@ -164,8 +172,8 @@ impl<'a, B: BitField> Iterator for BitfieldTileIter<B> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let skipped = self.state >> self.i;
-        if skipped.is_empty()  {
-            return None
+        if skipped.is_empty() {
+            return None;
         }
         self.i += skipped.trailing_zeros() + 1;
         Some(B::bit_to_tile(self.i - 1))
@@ -182,8 +190,7 @@ impl<B: BitField> From<TileSet<B>> for HashSet<Tile> {
     }
 }
 
-
-impl<'a, B: BitField, T: Iterator<Item=&'a Tile>> From<T> for TileSet<B> {
+impl<'a, B: BitField, T: Iterator<Item = &'a Tile>> From<T> for TileSet<B> {
     fn from(tiles: T) -> Self {
         let mut tile_set = Self::empty();
         for t in tiles {
@@ -224,16 +231,13 @@ mod tests {
         assert!(tile_set.contains(Tile::new(1, 3)));
         assert!(!tile_set.contains(Tile::new(1, 4)));
 
-        let other_tile_set = TileSet::<u64>::from(vec![
-            &Tile::new(4, 2),
-            &Tile::new(1, 3),
-            &Tile::new(6, 1)
-        ].into_iter());
+        let other_tile_set = TileSet::<u64>::from(
+            vec![&Tile::new(4, 2), &Tile::new(1, 3), &Tile::new(6, 1)].into_iter(),
+        );
         assert_eq!(other_tile_set.count(), 3);
         let intersection = tile_set.intersection(&other_tile_set);
         assert!(intersection.contains(Tile::new(1, 3)));
         assert!(!intersection.contains(Tile::new(4, 2)));
         assert!(!intersection.contains(Tile::new(6, 1)));
-
     }
 }

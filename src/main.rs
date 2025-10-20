@@ -1,13 +1,13 @@
 #![cfg(feature = "demo")]
 
+use hnefatafl::aliases::SmallBasicGame;
+use hnefatafl::game::Game;
+use hnefatafl::game::GameOutcome::{Draw, Win};
+use hnefatafl::game::GameStatus::Over;
+use hnefatafl::play::Play;
 use hnefatafl::preset;
 use std::io::stdin;
 use std::str::FromStr;
-use hnefatafl::game::GameOutcome::{Draw, Win};
-use hnefatafl::game::GameStatus::Over;
-use hnefatafl::game::Game;
-use hnefatafl::play::Play;
-use hnefatafl::aliases::SmallBasicGame;
 
 fn input(prompt: &str) -> std::io::Result<String> {
     println!("{prompt}");
@@ -21,21 +21,18 @@ fn get_play() -> Play {
         if let Ok(m_str) = input("Please enter your move:") {
             match Play::from_str(&m_str) {
                 Ok(play) => return play,
-                Err(e) => println!("Invalid move ({e:?}). Try again.")
+                Err(e) => println!("Invalid move ({e:?}). Try again."),
             }
         } else {
             println!("Error reading input. Try again.");
         }
-        
     }
 }
 
 fn main() {
     println!("hnefatafl-rs demo");
-    let mut game: SmallBasicGame = Game::new(
-        preset::rules::BRANDUBH, 
-        preset::boards::BRANDUBH,
-    ).expect("Could not create game.");
+    let mut game: SmallBasicGame = Game::new(preset::rules::BRANDUBH, preset::boards::BRANDUBH)
+        .expect("Could not create game.");
     loop {
         println!("Board:");
         println!("{}", game.state.board);
@@ -47,14 +44,16 @@ fn main() {
                 if let Over(outcome) = status {
                     match outcome {
                         Draw(reason) => println!("Game over. Draw {reason:?}."),
-                        Win(reason, side) => println!("Game over. Winner is {side:?} ({reason:?})."),
+                        Win(reason, side) => {
+                            println!("Game over. Winner is {side:?} ({reason:?}).")
+                        }
                     }
                     println!("Final board:");
                     println!("{}", game.state.board);
-                    return
+                    return;
                 }
-            },
-            Err(e) => println!("Invalid move ({e:?}). Try again.")
+            }
+            Err(e) => println!("Invalid move ({e:?}). Try again."),
         }
     }
 }

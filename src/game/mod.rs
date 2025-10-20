@@ -31,7 +31,7 @@ pub enum WinReason {
     /// The other side has no legal plays available.
     NoPlays,
     /// The other side has repeated a move too many times.
-    Repetition
+    Repetition,
 }
 
 /// The reason why a game has been drawn.
@@ -41,7 +41,7 @@ pub enum DrawReason {
     /// A move has been repeated too many times.
     Repetition,
     /// Player has no legal plays available.
-    NoPlays
+    NoPlays,
 }
 
 /// The outcome of a single game.
@@ -51,7 +51,7 @@ pub enum GameOutcome {
     /// Game has been won by the specified side.
     Win(WinReason, Side),
     /// Game has ended in a draw.
-    Draw(DrawReason)
+    Draw(DrawReason),
 }
 
 /// The current status of the game.
@@ -61,7 +61,7 @@ pub enum GameStatus {
     /// Game is still ongoing.
     Ongoing,
     /// Game is over, with the given outcome.
-    Over(GameOutcome)
+    Over(GameOutcome),
 }
 
 /// A struct representing a single game, including all state and associated information (such as
@@ -73,19 +73,23 @@ pub struct Game<B: BoardState> {
     pub logic: GameLogic<B>,
     pub state: GameState<B>,
     pub play_history: Vec<PlayRecord<B>>,
-    pub state_history: Vec<GameState<B>>
+    pub state_history: Vec<GameState<B>>,
 }
 
 impl<B: BoardState> Game<B> {
-
     /// Create a new [`Game`] from the given rules and starting positions.
     pub fn new(rules: Ruleset, starting_board: &str) -> Result<Self, ParseError> {
         let state: GameState<B> = GameState::new(starting_board, rules.starting_side)?;
         let logic = GameLogic::new(rules, state.board.side_len());
-            
-        Ok(Self { state, logic, play_history: vec![], state_history: vec![state] })
+
+        Ok(Self {
+            state,
+            logic,
+            play_history: vec![],
+            state_history: vec![state],
+        })
     }
-    
+
     /// Actually "do" a play, checking validity, getting outcome, applying outcome to board state,
     /// switching side to play and returning a description of the game status following the move.
     pub fn do_play(&mut self, play: Play) -> Result<GameStatus, PlayInvalid> {
@@ -95,7 +99,7 @@ impl<B: BoardState> Game<B> {
         self.play_history.push(play_record);
         Ok(self.state.status)
     }
-    
+
     pub fn undo_last_play(&mut self) {
         if let Some(state) = self.state_history.pop() {
             self.state = state;
@@ -108,28 +112,31 @@ impl<B: BoardState> Game<B> {
     pub fn iter_plays(&self, tile: Tile) -> Result<ValidPlayIterator<'_, '_, B>, BoardError> {
         ValidPlayIterator::new(&self.logic, &self.state, tile)
     }
-    
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::aliases::SmallBasicBoardState;
     use crate::game::Game;
     use crate::play::Play;
     use crate::preset::{boards, rules};
     use crate::tiles::Tile;
     use std::collections::HashSet;
-    use crate::aliases::SmallBasicBoardState;
 
     #[test]
     fn test_iter_plays() {
-        let game: Game<SmallBasicBoardState> = Game::new(rules::BRANDUBH, boards::BRANDUBH).unwrap();
+        let game: Game<SmallBasicBoardState> =
+            Game::new(rules::BRANDUBH, boards::BRANDUBH).unwrap();
         assert!(game.iter_plays(Tile::new(0, 0)).is_err());
         assert!(game.iter_plays(Tile::new(1, 0)).is_err());
         let outer_att_tile = Tile::new(0, 3);
         let outer_att_iter = game.iter_plays(outer_att_tile);
         assert!(outer_att_iter.is_ok());
         assert_eq!(
-            outer_att_iter.unwrap().map(|vp| vp.play).collect::<HashSet<Play>>(),
+            outer_att_iter
+                .unwrap()
+                .map(|vp| vp.play)
+                .collect::<HashSet<Play>>(),
             hashset!(
                 Play::from_tiles(outer_att_tile, Tile::new(0, 1)).unwrap(),
                 Play::from_tiles(outer_att_tile, Tile::new(0, 2)).unwrap(),
@@ -141,7 +148,10 @@ mod tests {
         let inner_att_iter = game.iter_plays(inner_att_tile);
         assert!(inner_att_iter.is_ok());
         assert_eq!(
-            inner_att_iter.unwrap().map(|vp| vp.play).collect::<HashSet<Play>>(),
+            inner_att_iter
+                .unwrap()
+                .map(|vp| vp.play)
+                .collect::<HashSet<Play>>(),
             hashset!(
                 Play::from_tiles(inner_att_tile, Tile::new(1, 0)).unwrap(),
                 Play::from_tiles(inner_att_tile, Tile::new(1, 1)).unwrap(),
@@ -155,7 +165,10 @@ mod tests {
         let outer_def_iter = game.iter_plays(outer_def_tile);
         assert!(outer_def_iter.is_ok());
         assert_eq!(
-            outer_def_iter.unwrap().map(|vp| vp.play).collect::<HashSet<Play>>(),
+            outer_def_iter
+                .unwrap()
+                .map(|vp| vp.play)
+                .collect::<HashSet<Play>>(),
             hashset!(
                 Play::from_tiles(outer_def_tile, Tile::new(2, 0)).unwrap(),
                 Play::from_tiles(outer_def_tile, Tile::new(2, 1)).unwrap(),
@@ -168,11 +181,15 @@ mod tests {
         let king_tile = Tile::new(3, 3);
         let king_iter = game.iter_plays(king_tile);
         assert!(king_iter.is_ok());
-        assert_eq!(king_iter.unwrap().map(|vp| vp.play).collect::<HashSet<Play>>(), HashSet::new());
-        let game: Game<SmallBasicBoardState> = Game::new(
-            rules::BRANDUBH,
-            "1T5/7/7/1t3K1/7/7/7"
-        ).unwrap();
+        assert_eq!(
+            king_iter
+                .unwrap()
+                .map(|vp| vp.play)
+                .collect::<HashSet<Play>>(),
+            HashSet::new()
+        );
+        let game: Game<SmallBasicBoardState> =
+            Game::new(rules::BRANDUBH, "1T5/7/7/1t3K1/7/7/7").unwrap();
 
         // Test moving through (but not onto) throne and blocking by piece
         let test_tile = Tile::new(3, 1);
@@ -195,18 +212,22 @@ mod tests {
             )
         )
     }
-    
+
     #[test]
     fn test_undo() {
-        let mut g: Game<SmallBasicBoardState> = Game::new(rules::BRANDUBH, boards::BRANDUBH).unwrap();
+        let mut g: Game<SmallBasicBoardState> =
+            Game::new(rules::BRANDUBH, boards::BRANDUBH).unwrap();
         let state_0 = g.state.clone();
-        g.do_play(Play::from_tiles(Tile::new(0, 3), Tile::new(0, 2)).unwrap()).unwrap();
+        g.do_play(Play::from_tiles(Tile::new(0, 3), Tile::new(0, 2)).unwrap())
+            .unwrap();
         let state_1 = g.state.clone();
         assert_ne!(state_0, state_1);
-        g.do_play(Play::from_tiles(Tile::new(2, 3), Tile::new(2, 1)).unwrap()).unwrap();
+        g.do_play(Play::from_tiles(Tile::new(2, 3), Tile::new(2, 1)).unwrap())
+            .unwrap();
         let state_2 = g.state.clone();
         assert_ne!(state_0, state_2);
-        g.do_play(Play::from_tiles(Tile::new(1, 3), Tile::new(1, 1)).unwrap()).unwrap();
+        g.do_play(Play::from_tiles(Tile::new(1, 3), Tile::new(1, 1)).unwrap())
+            .unwrap();
         let state_3 = g.state.clone();
         assert_ne!(state_0, state_3);
         g.undo_last_play();
@@ -217,30 +238,31 @@ mod tests {
         assert_eq!(g.state, state_0);
         g.undo_last_play();
         assert_eq!(g.state, state_0);
-
     }
 }
 
 #[cfg(all(test, feature = "serde"))]
 mod serde_tests {
+    use crate::aliases::MediumBasicGame;
     use crate::game::Game;
     use crate::play::Play;
     use crate::preset::{boards, rules};
     use bincode;
     use bincode::serde::{decode_from_slice, encode_to_vec};
     use std::str::FromStr;
-    use crate::aliases::MediumBasicGame;
 
     #[test]
     fn test_round_trip() {
-        let mut g: MediumBasicGame = Game::new(rules::COPENHAGEN, boards::COPENHAGEN)
-            .expect("failed to create game");
+        let mut g: MediumBasicGame =
+            Game::new(rules::COPENHAGEN, boards::COPENHAGEN).expect("failed to create game");
         let cfg = bincode::config::standard();
         let bytes = encode_to_vec(&g, cfg).unwrap();
         let (back, _len) = decode_from_slice(&bytes, cfg).unwrap();
         assert_eq!(g, back);
-        g.do_play(Play::from_str("h11-h7").expect("bad play")).expect("failed to do play");
-        g.do_play(Play::from_str("f8-h8").expect("bad play")).expect("failed to do play");
+        g.do_play(Play::from_str("h11-h7").expect("bad play"))
+            .expect("failed to do play");
+        g.do_play(Play::from_str("f8-h8").expect("bad play"))
+            .expect("failed to do play");
         let bytes = encode_to_vec(&g, cfg).unwrap();
         let (back, _len) = decode_from_slice(&bytes, cfg).unwrap();
         assert_eq!(g, back);
