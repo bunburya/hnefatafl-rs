@@ -1,0 +1,24 @@
+on: push
+name: clippy check
+
+# Make sure CI fails on all warnings, including Clippy lints
+env:
+  RUSTFLAGS: "-D warnings"
+
+jobs:
+  clippy_check:
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      # required for workflows in private repositories
+      # contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Run clippy
+        run: |
+          rustup component add clippy
+          cargo clippy --all-targets
