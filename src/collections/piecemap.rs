@@ -253,8 +253,8 @@ impl<B: BitField> PieceMap for BasicPieceMap<B> {
             let mut n_empty = 0;
             let mut c = 0u8;
             for chr in line.chars() {
-                if chr.is_digit(10) {
-                    n_empty = (n_empty * 10) + (chr as u8 - '0' as u8);
+                if chr.is_ascii_digit() {
+                    n_empty = (n_empty * 10) + (chr as u8 - b'0');
                 } else {
                     c += n_empty;
                     n_empty = 0;
@@ -307,7 +307,7 @@ pub struct BasicPieceMapIterator<B: BitField> {
     current_piece: Piece,
 }
 
-impl<'a, B: BitField> BasicPieceMapIterator<B> {
+impl<B: BitField> BasicPieceMapIterator<B> {
     pub fn new(piece_map: BasicPieceMap<B>) -> Self {
         Self {
             piece_map,
@@ -370,7 +370,7 @@ impl<B: BitField> Iterator for BasicPieceMapIterator<B> {
     }
 }
 
-impl<'a, B: BitField> IntoIterator for BasicPieceMap<B> {
+impl<B: BitField> IntoIterator for BasicPieceMap<B> {
     type Item = PlacedPiece;
     type IntoIter = BasicPieceMapIterator<B>;
     fn into_iter(self) -> Self::IntoIter {
@@ -378,7 +378,7 @@ impl<'a, B: BitField> IntoIterator for BasicPieceMap<B> {
     }
 }
 
-impl<'a, B: BitField> IntoIterator for &'a BasicPieceMap<B> {
+impl<B: BitField> IntoIterator for &BasicPieceMap<B> {
     type Item = PlacedPiece;
     type IntoIter = BasicPieceMapIterator<B>;
     fn into_iter(self) -> Self::IntoIter {

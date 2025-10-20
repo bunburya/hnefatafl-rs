@@ -151,7 +151,6 @@ impl<B: BoardState> Display for PlayRecord<B> {
                 "x{}",
                 self.effects
                     .captures
-                    .clone()
                     .into_iter()
                     .map(|pp: PlacedPiece| pp.tile.to_string())
                     .collect::<Vec<_>>()

@@ -106,7 +106,7 @@ impl<B: BitField> IntoIterator for TileSet<B> {
     }
 }
 
-impl<'a, B: BitField> IntoIterator for &'a TileSet<B> {
+impl<B: BitField> IntoIterator for &TileSet<B> {
     type Item = Tile;
     type IntoIter = BitfieldTileIter<B>;
     fn into_iter(self) -> Self::IntoIter {
@@ -167,7 +167,7 @@ impl<B: BitField> BitfieldTileIter<B> {
     }
 }
 
-impl<'a, B: BitField> Iterator for BitfieldTileIter<B> {
+impl<B: BitField> Iterator for BitfieldTileIter<B> {
     type Item = Tile;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -205,7 +205,7 @@ impl<'a, B: BitField, T: Iterator<Item = &'a Tile>> From<T> for TileSet<B> {
 macro_rules! tileset {
     ($( $x: expr ),* ) => {
         {
-            use crate::collections::tileset::TileSet;
+            use $crate::collections::tileset::TileSet;
             let mut tmp = TileSet::empty();
             $(
                 tmp.insert($x);
