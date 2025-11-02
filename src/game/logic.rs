@@ -794,7 +794,10 @@ impl<B: BoardState> GameLogic<B> {
             is_loss,
         }) = self.rules.repetition_rule
         {
-            if state.repetitions.get_repetitions(state.side_to_play) >= n_repetitions {
+            if state
+                .recent_positions
+                .appears_n_times(state.into(), n_repetitions)
+            {
                 // Loss or draw as a result of repeated moves.
                 return if is_loss {
                     Some(Win(WinReason::Repetition, state.side_to_play.other()))
@@ -833,9 +836,9 @@ impl<B: BoardState> GameLogic<B> {
         let captures = self.get_captures(valid_play, moving_piece, &state);
         state.board.remove_placed_pieces(&captures);
         // Update records of repetitions and non-capturing plays
-        state
-            .repetitions
-            .track_play(state.side_to_play, play, !captures.is_empty());
+        if captures.is_empty() {
+            state.recent_positions.push(state)
+        }
         if captures.is_empty() {
             state.plays_since_capture += 1;
         } else {

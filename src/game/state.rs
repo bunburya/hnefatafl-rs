@@ -1,157 +1,66 @@
 use crate::board::state::BoardState;
-use crate::collections::piecemap::PieceMap;
 use crate::error::ParseError;
 use crate::game::GameStatus;
 use crate::game::GameStatus::Ongoing;
 use crate::pieces::Side;
-use crate::play::{Play, PlayRecord};
 use std::cmp::PartialEq;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-/// A short (fixed-size) record of the relevant information about a play we need to figure out
-/// if it is a repetition of a previous play.
+/// A struct containing the minimum information needed to uniquely identify a position in the game.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub(crate) struct ShortPlayRecord {
-    side: Side,
-    play: Play,
-    captures: bool,
+pub struct Position<B: BoardState> {
+    board_state: B,
+    side_to_play: Side,
+    status: GameStatus,
 }
 
-impl<B: BoardState> From<&PlayRecord<B>> for ShortPlayRecord {
-    fn from(play_record: &PlayRecord<B>) -> Self {
+impl<B: BoardState> From<&GameState<B>> for Position<B> {
+    fn from(game_state: &GameState<B>) -> Self {
         Self {
-            side: play_record.side,
-            play: play_record.play,
-            captures: !play_record.effects.captures.is_empty(),
+            board_state: game_state.board,
+            side_to_play: game_state.side_to_play,
+            status: game_state.status,
         }
     }
 }
 
-/// A queue of a fixed size. Pushing a new value to the end of the queue drops the first item in the
-/// queue.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Default)]
+/// A fixed size queue of game positions. Pushing a new value to the end of the queue drops the
+/// first item in the queue.
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Default)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-struct PlayRecQueue {
-    queue: [Option<ShortPlayRecord>; 4],
+pub struct PositionQueue<B: BoardState> {
+    // 32 chosen because that's the longest array for which `serde` can derive `Serialize` and
+    // `Deserialize`
+    queue: [Option<Position<B>>; 32],
     first_i: usize,
 }
 
-impl PlayRecQueue {
-    pub(crate) fn push(&mut self, value: Option<ShortPlayRecord>) {
-        self.queue[self.first_i] = value;
-        self.first_i = if self.first_i == 3 {
+impl<B: BoardState> PositionQueue<B> {
+    /// Push a new position to the queue.
+    pub(crate) fn push(&mut self, value: GameState<B>) {
+        self.queue[self.first_i] = Some((&value).into());
+        self.first_i = if self.first_i == 31 {
             0
         } else {
             self.first_i + 1
         }
     }
 
-    pub(crate) fn first(&self) -> &Option<ShortPlayRecord> {
-        &self.queue[self.first_i]
-    }
-}
-
-/// Keeps track of the number of consecutive times each side has repeated its last move.
-///
-/// A move is considered to be a repetition if
-/// (1) it does not capture any pieces;
-/// (2) it is the same as the fourth last move in the game record; and
-/// (3) it is not merely a reversal of a previous repeating move.
-///
-/// To explain (3), for example, if a player moves (`a1-b1`, `b1-a1`, `a1-b1`, `b1-a1`), the second
-/// `a1-b1` would count as a repetition but the second `b1-a1` would not (but would not force
-/// a reset of the repetition counter).
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct RepetitionTracker {
-    pub(crate) attacker_reps: usize,
-    pub(crate) defender_reps: usize,
-    attacker_mid_pair: bool,
-    defender_mid_pair: bool,
-    recent_plays: PlayRecQueue,
-}
-
-impl Default for RepetitionTracker {
-    fn default() -> Self {
-        Self {
-            // The default repetition counts are 1 because the first move is always a repetition.
-            attacker_reps: 1,
-            defender_reps: 1,
-            attacker_mid_pair: false,
-            defender_mid_pair: false,
-            recent_plays: PlayRecQueue::default(),
-        }
-    }
-}
-
-impl RepetitionTracker {
-    fn is_mid_pair(&self, side: Side) -> bool {
-        match side {
-            Side::Attacker => self.attacker_mid_pair,
-            Side::Defender => self.defender_mid_pair,
-        }
-    }
-
-    fn toggle_mid_pair(&mut self, side: Side) {
-        match side {
-            Side::Attacker => self.attacker_mid_pair = !self.attacker_mid_pair,
-            Side::Defender => self.defender_mid_pair = !self.defender_mid_pair,
-        }
-    }
-
-    /// Check whether play is a repetition (same move as four plays ago) and is not the second leg
-    /// of a pair.
-    ///
-    /// Returns a tuple of `bool`s. The first bool is whether to increment the repetition counter.
-    /// The second is whether to reset the repetition counter.
-    fn check_repetition(&mut self, record: ShortPlayRecord) -> (bool, bool) {
-        if (!record.captures) && (Some(record) == *self.recent_plays.first()) {
-            let is_rep = !self.is_mid_pair(record.side);
-            self.toggle_mid_pair(record.side);
-            (is_rep, false)
-        } else {
-            (false, true)
-        }
-    }
-
-    /// Return the number of consecutive repetitions recorded for the given side.
-    pub fn get_repetitions(&self, side: Side) -> usize {
-        match side {
-            Side::Attacker => self.attacker_reps,
-            Side::Defender => self.defender_reps,
-        }
-    }
-
-    /// Track the given play, adding to the given player's repetition count if it is a repetition
-    /// and resetting both counters back to zero otherwise.
-    pub fn track_play(&mut self, side: Side, play: Play, captures: bool) {
-        let record = ShortPlayRecord {
-            side,
-            play,
-            captures,
-        };
-        let (incr, reset) = self.check_repetition(record);
-        if incr {
-            match record.side {
-                Side::Attacker => self.attacker_reps += 1,
-                Side::Defender => self.defender_reps += 1,
-            }
-        } else if reset {
-            match record.side {
-                Side::Attacker => {
-                    self.attacker_reps = 1;
-                    self.attacker_mid_pair = false;
-                }
-                Side::Defender => {
-                    self.defender_reps = 1;
-                    self.defender_mid_pair = false;
+    /// Returns true if the given position appears at least `n` times in the queue.
+    pub(crate) fn appears_n_times(&self, posn: Position<B>, n: usize) -> bool {
+        let mut count = 0;
+        for p in self.queue {
+            if p == Some(posn) {
+                count += 1;
+                if count == n {
+                    return true;
                 }
             }
         }
-        self.recent_plays.push(Some(record));
+        false
     }
 }
 
@@ -166,7 +75,7 @@ pub struct GameState<B: BoardState> {
     /// The side whose turn it is.
     pub side_to_play: Side,
     /// Tracker for repetitions.
-    pub repetitions: RepetitionTracker,
+    pub recent_positions: PositionQueue<B>,
     /// Number of plays since a piece was last captured.
     pub plays_since_capture: usize,
     /// Current status of the game.
@@ -180,34 +89,10 @@ impl<B: BoardState> GameState<B> {
         Ok(Self {
             board: B::from_fen(fen_str)?,
             side_to_play,
-            repetitions: RepetitionTracker::default(),
+            recent_positions: PositionQueue::default(),
             plays_since_capture: 0,
             status: Ongoing,
             turn: 0,
         })
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::game::state::RepetitionTracker;
-    use crate::pieces::Side;
-    use crate::play::Play;
-    use std::str::FromStr;
-
-    #[test]
-    fn test_repetition_tracker() {
-        let mut tracker = RepetitionTracker::default();
-        tracker.track_play(Side::Attacker, Play::from_str("f10-h10").unwrap(), false);
-        tracker.track_play(Side::Defender, Play::from_str("f8-h8").unwrap(), false);
-        tracker.track_play(Side::Attacker, Play::from_str("h10-f10").unwrap(), false);
-        tracker.track_play(Side::Defender, Play::from_str("h8-f8").unwrap(), false);
-        tracker.track_play(Side::Attacker, Play::from_str("f10-h10").unwrap(), false);
-        tracker.track_play(Side::Defender, Play::from_str("f8-h8").unwrap(), false);
-        tracker.track_play(Side::Attacker, Play::from_str("h10-f10").unwrap(), false);
-        tracker.track_play(Side::Defender, Play::from_str("h8-f8").unwrap(), false);
-        assert_eq!(tracker.get_repetitions(Side::Attacker), 2);
-        tracker.track_play(Side::Attacker, Play::from_str("f10-h10").unwrap(), false);
-        assert_eq!(tracker.get_repetitions(Side::Attacker), 3);
     }
 }

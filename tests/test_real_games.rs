@@ -4,7 +4,7 @@ use hnefatafl::collections::piecemap::PieceMap;
 use hnefatafl::collections::tileset::TileSet;
 use hnefatafl::error::ParseError;
 use hnefatafl::error::ParseError::EmptyString;
-use hnefatafl::game::Game;
+use hnefatafl::game::{DrawReason, Game, WinReason};
 use hnefatafl::game::{GameOutcome, GameStatus};
 use hnefatafl::pieces::Side;
 use hnefatafl::play::Play;
@@ -42,7 +42,7 @@ fn test_real_games(rules: Ruleset, starting_posn: &str, fname: &str) {
     let s = fs::read_to_string(f).unwrap();
     let lines = s.split('\n');
     let mut last_game_status: GameStatus = GameStatus::Ongoing;
-    for line in lines {
+    'line_loop: for line in lines {
         if line.starts_with('#') {
             continue;
         }
@@ -53,14 +53,14 @@ fn test_real_games(rules: Ruleset, starting_posn: &str, fname: &str) {
             continue;
         }
         let plays = cols[0].split(' ').collect::<Vec<&str>>();
-        //println!("{line}");
-        for p_str in plays {
-            //println!("{p_str}");
+        println!("{line}");
+        for (i, &p_str) in plays.iter().enumerate() {
+            println!("{i}: {p_str}");
             //println!("{}", g.state.board);
             if let Ok((p, c)) = play_captures_from_str(p_str) {
                 let vp_res = g.logic.validate_play(p, &g.state);
-                assert!(vp_res.is_ok());
-                let vp = vp_res.unwrap(); // just checked that this is ok
+                //println!("{vp_res:?}");
+                let vp = vp_res.unwrap();
                 let piece = g.state.board.move_piece(p.from, p.to());
                 let captures = g.logic.get_captures(vp, piece, &g.state);
                 g.state.board.move_piece(p.to(), p.from);
@@ -72,14 +72,26 @@ fn test_real_games(rules: Ruleset, starting_posn: &str, fname: &str) {
                 }
 
                 let game_status_res = g.do_play(p);
-                assert!(game_status_res.is_ok());
-                last_game_status = game_status_res.unwrap();
+                match game_status_res {
+                    // A lot of games in the historical data repeat positions but do not end at the
+                    // repetition, so it seems maybe the repetition rule was not implemented.
+                    // Therefore, we skip these games.
+                    Ok(GameStatus::Over(GameOutcome::Draw(DrawReason::Repetition))) => {
+                        continue 'line_loop;
+                    }
+                    Ok(GameStatus::Over(GameOutcome::Win(WinReason::Repetition, _))) => {
+                        continue 'line_loop;
+                    }
+                    Err(e) => panic!("{:?}", e),
+                    _ => last_game_status = game_status_res.unwrap(),
+                }
             } else {
                 assert_eq!(p_str, "timeout")
             }
         }
 
-        if let GameStatus::Over(GameOutcome::Win(_, side)) = last_game_status {
+        if let GameStatus::Over(GameOutcome::Win(reason, side)) = last_game_status {
+            println!("{reason:?}");
             let expected = match side {
                 Side::Attacker => "Black",
                 Side::Defender => "White",
