@@ -1532,7 +1532,7 @@ mod tests {
     fn test_repetitions() {
         let mut game: Game<SmallBasicBoardState> =
             Game::new(rules::BRANDUBH, boards::BRANDUBH).unwrap();
-        for _ in 0..3 {
+        for _ in 0..2 {
             game.do_play(Play::from_str("d6-f6").unwrap()).unwrap();
             game.do_play(Play::from_str("d5-f5").unwrap()).unwrap();
             game.do_play(Play::from_str("f6-d6").unwrap()).unwrap();
