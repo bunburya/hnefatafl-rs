@@ -1,10 +1,9 @@
-use crate::error::ParseError::{BadChar, EmptyString};
 use crate::error::ParseError;
+use crate::error::ParseError::{BadChar, EmptyString};
 use crate::tiles::Axis::{Horizontal, Vertical};
 use std::fmt::{Debug, Display, Formatter};
 use std::ops::Add;
 use std::str::FromStr;
-
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -35,9 +34,9 @@ impl AxisOffset {
 /// An offset which can be applied to [`Coords`] and which is composed of the row and column offset
 /// to be applied.
 #[derive(Debug, Copy, Clone)]
-pub struct RowColOffset{
+pub struct RowColOffset {
     row: i8,
-    col: i8
+    col: i8,
 }
 
 impl RowColOffset {
@@ -57,7 +56,7 @@ impl RowColOffset {
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct Coords {
     pub row: i8,
-    pub col: i8
+    pub col: i8,
 }
 
 impl Coords {
@@ -68,7 +67,7 @@ impl Coords {
     pub fn row_col_offset_from(&self, other: Coords) -> RowColOffset {
         RowColOffset {
             row: self.row - other.row,
-            col: self.col - other.col
+            col: self.col - other.col,
         }
     }
 }
@@ -77,7 +76,7 @@ impl From<Tile> for Coords {
     fn from(t: Tile) -> Self {
         Self {
             row: t.row as i8,
-            col: t.col as i8
+            col: t.col as i8,
         }
     }
 }
@@ -88,7 +87,7 @@ impl Add<RowColOffset> for Coords {
     fn add(self, rhs: RowColOffset) -> Self {
         Self {
             row: self.row + rhs.row,
-            col: self.col + rhs.col
+            col: self.col + rhs.col,
         }
     }
 }
@@ -113,25 +112,23 @@ impl Add<AxisOffset> for Coords {
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Tile {
     pub row: u8,
-    pub col: u8
+    pub col: u8,
 }
 
 impl Tile {
-    
     /// Create a new [`Tile`] with the given row and column.
     pub fn new(row: u8, col: u8) -> Self {
         Self { row, col }
     }
-    
+
     /// The tile's position on the given axis, ie, the tile's row if `axis` is [`Vertical`] and its
-    /// column if `axis` is [`Horizontal`]. 
+    /// column if `axis` is [`Horizontal`].
     pub fn posn_on_axis(&self, axis: Axis) -> u8 {
         match axis {
             Vertical => self.row,
-            Horizontal => self.col
+            Horizontal => self.col,
         }
     }
-    
 }
 
 impl Debug for Tile {
@@ -151,14 +148,13 @@ impl FromStr for Tile {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let col = if let Some(&byte) = s.as_bytes().first() {
             if !(97..=122).contains(&byte) {
-                return Err(BadChar(byte as char))
+                return Err(BadChar(byte as char));
             }
             byte - 97
         } else {
-            return Err(EmptyString)
+            return Err(EmptyString);
         };
         Ok(Tile::new(s[1..].parse::<u8>()? - 1, col))
-
     }
 }
 
@@ -173,14 +169,14 @@ impl From<Tile> for (u8, u8) {
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Axis {
     Vertical = 0,
-    Horizontal = 0x80
+    Horizontal = 0x80,
 }
 
 impl Axis {
     pub fn other(&self) -> Axis {
         match self {
             Vertical => Horizontal,
-            Horizontal => Vertical
+            Horizontal => Vertical,
         }
     }
 }
@@ -189,7 +185,7 @@ impl Axis {
 pub struct TileIterator {
     side_len: u8,
     current_row: u8,
-    current_col: u8
+    current_col: u8,
 }
 
 impl TileIterator {
@@ -197,7 +193,7 @@ impl TileIterator {
         Self {
             side_len,
             current_row: 0,
-            current_col: 0
+            current_col: 0,
         }
     }
 }
@@ -206,7 +202,7 @@ impl Iterator for TileIterator {
     type Item = Tile;
     fn next(&mut self) -> Option<Self::Item> {
         if self.current_row >= self.side_len {
-            return None
+            return None;
         }
         let tile = Tile::new(self.current_row, self.current_col);
         if self.current_col >= self.side_len - 1 {
@@ -238,7 +234,7 @@ mod tests {
             }
         }
     }
-    
+
     #[test]
     fn test_moves() {
         let p_res = Play::from_tiles(Tile::new(2, 4), Tile::new(2, 6));
@@ -277,7 +273,7 @@ mod tests {
         let m_res = Play::from_tiles(Tile::new(2, 3), Tile::new(3, 6));
         assert!(m_res.is_err());
     }
-    
+
     #[test]
     fn test_parsing_tiles() {
         let parsed_t = Tile::from_str("a8");
@@ -291,41 +287,35 @@ mod tests {
         assert!(parsed_t.is_ok());
         assert_eq!(parsed_t.unwrap(), t);
         assert_eq!(t.to_string(), "f14");
-        
+
         assert_eq!(Tile::from_str(""), Err(EmptyString));
         assert_eq!(Tile::from_str("[53"), Err(BadChar('[')));
         assert!(matches!(Tile::from_str("a!!"), Err(BadInt(_))));
     }
-    
+
     #[test]
     fn test_parsing_moves() {
         let parsed_m = Play::from_str("a8-a11");
-        let m = Play::from_tiles(
-            Tile::new(7, 0), 
-            Tile::new(10, 0)
-        ).unwrap();
+        let m = Play::from_tiles(Tile::new(7, 0), Tile::new(10, 0)).unwrap();
         assert!(parsed_m.is_ok());
         assert_eq!(parsed_m.unwrap(), m);
         assert_eq!(m.to_string(), "a8-a11");
 
         let parsed_m = Play::from_str("f5-d5");
-        let m = Play::from_tiles(
-            Tile::new(4, 5),
-            Tile::new(4, 3)
-        ).unwrap();
+        let m = Play::from_tiles(Tile::new(4, 5), Tile::new(4, 3)).unwrap();
         assert!(parsed_m.is_ok());
         assert_eq!(parsed_m.unwrap(), m);
         assert_eq!(m.to_string(), "f5-d5");
-        
+
         let parsed_m = Play::from_str("f5-d6");
         assert_eq!(parsed_m, Err(BadPlay(PlayError::DisjointTiles)));
-        
+
         let parsed_m = Play::from_str("f5-d7-d6");
         assert_eq!(parsed_m, Err(BadString(String::from("f5-d7-d6"))));
-        
+
         let parsed_m = Play::from_str("f5-d]");
         assert!(matches!(parsed_m, Err(BadInt(_))));
-        
+
         let parsed_m = Play::from_str("!5-d5");
         assert_eq!(parsed_m, Err(BadChar('!')));
     }

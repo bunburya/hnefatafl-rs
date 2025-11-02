@@ -1,6 +1,6 @@
-use std::ops::Shl;
-use crate::pieces::{Piece, PieceType, Side};
 use crate::pieces::PieceType::King;
+use crate::pieces::{Piece, PieceType, Side};
+use std::ops::Shl;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -17,7 +17,6 @@ impl From<u16> for PieceSet {
 }
 
 impl From<PieceType> for PieceSet {
-
     /// Create a new [`PieceSet`] which includes only the given piece type (on each side).
     fn from(value: PieceType) -> Self {
         Self::from_piece_type(value)
@@ -41,9 +40,11 @@ impl From<Piece> for PieceSet {
 
 impl From<Vec<Piece>> for PieceSet {
     fn from(value: Vec<Piece>) -> Self {
-        Self(value.into_iter().fold(0u16, |acc, piece| {
-            acc | (piece.piece_type << piece.side)
-        }))
+        Self(
+            value
+                .into_iter()
+                .fold(0u16, |acc, piece| acc | (piece.piece_type << piece.side)),
+        )
     }
 }
 
@@ -62,7 +63,6 @@ impl From<Side> for PieceSet {
 }
 
 impl PieceSet {
-
     /// Create a new empty [`PieceSet`].
     pub const fn none() -> Self {
         Self(0)

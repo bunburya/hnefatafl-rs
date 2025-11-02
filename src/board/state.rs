@@ -15,7 +15,6 @@ use serde::{Deserialize, Serialize};
 
 /// Store information on the current board state (ie, pieces).
 pub trait BoardState: Default + Clone + Copy + Display + FromStr + Debug + PartialEq {
-
     type BitField: BitField;
     type PieceMap: PieceMap;
 
@@ -94,7 +93,6 @@ pub trait BoardState: Default + Clone + Copy + Display + FromStr + Debug + Parti
 
     /// Remove all placed pieces represented by the given piece map from the board.
     fn remove_placed_pieces(&mut self, piece_map: &Self::PieceMap);
-
 }
 
 /// This struct stores information about piece placement, by piece type. It is mainly a wrapper
@@ -111,14 +109,16 @@ pub trait BoardState: Default + Clone + Copy + Display + FromStr + Debug + Parti
 /// If performance was an issue, we could look at moving some of that logic to the bitfield level.
 #[derive(Copy, Clone, Hash, Eq, PartialEq, Default, Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-#[cfg_attr(feature = "serde", serde(bound = "B: serde::Serialize + serde::de::DeserializeOwned"))]
+#[cfg_attr(
+    feature = "serde",
+    serde(bound = "B: serde::Serialize + serde::de::DeserializeOwned")
+)]
 pub struct BasicBoardState<B: BitField> {
     pieces: BasicPieceMap<B>,
-    side_len: u8
+    side_len: u8,
 }
 
 impl<B: BitField> BoardState for BasicBoardState<B> {
-
     type BitField = B;
     type PieceMap = BasicPieceMap<B>;
 
@@ -143,7 +143,7 @@ impl<B: BitField> BoardState for BasicBoardState<B> {
     }
 
     fn clear_tiles(&mut self, tiles: &TileSet<B>) {
-       self.pieces.remove_tiles(*tiles);
+        self.pieces.remove_tiles(*tiles);
     }
 
     fn get_piece(&self, t: Tile) -> Option<Piece> {
@@ -157,14 +157,14 @@ impl<B: BitField> BoardState for BasicBoardState<B> {
     fn count_pieces_of_side(&self, side: Side) -> u8 {
         (match side {
             Side::Attacker => self.pieces.attacking_soldier.count(),
-            Side::Defender => (self.pieces.defending_soldier | self.pieces.king).count()
+            Side::Defender => (self.pieces.defending_soldier | self.pieces.king).count(),
         }) as u8
     }
 
     fn occupied_by_side(&self, side: Side) -> TileSet<B> {
         match side {
             Side::Attacker => self.pieces.attacking_soldier,
-            Side::Defender => self.pieces.defending_soldier | self.pieces.king
+            Side::Defender => self.pieces.defending_soldier | self.pieces.king,
         }
     }
 
@@ -188,7 +188,7 @@ impl<B: BitField> BoardState for BasicBoardState<B> {
             if state.side_len == 0 {
                 state.side_len = line_len
             } else if line_len != state.side_len {
-                return Err(BadLineLen(line.len()))
+                return Err(BadLineLen(line.len()));
             }
             for (c, chr) in line.chars().enumerate() {
                 if chr != '.' {
@@ -245,7 +245,7 @@ impl<T: BitField> FromStr for BasicBoardState<T> {
     }
 }
 
-impl <T: BitField> Display for BasicBoardState<T> {
+impl<T: BitField> Display for BasicBoardState<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.to_display_str())
     }
@@ -265,19 +265,12 @@ mod tests {
 
     #[test]
     fn test_from_str() {
-        let from_fen = SmallBasicBoardState::from_fen(
-            "3t3/3t3/3T3/ttTKTtt/3T3/3t3/3t3"
-        );
+        let from_fen = SmallBasicBoardState::from_fen("3t3/3t3/3T3/ttTKTtt/3T3/3t3/3t3");
         let from_display_str = SmallBasicBoardState::from_display_str(
             &[
-                "...t...",
-                "...t...",
-                "...T...",
-                "ttTKTtt",
-                "...T...",
-                "...t...",
-                "...t..."
-            ].join("\n")
+                "...t...", "...t...", "...T...", "ttTKTtt", "...T...", "...t...", "...t...",
+            ]
+            .join("\n"),
         );
         assert_eq!(from_fen, from_display_str);
     }
@@ -295,25 +288,16 @@ mod tests {
         state.move_piece(Tile::new(3, 3), Tile::new(0, 4));
         assert_eq!(state.get_king(), Some(Tile::new(0, 4)));
         assert_eq!(state.to_fen(), expected_str);
-    
-        let occupied = [
-            Tile::new(0, 3),
-            Tile::new(2, 3),
-            Tile::new(0, 4)
-        ];
+
+        let occupied = [Tile::new(0, 3), Tile::new(2, 3), Tile::new(0, 4)];
         for t in occupied {
             assert!(state.tile_occupied(t));
         }
-        let empty = [
-            Tile::new(3, 3),
-            Tile::new(5, 4),
-            Tile::new(1, 1)
-        ];
+        let empty = [Tile::new(3, 3), Tile::new(5, 4), Tile::new(1, 1)];
         for t in empty {
             assert!(!state.tile_occupied(t));
         }
     }
-
 
     #[test]
     fn test_iter_occupied() {
@@ -344,16 +328,27 @@ mod tests {
     #[test]
     fn test_swap_pieces() {
         let mut board = SmallBasicBoardState::from_str("5/1K3/5/5/3t1").unwrap();
-        assert_eq!(board.get_piece(Tile::new(1, 1)), Some(Piece::new(King, Defender)));
-        assert_eq!(board.get_piece(Tile::new(4, 3)), Some(Piece::new(Soldier, Attacker)));
+        assert_eq!(
+            board.get_piece(Tile::new(1, 1)),
+            Some(Piece::new(King, Defender))
+        );
+        assert_eq!(
+            board.get_piece(Tile::new(4, 3)),
+            Some(Piece::new(Soldier, Attacker))
+        );
         assert_eq!(board.get_king(), Some(Tile::new(1, 1)));
         board.swap_pieces(Tile::new(1, 1), Tile::new(4, 3));
-        assert_eq!(board.get_piece(Tile::new(4, 3)), Some(Piece::new(King, Defender)));
-        assert_eq!(board.get_piece(Tile::new(1, 1)), Some(Piece::new(Soldier, Attacker)));
+        assert_eq!(
+            board.get_piece(Tile::new(4, 3)),
+            Some(Piece::new(King, Defender))
+        );
+        assert_eq!(
+            board.get_piece(Tile::new(1, 1)),
+            Some(Piece::new(Soldier, Attacker))
+        );
         assert_eq!(board.get_king(), Some(Tile::new(4, 3)));
-
     }
-    
+
     #[test]
     fn test_count_pieces() {
         let board = MediumBasicBoardState::from_str(boards::COPENHAGEN).unwrap();

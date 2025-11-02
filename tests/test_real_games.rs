@@ -1,4 +1,7 @@
+use hnefatafl::aliases::MediumBasicBoardState;
 use hnefatafl::board::state::BoardState;
+use hnefatafl::collections::piecemap::PieceMap;
+use hnefatafl::collections::tileset::TileSet;
 use hnefatafl::error::ParseError;
 use hnefatafl::error::ParseError::EmptyString;
 use hnefatafl::game::Game;
@@ -8,13 +11,10 @@ use hnefatafl::play::Play;
 use hnefatafl::preset::{boards, rules};
 use hnefatafl::rules::Ruleset;
 use hnefatafl::tiles::Tile;
-use hnefatafl::collections::tileset::TileSet;
 use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
 use std::str::FromStr;
-use hnefatafl::aliases::MediumBasicBoardState;
-use hnefatafl::collections::piecemap::PieceMap;
 
 fn play_captures_from_str(s: &str) -> Result<(Play, HashSet<Tile>), ParseError> {
     if s.is_empty() {
@@ -27,9 +27,7 @@ fn play_captures_from_str(s: &str) -> Result<(Play, HashSet<Tile>), ParseError> 
         captures.insert(Tile::from_str(c)?);
     }
     Ok((play, captures))
-
 }
-
 
 fn test_real_games(rules: Ruleset, starting_posn: &str, fname: &str) {
     let f: PathBuf = [
@@ -37,23 +35,22 @@ fn test_real_games(rules: Ruleset, starting_posn: &str, fname: &str) {
         "resources",
         "test",
         "games",
-        fname
-    ].iter().collect();
+        fname,
+    ]
+    .iter()
+    .collect();
     let s = fs::read_to_string(f).unwrap();
     let lines = s.split('\n');
     let mut last_game_status: GameStatus = GameStatus::Ongoing;
     for line in lines {
         if line.starts_with('#') {
-            continue
+            continue;
         }
-        let mut g: Game<MediumBasicBoardState> = Game::new(
-            rules,
-            starting_posn
-        ).unwrap();
+        let mut g: Game<MediumBasicBoardState> = Game::new(rules, starting_posn).unwrap();
         let cols = line.split(',').collect::<Vec<&str>>();
         let outcome = cols.last().unwrap();
         if outcome.is_empty() {
-            continue
+            continue;
         }
         let plays = cols[0].split(' ').collect::<Vec<&str>>();
         //println!("{line}");
@@ -85,7 +82,7 @@ fn test_real_games(rules: Ruleset, starting_posn: &str, fname: &str) {
         if let GameStatus::Over(GameOutcome::Win(_, side)) = last_game_status {
             let expected = match side {
                 Side::Attacker => "Black",
-                Side::Defender => "White"
+                Side::Defender => "White",
             };
             assert_eq!(&expected, outcome);
         }
@@ -94,18 +91,10 @@ fn test_real_games(rules: Ruleset, starting_posn: &str, fname: &str) {
 
 #[test]
 fn test_real_copenhagen() {
-    test_real_games(
-        rules::COPENHAGEN,
-        boards::COPENHAGEN,
-        "copenhagen.csv"
-    )
+    test_real_games(rules::COPENHAGEN, boards::COPENHAGEN, "copenhagen.csv")
 }
 
 #[test]
 fn test_real_brandubh() {
-    test_real_games(
-        rules::BRANDUBH,
-        boards::BRANDUBH,
-        "brandubh.csv"
-    )
+    test_real_games(rules::BRANDUBH, boards::BRANDUBH, "brandubh.csv")
 }

@@ -1,5 +1,5 @@
-use std::num::ParseIntError;
 use crate::error::ParseError::BadInt;
+use std::num::ParseIntError;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -23,8 +23,7 @@ pub enum ParseError {
     /// Tried to parse a string which represents an invalid [`Play`].
     BadPlay(PlayError),
     /// A generic error type where the given string could not be parsed for some reason.
-    BadString(String)
-    
+    BadString(String),
 }
 
 impl From<ParseIntError> for ParseError {
@@ -37,7 +36,7 @@ impl From<ParseIntError> for ParseError {
 #[derive(Debug, Eq, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum PlayError {
-    DisjointTiles
+    DisjointTiles,
 }
 
 /// Errors relating to the board.
@@ -47,7 +46,7 @@ pub enum BoardError {
     /// Coordinates are out of bounds, ie, not on board.
     OutOfBounds,
     /// There is no piece at the given tile, where one is expected.
-    NoPiece
+    NoPiece,
 }
 
 /// Different ways a [`Play`] can be invalid.
@@ -73,5 +72,5 @@ pub enum PlayInvalid {
     /// The move is further than this piece is permitted to move in one go.
     TooFar,
     /// Game is already over.
-    GameOver
+    GameOver,
 }

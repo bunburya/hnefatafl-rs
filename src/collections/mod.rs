@@ -1,7 +1,7 @@
 pub mod piecemap;
-pub mod tileset;
 pub mod pieceset;
+pub mod tileset;
 
-pub use piecemap::{PieceMap, BasicPieceMap};
-pub use tileset::TileSet;
+pub use piecemap::{BasicPieceMap, PieceMap};
 pub use pieceset::PieceSet;
+pub use tileset::TileSet;

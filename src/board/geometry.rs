@@ -1,7 +1,7 @@
 use crate::board::state::BoardState;
+use crate::collections::tileset::TileSet;
 use crate::error::BoardError;
 use crate::tiles::{Coords, Tile, TileIterator};
-use crate::collections::tileset::TileSet;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -12,7 +12,7 @@ const NEIGHBOR_OFFSETS: [[i8; 2]; 4] = [[-1, 0], [1, 0], [0, -1], [0, 1]];
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct SpecialTiles<B: BoardState> {
     pub throne: Tile,
-    pub corners: TileSet<B::BitField>
+    pub corners: TileSet<B::BitField>,
 }
 
 impl<B: BoardState> From<u8> for SpecialTiles<B> {
@@ -34,14 +34,16 @@ impl<B: BoardState> From<u8> for SpecialTiles<B> {
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct BoardGeometry<B: BoardState> {
     pub side_len: u8,
-    pub special_tiles: SpecialTiles<B>
+    pub special_tiles: SpecialTiles<B>,
 }
 
 impl<B: BoardState> BoardGeometry<B> {
-
     /// Create an empty board with the given side length.
     pub fn new(side_len: u8) -> Self {
-        Self { side_len, special_tiles: SpecialTiles::from(side_len) }
+        Self {
+            side_len,
+            special_tiles: SpecialTiles::from(side_len),
+        }
     }
 
     /// Check whether the given tile is on the board. Ideally should not be necessary as [`Tile`]s
@@ -77,7 +79,10 @@ impl<B: BoardState> BoardGeometry<B> {
         let signed_col = col as i8;
         let mut neighbors: Vec<Tile> = vec![];
         for [r_off, c_off] in NEIGHBOR_OFFSETS.iter() {
-            let coords = Coords { row: signed_row + r_off, col: signed_col + c_off };
+            let coords = Coords {
+                row: signed_row + r_off,
+                col: signed_col + c_off,
+            };
             if let Ok(t) = self.coords_to_tile(coords) {
                 neighbors.push(t);
             }
@@ -91,20 +96,12 @@ impl<B: BoardState> BoardGeometry<B> {
         let mut tiles: Vec<Tile> = vec![];
         let (r1, c1, r2, c2) = (t1.row, t1.col, t2.row, t2.col);
         if r1 == r2 {
-            let col_range = if c1 > c2 {
-                (c2+1)..c1
-            } else {
-                (c1+1)..c2
-            };
+            let col_range = if c1 > c2 { (c2 + 1)..c1 } else { (c1 + 1)..c2 };
             for col in col_range {
                 tiles.push(Tile::new(r1, col))
             }
         } else if c1 == c2 {
-            let row_range = if r1 > r2 {
-                (r2 + 1)..r1
-            } else {
-                (r1 + 1)..r2
-            };
+            let row_range = if r1 > r2 { (r2 + 1)..r1 } else { (r1 + 1)..r2 };
             for row in row_range {
                 tiles.push(Tile::new(row, c1))
             }
@@ -124,7 +121,7 @@ impl<B: BoardState> BoardGeometry<B> {
     pub fn tile_surrounded(&self, tile: Tile, state: impl BoardState) -> bool {
         self.neighbors(tile).iter().all(|t| state.tile_occupied(*t))
     }
-    
+
     /// Return an iterator over all tiles on the board.
     pub fn iter_tiles(&self) -> TileIterator {
         TileIterator::new(self.side_len)
@@ -169,30 +166,24 @@ mod tests {
     fn test_neighbors() {
         let geo: BoardGeometry<SmallBasicBoardState> = BoardGeometry::new(7);
         let n = geo.neighbors(Tile::new(0, 0));
-        check_tile_vec(n, vec![
-            Tile::new(0, 1),
-            Tile::new(1, 0)
-        ]);
+        check_tile_vec(n, vec![Tile::new(0, 1), Tile::new(1, 0)]);
 
         let n = geo.neighbors(Tile::new(3, 2));
-        check_tile_vec(n, vec![
-            Tile::new(2, 2),
-            Tile::new(3, 1),
-            Tile::new(3, 3),
-            Tile::new(4, 2),
-        ]);
+        check_tile_vec(
+            n,
+            vec![
+                Tile::new(2, 2),
+                Tile::new(3, 1),
+                Tile::new(3, 3),
+                Tile::new(4, 2),
+            ],
+        );
 
         let b = geo.tiles_between(Tile::new(2, 2), Tile::new(2, 5));
-        check_tile_vec(b, vec![
-            Tile::new(2, 3),
-            Tile::new(2, 4)
-        ]);
+        check_tile_vec(b, vec![Tile::new(2, 3), Tile::new(2, 4)]);
 
         let b = geo.tiles_between(Tile::new(1, 3), Tile::new(4, 3));
-        check_tile_vec(b, vec![
-            Tile::new(2, 3),
-            Tile::new(3, 3)
-        ]);
+        check_tile_vec(b, vec![Tile::new(2, 3), Tile::new(3, 3)]);
 
         let b = geo.tiles_between(Tile::new(1, 1), Tile::new(3, 3));
         assert!(b.is_empty());
