@@ -1,4 +1,5 @@
-use crate::error::ParseError::BadInt;
+use std::fmt::{Display, Formatter};
+use crate::error::ParseError::{BadChar, BadInt, BadLineLen, BadPlay, BadString, BadStringLen, EmptyString};
 use std::num::ParseIntError;
 
 #[cfg(feature = "serde")]
@@ -26,6 +27,20 @@ pub enum ParseError {
     BadString(String),
 }
 
+impl Display for ParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BadStringLen(len) => write!(f, "string is wrong length: {len}"),
+            BadLineLen(len) => write!(f, "line is wrong length: {len}"),
+            BadChar(c) => write!(f, "unexpected character: {c}"),
+            EmptyString => write!(f, "empty string"),
+            BadInt(e) => write!(f, "could not parse integer: {e}"),
+            BadPlay(e) => write!(f, "could not parse play: {e}"),
+            BadString(s) => write!(f, "could not parse string: {s}"),
+        }
+    }
+}
+
 impl From<ParseIntError> for ParseError {
     fn from(value: ParseIntError) -> Self {
         BadInt(value)
@@ -39,6 +54,14 @@ pub enum PlayError {
     DisjointTiles,
 }
 
+impl Display for PlayError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PlayError::DisjointTiles => write!(f, "origin and destination tiles do not share an axis"),
+        }
+    }
+}
+
 /// Errors relating to the board.
 #[derive(Debug, Eq, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -47,6 +70,15 @@ pub enum BoardError {
     OutOfBounds,
     /// There is no piece at the given tile, where one is expected.
     NoPiece,
+}
+
+impl Display for BoardError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BoardError::OutOfBounds => write!(f, "coordinates are out of bounds"),
+            BoardError::NoPiece => write!(f, "no piece at the given tile"),
+        }
+    }
 }
 
 /// Different ways a [`Play`] can be invalid.
@@ -73,4 +105,20 @@ pub enum PlayInvalid {
     TooFar,
     /// Game is already over.
     GameOver,
+}
+
+impl Display for PlayInvalid {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PlayInvalid::WrongPlayer => write!(f, "piece does not belong to player"),
+            PlayInvalid::NoPiece => write!(f, "no piece at given tile"),
+            PlayInvalid::OutOfBounds => write!(f, "destination out of bounds"),
+            PlayInvalid::NoCommonAxis => write!(f, "origin and destination tiles do not share an axis"),
+            PlayInvalid::BlockedByPiece => write!(f, "blocked by another piece"),
+            PlayInvalid::MoveThroughBlockedTile => write!(f, "blocked by an impassable tile"),
+            PlayInvalid::MoveOntoBlockedTile => write!(f, "piece cannot occupy destination tile"),
+            PlayInvalid::TooFar => write!(f, "piece cannot travel this far in one turn"),
+            PlayInvalid::GameOver => write!(f, "game is already over"),
+        }
+    }
 }

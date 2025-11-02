@@ -4,7 +4,7 @@
 - [ ] Improve center square logic.
   - [ ] Remove special case for strong king beside throne from game logic. The king can be captured by three pieces
     beside the throne if the empty throne is hostile to the king.
-- [ ] Optional database support.
+- [ ] `Game::undo_last_play` should return details of play that has been undone.
 - [ ] Game protocol (JSON?)
   - [ ] Textual representation of game rules.
   - [ ] JSON representation of game state.
@@ -12,6 +12,7 @@
 ## Support for extra rules/pieces
 
 - [ ] Implement berserk rule.
+- [ ] Specify maximum move distance for each piece type.
 - [ ] Implement support for other piece types.
 
 ## OpenTafl integration
