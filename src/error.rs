@@ -1,5 +1,7 @@
+use crate::error::ParseError::{
+    BadChar, BadInt, BadLineLen, BadPlay, BadString, BadStringLen, EmptyString,
+};
 use std::fmt::{Display, Formatter};
-use crate::error::ParseError::{BadChar, BadInt, BadLineLen, BadPlay, BadString, BadStringLen, EmptyString};
 use std::num::ParseIntError;
 
 #[cfg(feature = "serde")]
@@ -57,7 +59,9 @@ pub enum PlayError {
 impl Display for PlayError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            PlayError::DisjointTiles => write!(f, "origin and destination tiles do not share an axis"),
+            PlayError::DisjointTiles => {
+                write!(f, "origin and destination tiles do not share an axis")
+            }
         }
     }
 }
@@ -113,7 +117,9 @@ impl Display for PlayInvalid {
             PlayInvalid::WrongPlayer => write!(f, "piece does not belong to player"),
             PlayInvalid::NoPiece => write!(f, "no piece at given tile"),
             PlayInvalid::OutOfBounds => write!(f, "destination out of bounds"),
-            PlayInvalid::NoCommonAxis => write!(f, "origin and destination tiles do not share an axis"),
+            PlayInvalid::NoCommonAxis => {
+                write!(f, "origin and destination tiles do not share an axis")
+            }
             PlayInvalid::BlockedByPiece => write!(f, "blocked by another piece"),
             PlayInvalid::MoveThroughBlockedTile => write!(f, "blocked by an impassable tile"),
             PlayInvalid::MoveOntoBlockedTile => write!(f, "piece cannot occupy destination tile"),

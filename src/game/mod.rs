@@ -100,10 +100,13 @@ impl<B: BoardState> Game<B> {
         Ok(self.state.status)
     }
 
-    pub fn undo_last_play(&mut self) {
+    /// Undo the most recent play of the game. Returns a record of the play that was undone.
+    pub fn undo_last_play(&mut self) -> Option<PlayRecord<B>> {
         if let Some(state) = self.state_history.pop() {
             self.state = state;
-            self.play_history.pop();
+            self.play_history.pop()
+        } else {
+            None
         }
     }
 
