@@ -4,7 +4,7 @@ use crate::game::GameStatus;
 use crate::game::GameStatus::Ongoing;
 use crate::pieces::Side;
 use std::cmp::PartialEq;
-
+use std::fmt::Display;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -12,9 +12,9 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Position<B: BoardState> {
-    board_state: B,
-    side_to_play: Side,
-    status: GameStatus,
+    pub(crate) board_state: B,
+    pub(crate) side_to_play: Side,
+    pub(crate) status: GameStatus,
 }
 
 impl<B: BoardState> From<&GameState<B>> for Position<B> {
@@ -27,18 +27,24 @@ impl<B: BoardState> From<&GameState<B>> for Position<B> {
     }
 }
 
+impl<B: BoardState> Display for Position<B> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} {} {:?}", self.board_state.to_fen(), self.side_to_play, self.status)
+    }
+}
+
 /// A fixed size queue of game positions. Pushing a new value to the end of the queue drops the
 /// first item in the queue.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Default)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct PositionQueue<B: BoardState> {
+pub struct PositionHistory<B: BoardState> {
     // 32 chosen because that's the longest array for which `serde` can derive `Serialize` and
     // `Deserialize`
     queue: [Option<Position<B>>; 32],
     first_i: usize,
 }
 
-impl<B: BoardState> PositionQueue<B> {
+impl<B: BoardState> PositionHistory<B> {
     /// Push a new position to the queue.
     pub(crate) fn push(&mut self, value: GameState<B>) {
         self.queue[self.first_i] = Some((&value).into());
@@ -50,7 +56,7 @@ impl<B: BoardState> PositionQueue<B> {
     }
 
     /// Returns true if the given position appears at least `n` times in the queue.
-    pub(crate) fn appears_n_times(&self, posn: Position<B>, n: usize) -> bool {
+    pub(crate) fn detect_n_repetitions(&self, posn: Position<B>, n: usize) -> bool {
         let mut count = 0;
         for p in self.queue {
             if p == Some(posn) {
@@ -61,6 +67,12 @@ impl<B: BoardState> PositionQueue<B> {
             }
         }
         false
+    }
+
+    /// Clear the position history.
+    pub(crate) fn clear(&mut self) {
+        self.first_i = Default::default();
+        self.queue = Default::default();
     }
 }
 
@@ -74,8 +86,6 @@ pub struct GameState<B: BoardState> {
     pub board: B,
     /// The side whose turn it is.
     pub side_to_play: Side,
-    /// Tracker for repetitions.
-    pub recent_positions: PositionQueue<B>,
     /// Number of plays since a piece was last captured.
     pub plays_since_capture: usize,
     /// Current status of the game.
@@ -89,7 +99,6 @@ impl<B: BoardState> GameState<B> {
         Ok(Self {
             board: B::from_fen(fen_str)?,
             side_to_play,
-            recent_positions: PositionQueue::default(),
             plays_since_capture: 0,
             status: Ongoing,
             turn: 0,

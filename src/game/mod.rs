@@ -2,9 +2,10 @@ pub mod logic;
 pub mod state;
 
 use crate::board::state::BoardState;
+use crate::collections::PieceMap;
 use crate::error::{BoardError, ParseError, PlayInvalid};
 use crate::game::logic::GameLogic;
-use crate::game::state::GameState;
+use crate::game::state::{GameState, Position};
 use crate::pieces::Side;
 use crate::play::{Play, PlayRecord, ValidPlayIterator};
 use crate::rules::Ruleset;
@@ -74,6 +75,7 @@ pub struct Game<B: BoardState> {
     pub state: GameState<B>,
     pub play_history: Vec<PlayRecord<B>>,
     pub state_history: Vec<GameState<B>>,
+    pub position_history: Vec<Position<B>>,
 }
 
 impl<B: BoardState> Game<B> {
@@ -87,16 +89,26 @@ impl<B: BoardState> Game<B> {
             logic,
             play_history: vec![],
             state_history: vec![state],
+            position_history: vec![],
         })
     }
 
     /// Actually "do" a play, checking validity, getting outcome, applying outcome to board state,
     /// switching side to play and returning a description of the game status following the move.
     pub fn do_play(&mut self, play: Play) -> Result<GameStatus, PlayInvalid> {
-        let (state, play_record) = self.logic.do_play(play, self.state)?.into();
+        let (state, play_record) = self.logic.do_play(
+            play,
+            self.state,
+            Some(&self.position_history)
+        )?.into();
         self.state_history.push(self.state);
         self.state = state;
         self.play_history.push(play_record);
+        if play_record.effects.captures.is_empty() {
+            self.position_history.push((&state).into());
+        } else {
+            self.position_history.clear()
+        }
         Ok(self.state.status)
     }
 

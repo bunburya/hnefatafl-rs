@@ -8,7 +8,7 @@ use crate::error::PlayInvalid::{
     OutOfBounds, TooFar, WrongPlayer,
 };
 use crate::error::{BoardError, PlayInvalid};
-use crate::game::state::GameState;
+use crate::game::state::{GameState, Position};
 use crate::game::GameOutcome::{Draw, Win};
 use crate::game::GameStatus::{Ongoing, Over};
 use crate::game::WinReason::{AllCaptured, Enclosed, ExitFort, KingCaptured, KingEscaped};
@@ -635,6 +635,40 @@ impl<B: BoardState> GameLogic<B> {
         }
     }
 
+    pub fn detect_repetition(
+        &self,
+        state: &GameState<B>,
+        position_history: &Vec<Position<B>>,
+        n: usize
+    ) -> bool {
+        // We already know that the position appears once, so start at 1.
+        let mut count = 1;
+        // `detect_repetition` is called *before* `side_to_play` is updated, so we need to flip
+        // the side to play to get the correct position.
+        // NOTE: We will need to revisit this when we support berserk rules (unless we only call
+        // this function when no captures are made).
+        let posn = Position {
+            board_state: state.board,
+            side_to_play: state.side_to_play.other(),
+            status: state.status,
+        };
+        println!("Detecting repetition for position: {}", posn);
+        for &p in position_history {
+            print!("        Checking against position: {}", p);
+            if p == posn {
+                println!(" : Match");
+                count += 1;
+                if count >= n {
+                    println!("Found {count} repetitions");
+                    return true;
+                }
+            } else {
+                println!(" : No match");
+            }
+        }
+        false
+    }
+
     /// Get the tiles containing pieces captured by the given play.
     pub fn get_captures(
         &self,
@@ -742,6 +776,7 @@ impl<B: BoardState> GameLogic<B> {
         valid_play: ValidPlay,
         moving_piece: Piece,
         state: &GameState<B>,
+        position_history: Option<&Vec<Position<B>>>,
     ) -> Option<GameOutcome> {
         if state.board.count_pieces_of_side(state.side_to_play.other()) == 0 {
             // All opposing pieces have been captured.
@@ -789,14 +824,14 @@ impl<B: BoardState> GameLogic<B> {
             }
         }
 
-        if let Some(RepetitionRule {
-            n_repetitions,
-            is_loss,
-        }) = self.rules.repetition_rule
+        // NOTE: Could probably only run this check if play does not capture. But would need to
+        // receive captures to do it.
+        if let (
+            Some(RepetitionRule { n_repetitions, is_loss}),
+            Some(ph)
+        ) = (self.rules.repetition_rule, position_history)
         {
-            if state
-                .recent_positions
-                .appears_n_times(state.into(), n_repetitions)
+            if self.detect_repetition(state, ph, n_repetitions)
             {
                 // Loss or draw as a result of repeated moves.
                 return if is_loss {
@@ -828,24 +863,30 @@ impl<B: BoardState> GameLogic<B> {
     /// difficult to debug errors. If in any doubt as to the validity of a play, call
     /// [`Self::validate_play`] first or use [`Self::do_play`] instead (which performs that
     /// check).
-    pub fn do_valid_play(&self, valid_play: ValidPlay, mut state: GameState<B>) -> DoPlayResult<B> {
+    pub fn do_valid_play(
+        &self,
+        valid_play: ValidPlay,
+        mut state: GameState<B>,
+        position_history: Option<&Vec<Position<B>>>,
+    ) -> DoPlayResult<B> {
         let play = valid_play.play;
         // First move the piece on the board
         let moving_piece = state.board.move_piece(play.from, play.to());
         // Then remove captured pieces
         let captures = self.get_captures(valid_play, moving_piece, &state);
         state.board.remove_placed_pieces(&captures);
-        // Update records of repetitions and non-capturing plays
-        if captures.is_empty() {
-            state.recent_positions.push(state)
-        }
         if captures.is_empty() {
             state.plays_since_capture += 1;
         } else {
             state.plays_since_capture = 0;
         }
         // Then assess the game outcome
-        let game_outcome = self.get_game_outcome(valid_play, moving_piece, &state);
+        let game_outcome = self.get_game_outcome(
+            valid_play,
+            moving_piece,
+            &state,
+            position_history
+        );
 
         state.turn += 1;
         let game_status = match game_outcome {
@@ -876,9 +917,14 @@ impl<B: BoardState> GameLogic<B> {
     /// (captures, etc) to a copy of the current game state, checks for any game end conditions, and
     /// returns the modified copy of the game state plus a record of the play (including its
     /// effects).
-    pub fn do_play(&self, play: Play, state: GameState<B>) -> Result<DoPlayResult<B>, PlayInvalid> {
+    pub fn do_play(
+        &self,
+        play: Play,
+        state: GameState<B>,
+        position_history: Option<&Vec<Position<B>>>,
+    ) -> Result<DoPlayResult<B>, PlayInvalid> {
         let valid_play = self.validate_play(play, &state)?;
-        Ok(self.do_valid_play(valid_play, state))
+        Ok(self.do_valid_play(valid_play, state, position_history))
     }
 
     /// Whether the given side could make any play given the current board.
@@ -1027,6 +1073,7 @@ mod tests {
             .do_play(
                 Play::from_tiles(Tile::new(3, 1), Tile::new(4, 1)).unwrap(),
                 state,
+                None
             )
             .unwrap()
             .new_state;
@@ -1117,7 +1164,7 @@ mod tests {
         );
         state.board.move_piece(vp.play.to(), vp.play.from);
         assert_eq!(
-            logic.do_play(vp.play, state).unwrap().new_state.status,
+            logic.do_play(vp.play, state, None).unwrap().new_state.status,
             Over(Win(KingCaptured, Attacker))
         );
 
@@ -1139,7 +1186,7 @@ mod tests {
             .collect()
         );
         state.board.move_piece(vp.play.to(), vp.play.from);
-        assert_eq!(logic.do_valid_play(vp, state).new_state.status, Ongoing);
+        assert_eq!(logic.do_valid_play(vp, state, None).new_state.status, Ongoing);
 
         let (logic, mut state) = proto.clone();
         state.side_to_play = Defender;
@@ -1153,7 +1200,7 @@ mod tests {
         assert!(logic.get_captures(vp, piece, &state).is_empty());
         state.board.move_piece(vp.play.to(), vp.play.from);
         assert_eq!(
-            logic.do_valid_play(vp, state).new_state.status,
+            logic.do_valid_play(vp, state, None).new_state.status,
             Over(Win(KingEscaped, Defender))
         );
 
@@ -1168,7 +1215,7 @@ mod tests {
         let piece = state.board.move_piece(vp.play.from, vp.play.to());
         assert!(logic.get_captures(vp, piece, &state).is_empty());
         state.board.move_piece(vp.play.to(), vp.play.from);
-        assert_eq!(logic.do_valid_play(vp, state).new_state.status, Ongoing);
+        assert_eq!(logic.do_valid_play(vp, state, None).new_state.status, Ongoing);
     }
 
     #[test]
@@ -1560,6 +1607,7 @@ mod tests {
             .do_play(
                 Play::from_tiles(Tile::new(3, 6), Tile::new(3, 5)).unwrap(),
                 SmallBasicGameState::new("1T5/7/4t2/4K1t/4t2/7/7", Attacker).unwrap(),
+                None
             )
             .unwrap()
             .into();
@@ -1575,6 +1623,7 @@ mod tests {
             .do_play(
                 Play::from_tiles(Tile::new(1, 4), Tile::new(2, 4)).unwrap(),
                 SmallBasicGameState::new("1T5/4t2/7/4Kt1/4t2/7/7", Attacker).unwrap(),
+                None
             )
             .unwrap()
             .into();
@@ -1590,6 +1639,7 @@ mod tests {
             .do_play(
                 Play::from_tiles(Tile::new(3, 6), Tile::new(3, 5)).unwrap(),
                 SmallBasicGameState::new("1T5/7/7/4K1t/4t2/7/7", Attacker).unwrap(),
+                None
             )
             .unwrap()
             .into();
@@ -1601,6 +1651,7 @@ mod tests {
             .do_play(
                 Play::from_tiles(Tile::new(1, 4), Tile::new(2, 4)).unwrap(),
                 SmallBasicGameState::new("1T5/4t2/7/4K2/4t2/7/7", Attacker).unwrap(),
+                None
             )
             .unwrap()
             .into();
@@ -1616,6 +1667,7 @@ mod tests {
             .do_play(
                 Play::from_tiles(Tile::new(4, 0), Tile::new(4, 2)).expect("Invalid play."),
                 state,
+                None
             )
             .expect("Invalid play")
             .into();
