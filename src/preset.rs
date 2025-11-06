@@ -120,7 +120,7 @@ pub mod rules {
             corners: PieceSet::all(),
         },
         passable_tiles: PassRules {
-            throne: PieceSet::none(),
+            throne: PieceSet::all(),
         },
         slow_pieces: PieceSet::none(),
         starting_side: Attacker,
