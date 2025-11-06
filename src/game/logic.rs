@@ -639,7 +639,7 @@ impl<B: BoardState> GameLogic<B> {
         &self,
         state: &GameState<B>,
         position_history: &Vec<Position<B>>,
-        n: usize
+        n: usize,
     ) -> bool {
         // We already know that the position appears once, so start at 1.
         let mut count = 1;
@@ -652,18 +652,12 @@ impl<B: BoardState> GameLogic<B> {
             side_to_play: state.side_to_play.other(),
             status: state.status,
         };
-        println!("Detecting repetition for position: {}", posn);
         for &p in position_history {
-            print!("        Checking against position: {}", p);
             if p == posn {
-                println!(" : Match");
                 count += 1;
                 if count >= n {
-                    println!("Found {count} repetitions");
                     return true;
                 }
-            } else {
-                println!(" : No match");
             }
         }
         false
@@ -827,12 +821,14 @@ impl<B: BoardState> GameLogic<B> {
         // NOTE: Could probably only run this check if play does not capture. But would need to
         // receive captures to do it.
         if let (
-            Some(RepetitionRule { n_repetitions, is_loss}),
-            Some(ph)
+            Some(RepetitionRule {
+                n_repetitions,
+                is_loss,
+            }),
+            Some(ph),
         ) = (self.rules.repetition_rule, position_history)
         {
-            if self.detect_repetition(state, ph, n_repetitions)
-            {
+            if self.detect_repetition(state, ph, n_repetitions) {
                 // Loss or draw as a result of repeated moves.
                 return if is_loss {
                     Some(Win(WinReason::Repetition, state.side_to_play.other()))
@@ -881,12 +877,8 @@ impl<B: BoardState> GameLogic<B> {
             state.plays_since_capture = 0;
         }
         // Then assess the game outcome
-        let game_outcome = self.get_game_outcome(
-            valid_play,
-            moving_piece,
-            &state,
-            position_history
-        );
+        let game_outcome =
+            self.get_game_outcome(valid_play, moving_piece, &state, position_history);
 
         state.turn += 1;
         let game_status = match game_outcome {
@@ -1073,7 +1065,7 @@ mod tests {
             .do_play(
                 Play::from_tiles(Tile::new(3, 1), Tile::new(4, 1)).unwrap(),
                 state,
-                None
+                None,
             )
             .unwrap()
             .new_state;
@@ -1164,7 +1156,11 @@ mod tests {
         );
         state.board.move_piece(vp.play.to(), vp.play.from);
         assert_eq!(
-            logic.do_play(vp.play, state, None).unwrap().new_state.status,
+            logic
+                .do_play(vp.play, state, None)
+                .unwrap()
+                .new_state
+                .status,
             Over(Win(KingCaptured, Attacker))
         );
 
@@ -1186,7 +1182,10 @@ mod tests {
             .collect()
         );
         state.board.move_piece(vp.play.to(), vp.play.from);
-        assert_eq!(logic.do_valid_play(vp, state, None).new_state.status, Ongoing);
+        assert_eq!(
+            logic.do_valid_play(vp, state, None).new_state.status,
+            Ongoing
+        );
 
         let (logic, mut state) = proto.clone();
         state.side_to_play = Defender;
@@ -1215,7 +1214,10 @@ mod tests {
         let piece = state.board.move_piece(vp.play.from, vp.play.to());
         assert!(logic.get_captures(vp, piece, &state).is_empty());
         state.board.move_piece(vp.play.to(), vp.play.from);
-        assert_eq!(logic.do_valid_play(vp, state, None).new_state.status, Ongoing);
+        assert_eq!(
+            logic.do_valid_play(vp, state, None).new_state.status,
+            Ongoing
+        );
     }
 
     #[test]
@@ -1607,7 +1609,7 @@ mod tests {
             .do_play(
                 Play::from_tiles(Tile::new(3, 6), Tile::new(3, 5)).unwrap(),
                 SmallBasicGameState::new("1T5/7/4t2/4K1t/4t2/7/7", Attacker).unwrap(),
-                None
+                None,
             )
             .unwrap()
             .into();
@@ -1623,7 +1625,7 @@ mod tests {
             .do_play(
                 Play::from_tiles(Tile::new(1, 4), Tile::new(2, 4)).unwrap(),
                 SmallBasicGameState::new("1T5/4t2/7/4Kt1/4t2/7/7", Attacker).unwrap(),
-                None
+                None,
             )
             .unwrap()
             .into();
@@ -1639,7 +1641,7 @@ mod tests {
             .do_play(
                 Play::from_tiles(Tile::new(3, 6), Tile::new(3, 5)).unwrap(),
                 SmallBasicGameState::new("1T5/7/7/4K1t/4t2/7/7", Attacker).unwrap(),
-                None
+                None,
             )
             .unwrap()
             .into();
@@ -1651,7 +1653,7 @@ mod tests {
             .do_play(
                 Play::from_tiles(Tile::new(1, 4), Tile::new(2, 4)).unwrap(),
                 SmallBasicGameState::new("1T5/4t2/7/4K2/4t2/7/7", Attacker).unwrap(),
-                None
+                None,
             )
             .unwrap()
             .into();
@@ -1667,7 +1669,7 @@ mod tests {
             .do_play(
                 Play::from_tiles(Tile::new(4, 0), Tile::new(4, 2)).expect("Invalid play."),
                 state,
-                None
+                None,
             )
             .expect("Invalid play")
             .into();

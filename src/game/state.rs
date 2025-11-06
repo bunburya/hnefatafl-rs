@@ -3,10 +3,10 @@ use crate::error::ParseError;
 use crate::game::GameStatus;
 use crate::game::GameStatus::Ongoing;
 use crate::pieces::Side;
-use std::cmp::PartialEq;
-use std::fmt::Display;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
+use std::cmp::PartialEq;
+use std::fmt::Display;
 
 /// A struct containing the minimum information needed to uniquely identify a position in the game.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
@@ -29,50 +29,13 @@ impl<B: BoardState> From<&GameState<B>> for Position<B> {
 
 impl<B: BoardState> Display for Position<B> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} {} {:?}", self.board_state.to_fen(), self.side_to_play, self.status)
-    }
-}
-
-/// A fixed size queue of game positions. Pushing a new value to the end of the queue drops the
-/// first item in the queue.
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Default)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct PositionHistory<B: BoardState> {
-    // 32 chosen because that's the longest array for which `serde` can derive `Serialize` and
-    // `Deserialize`
-    queue: [Option<Position<B>>; 32],
-    first_i: usize,
-}
-
-impl<B: BoardState> PositionHistory<B> {
-    /// Push a new position to the queue.
-    pub(crate) fn push(&mut self, value: GameState<B>) {
-        self.queue[self.first_i] = Some((&value).into());
-        self.first_i = if self.first_i == 31 {
-            0
-        } else {
-            self.first_i + 1
-        }
-    }
-
-    /// Returns true if the given position appears at least `n` times in the queue.
-    pub(crate) fn detect_n_repetitions(&self, posn: Position<B>, n: usize) -> bool {
-        let mut count = 0;
-        for p in self.queue {
-            if p == Some(posn) {
-                count += 1;
-                if count == n {
-                    return true;
-                }
-            }
-        }
-        false
-    }
-
-    /// Clear the position history.
-    pub(crate) fn clear(&mut self) {
-        self.first_i = Default::default();
-        self.queue = Default::default();
+        write!(
+            f,
+            "{} {} {:?}",
+            self.board_state.to_fen(),
+            self.side_to_play,
+            self.status
+        )
     }
 }
 

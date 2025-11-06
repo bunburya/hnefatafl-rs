@@ -96,11 +96,10 @@ impl<B: BoardState> Game<B> {
     /// Actually "do" a play, checking validity, getting outcome, applying outcome to board state,
     /// switching side to play and returning a description of the game status following the move.
     pub fn do_play(&mut self, play: Play) -> Result<GameStatus, PlayInvalid> {
-        let (state, play_record) = self.logic.do_play(
-            play,
-            self.state,
-            Some(&self.position_history)
-        )?.into();
+        let (state, play_record) = self
+            .logic
+            .do_play(play, self.state, Some(&self.position_history))?
+            .into();
         self.state_history.push(self.state);
         self.state = state;
         self.play_history.push(play_record);
