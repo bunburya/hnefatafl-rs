@@ -13,9 +13,9 @@ use crate::game::GameOutcome::{Draw, Win};
 use crate::game::GameStatus::{Ongoing, Over};
 use crate::game::WinReason::{AllCaptured, Enclosed, ExitFort, KingCaptured, KingEscaped};
 use crate::game::{DrawReason, GameOutcome, WinReason};
-use crate::pieces::PieceType::{King, Soldier};
+use crate::pieces::PieceType::{Commander, King, Knight, Soldier};
 use crate::pieces::Side::{Attacker, Defender};
-use crate::pieces::{Piece, PieceSet, PlacedPiece, Side, KING};
+use crate::pieces::{Piece, PieceSet, PieceType, PlacedPiece, Side, KING};
 use crate::play::{Play, PlayEffects, PlayRecord, ValidPlay, ValidPlayIterator};
 use crate::rules::EnclosureWinRules::WithoutEdgeAccess;
 use crate::rules::KingAttack::{Anvil, Armed, Hammer};
@@ -152,6 +152,37 @@ impl<B: BoardState> GameLogic<B> {
         (can_occupy, can_pass)
     }
 
+    fn can_jump(&self, piece: Piece, play: Play, middle: Tile, state: &GameState<B>) -> bool {
+        if !self.rules.berserk {
+            // Can only jump under berserk rules
+            return false
+        }
+        let mid_piece = state.board.get_piece(middle).expect("Middle tile must contain piece.");
+        if mid_piece.side == piece.side {
+            // Can't jump over own pieces
+            return false
+        }
+        if mid_piece.piece_type == Knight
+            || mid_piece.piece_type == Commander
+            || mid_piece.piece_type == King {
+            // Can't jump over a knight, commander, or king
+            return false
+        }
+        if piece.piece_type == King {
+            // King can only jump to or from special tile (corner or throne)
+            for t in [play.from, play.to()] {
+                if self.board_geo.special_tiles.corners.contains(t)
+                    || self.board_geo.special_tiles.throne == t {
+                    return true
+                }
+            }
+            return false
+        } else if piece.piece_type == Knight || piece.piece_type == Commander {
+            return true
+        }
+        false
+    }
+
     /// Check whether a play is valid for the given side. Returns a `Result` which contains a
     /// [`ValidPlay`] wrapping the given `Play` if it is valid, and an [`PlayInvalid`] describing
     ///the reason for the invalidity otherwise.
@@ -166,8 +197,7 @@ impl<B: BoardState> GameLogic<B> {
         }
         let from = play.from;
         let to = play.to();
-        let maybe_piece = state.board.get_piece(from);
-        match maybe_piece {
+        match state.board.get_piece(from) {
             None => Err(NoPiece),
             Some(piece) => {
                 if piece.side != side {
@@ -638,7 +668,7 @@ impl<B: BoardState> GameLogic<B> {
     pub fn detect_repetition(
         &self,
         state: &GameState<B>,
-        position_history: &Vec<Position<B>>,
+        position_history: &[Position<B>],
         n: usize,
     ) -> bool {
         // We already know that the position appears once, so start at 1.
@@ -770,7 +800,7 @@ impl<B: BoardState> GameLogic<B> {
         valid_play: ValidPlay,
         moving_piece: Piece,
         state: &GameState<B>,
-        position_history: Option<&Vec<Position<B>>>,
+        position_history: Option<&[Position<B>]>,
     ) -> Option<GameOutcome> {
         if state.board.count_pieces_of_side(state.side_to_play.other()) == 0 {
             // All opposing pieces have been captured.
@@ -863,7 +893,7 @@ impl<B: BoardState> GameLogic<B> {
         &self,
         valid_play: ValidPlay,
         mut state: GameState<B>,
-        position_history: Option<&Vec<Position<B>>>,
+        position_history: Option<&[Position<B>]>,
     ) -> DoPlayResult<B> {
         let play = valid_play.play;
         // First move the piece on the board
@@ -913,7 +943,7 @@ impl<B: BoardState> GameLogic<B> {
         &self,
         play: Play,
         state: GameState<B>,
-        position_history: Option<&Vec<Position<B>>>,
+        position_history: Option<&[Position<B>]>,
     ) -> Result<DoPlayResult<B>, PlayInvalid> {
         let valid_play = self.validate_play(play, &state)?;
         Ok(self.do_valid_play(valid_play, state, position_history))
@@ -986,7 +1016,7 @@ mod tests {
     use crate::game::GameOutcome::Win;
     use crate::game::GameStatus::{Ongoing, Over};
     use crate::game::WinReason::{KingCaptured, KingEscaped, Repetition};
-    use crate::pieces::PieceType::{King, Soldier};
+    use crate::pieces::PieceType::{King, Knight, Soldier};
     use crate::pieces::Side::{Attacker, Defender};
     use crate::pieces::{Piece, PieceSet, PlacedPiece, KING};
     use crate::play::{Play, ValidPlay};
@@ -1001,6 +1031,7 @@ mod tests {
         SmallBasicBoardState, SmallBasicGameState,
     };
     use crate::collections::piecemap::PieceMap;
+    use crate::preset::rules::BRANDUBH;
     use crate::utils::check_tile_vec;
     use std::str::FromStr;
 
@@ -1008,7 +1039,7 @@ mod tests {
         slow_pieces: PieceSet::from_piece_type(King),
         passable_tiles: PassRules {
             throne: PieceSet::none(),
-            ..rules::BRANDUBH.passable_tiles
+            ..BRANDUBH.passable_tiles
         },
         ..rules::BRANDUBH
     };
@@ -1674,5 +1705,26 @@ mod tests {
             .expect("Invalid play")
             .into();
         assert_eq!(r.effects.captures.occupied(), tileset!(Tile::new(4, 3)));
+    }
+
+    #[test]
+    fn test_can_jump() {
+        let rules = Ruleset {
+            berserk: true,
+            ..BRANDUBH
+        };
+        let logic = GameLogic::new(rules, 9);
+        let state = MediumBasicGameState::new("1tKt5/1tNc5/1tCn5/tN7/t2TKt3/4t4/9/9/9", Attacker).unwrap();
+        // King can jump over soldier to get to corner
+        assert!(logic.can_jump(KING, Play::from_str("c1-a1").unwrap(), Tile::from_str("b1").unwrap(), &state));
+        // King can't jump over soldier if not to/from restricted square
+        assert!(!logic.can_jump(KING, Play::from_str("c1-e1").unwrap(), Tile::from_str("d1").unwrap(), &state));
+        // Knight can jump over soldier
+        assert!(logic.can_jump(Piece::defender(Knight), Play::from_str("c2-a2").unwrap(), Tile::from_str("b2").unwrap(), &state));
+        // Knight can't jump over commander
+        assert!(!logic.can_jump(Piece::defender(Knight), Play::from_str("c2-e2").unwrap(), Tile::from_str("d2").unwrap(), &state));
+
+
+
     }
 }

@@ -128,4 +128,6 @@ pub struct Ruleset {
     /// three enemies and one friendly soldier, that friendly soldier may be captured against the
     /// occupied throne).
     pub linnaean_capture: bool,
+    /// Whether berserk rules are enabled.
+    pub berserk: bool,
 }

@@ -2,7 +2,7 @@ use crate::error::ParseError;
 use crate::error::ParseError::{BadChar, EmptyString};
 use crate::tiles::Axis::{Horizontal, Vertical};
 use std::fmt::{Debug, Display, Formatter};
-use std::ops::Add;
+use std::ops::{Add, Sub, SubAssign};
 use std::str::FromStr;
 
 #[cfg(feature = "serde")]
@@ -78,6 +78,13 @@ impl From<Tile> for Coords {
             row: t.row as i8,
             col: t.col as i8,
         }
+    }
+}
+
+impl Sub<Coords> for Coords {
+    type Output = RowColOffset;
+    fn sub(self, rhs: Coords) -> Self::Output {
+        RowColOffset::new(self.row - rhs.row, self.col - rhs.col)
     }
 }
 

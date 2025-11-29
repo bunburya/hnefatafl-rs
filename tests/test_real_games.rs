@@ -41,7 +41,7 @@ fn test_real_games(rules: Ruleset, starting_posn: &str, fname: &str) {
     .collect();
     let s = fs::read_to_string(f).unwrap();
     let lines = s.split('\n');
-    let mut last_game_status: GameStatus = GameStatus::Ongoing;
+    let mut last_game_status = GameStatus::Ongoing;
     'line_loop: for line in lines {
         if line.starts_with('#') {
             continue;

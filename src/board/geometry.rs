@@ -1,7 +1,7 @@
 use crate::board::state::BoardState;
 use crate::collections::tileset::TileSet;
 use crate::error::BoardError;
-use crate::tiles::{Coords, Tile, TileIterator};
+use crate::tiles::{AxisOffset, Coords, RowColOffset, Tile, TileIterator};
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -117,6 +117,14 @@ impl<B: BoardState> BoardGeometry<B> {
             || tile.col == self.side_len - 1
     }
 
+    /// Return the tile (if any) which is the same distance from `t2` as `t2` is from `t1`.
+    pub fn far_tile(&self, t1: Tile, t2: Tile) -> Option<Tile> {
+        let c1: Coords = t1.into();
+        let c2: Coords = t2.into();
+        let offset: RowColOffset = c2 - c1;
+        self.coords_to_tile(c2 + offset).ok()
+    }
+
     /// Check whether the given tile is surrounded on all sides by pieces (friend or foe).
     pub fn tile_surrounded(&self, tile: Tile, state: impl BoardState) -> bool {
         self.neighbors(tile).iter().all(|t| state.tile_occupied(*t))
@@ -193,5 +201,16 @@ mod tests {
 
         let b = geo.tiles_between(Tile::new(1, 1), Tile::new(1, 2));
         assert!(b.is_empty());
+    }
+
+    #[test]
+    fn test_far_tile() {
+        let geo: BoardGeometry<SmallBasicBoardState> = BoardGeometry::new(7);
+        assert_eq!(geo.far_tile(Tile::new(0, 0), Tile::new(0, 1)), Some(Tile::new(0, 2)));
+        assert_eq!(geo.far_tile(Tile::new(1, 1), Tile::new(2, 3)), Some(Tile::new(3, 5)));
+        assert_eq!(geo.far_tile(Tile::new(1, 1), Tile::new(1, 1)), Some(Tile::new(1, 1)));
+        assert_eq!(geo.far_tile(Tile::new(2, 1), Tile::new(1, 1)), Some(Tile::new(0, 1)));
+        assert_eq!(geo.far_tile(Tile::new(1, 1), Tile::new(0, 0)), None);
+        assert_eq!(geo.far_tile(Tile::new(0, 5), Tile::new(0, 6)), None);
     }
 }
