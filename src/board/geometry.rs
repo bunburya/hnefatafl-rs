@@ -3,6 +3,7 @@ use crate::collections::tileset::TileSet;
 use crate::error::BoardError;
 use crate::tiles::{AxisOffset, Coords, RowColOffset, Tile, TileIterator};
 
+use crate::collections::PieceMap;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -10,12 +11,12 @@ const NEIGHBOR_OFFSETS: [[i8; 2]; 4] = [[-1, 0], [1, 0], [0, -1], [0, 1]];
 
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct SpecialTiles<B: BoardState> {
+pub struct SpecialTiles<P: PieceMap> {
     pub throne: Tile,
-    pub corners: TileSet<B::BitField>,
+    pub corners: TileSet<P::BitField>,
 }
 
-impl<B: BoardState> From<u8> for SpecialTiles<B> {
+impl<P: PieceMap> From<u8> for SpecialTiles<P> {
     fn from(board_len: u8) -> Self {
         let mut corners = TileSet::empty();
         corners.insert(Tile::new(0, 0));
@@ -32,12 +33,12 @@ impl<B: BoardState> From<u8> for SpecialTiles<B> {
 /// other state that would be expected to change over the course of a game.
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct BoardGeometry<B: BoardState> {
+pub struct BoardGeometry<P: PieceMap> {
     pub side_len: u8,
-    pub special_tiles: SpecialTiles<B>,
+    pub special_tiles: SpecialTiles<P>,
 }
 
-impl<B: BoardState> BoardGeometry<B> {
+impl<P: PieceMap> BoardGeometry<P> {
     /// Create an empty board with the given side length.
     pub fn new(side_len: u8) -> Self {
         Self {
@@ -126,7 +127,7 @@ impl<B: BoardState> BoardGeometry<B> {
     }
 
     /// Check whether the given tile is surrounded on all sides by pieces (friend or foe).
-    pub fn tile_surrounded(&self, tile: Tile, state: impl BoardState) -> bool {
+    pub fn tile_surrounded(&self, tile: Tile, state: &BoardState<P>) -> bool {
         self.neighbors(tile).iter().all(|t| state.tile_occupied(*t))
     }
 
@@ -136,7 +137,7 @@ impl<B: BoardState> BoardGeometry<B> {
     }
 
     /// Generate the FEN string describing the current board state
-    pub fn to_fen(&self, state: &impl BoardState) -> String {
+    pub fn to_fen(&self, state: &BoardState<P>) -> String {
         let mut s = String::new();
         for row in 0..self.side_len {
             let mut n_empty = 0;
@@ -165,14 +166,14 @@ impl<B: BoardState> BoardGeometry<B> {
 
 #[cfg(test)]
 mod tests {
-    use crate::aliases::SmallBasicBoardState;
+    use crate::aliases::SmallBasicPieceMap;
     use crate::board::geometry::BoardGeometry;
     use crate::tiles::Tile;
     use crate::utils::check_tile_vec;
 
     #[test]
     fn test_neighbors() {
-        let geo: BoardGeometry<SmallBasicBoardState> = BoardGeometry::new(7);
+        let geo: BoardGeometry<SmallBasicPieceMap> = BoardGeometry::new(7);
         let n = geo.neighbors(Tile::new(0, 0));
         check_tile_vec(n, vec![Tile::new(0, 1), Tile::new(1, 0)]);
 
@@ -205,7 +206,7 @@ mod tests {
 
     #[test]
     fn test_far_tile() {
-        let geo: BoardGeometry<SmallBasicBoardState> = BoardGeometry::new(7);
+        let geo: BoardGeometry<SmallBasicPieceMap> = BoardGeometry::new(7);
         assert_eq!(geo.far_tile(Tile::new(0, 0), Tile::new(0, 1)), Some(Tile::new(0, 2)));
         assert_eq!(geo.far_tile(Tile::new(1, 1), Tile::new(2, 3)), Some(Tile::new(3, 5)));
         assert_eq!(geo.far_tile(Tile::new(1, 1), Tile::new(1, 1)), Some(Tile::new(1, 1)));

@@ -46,16 +46,17 @@
 //! * [`collections::TileSet`] is a struct that represents a set of `Tiles` on a board. It is generic over
 //!   `BitField`.
 //! * [`collections::PieceMap`] is a trait allowing mapping of tiles to the pieces (if any) that occupy them.
-//!   `PieceMap` has an associated type `BitField` which is the bitfield type used to represent the
+//!   `PieceMap` has an associated type `BitField`, which is the bitfield type used to represent the
 //!   board state. Several of the collections returned by functions on `PieceMap` are generic over
 //!   that type.
 //! * [`collections::BasicPieceMap`] is a struct that implements `PieceMap` using `TileSet`s to represent
 //!   the "basic" pieces: attacking soldiers, defending soldiers and defending king.
-//! * [`board::state::BoardState`] is a trait allowing access to the board state. It has two associated types:
-//!   `BitField` and `PieceMap` (each of which is constrained by the trait of the same name) which
-//!   are used to store and represent board state internally.
-//! * [`board::state::BasicBoardState`] is a struct that implements `BoardState` for basic pieces. It is generic
-//!   over `BitField` and uses a `BasicPieceMap` to store state internally.
+//! * [`collections::BerserkPieceMap`] is a struct that implements `PieceMap` using `TileSet`s to represent
+//!   the basic pieces plus the additional "berserk" pieces: knights and commanders.
+//! * [`board::state::BoardState`] is a struct allowing access to the board state. It is generic over
+//!   `PieceMap` and in practice it is a thin wrapper around a struct that implements that trait.
+//! * [`collections::pieceset::PieceSet`] is a struct that represents a set of pieces. A piece, in this
+//!   context, is a combination of a piece type (king, soldier, etc) and a side (attacker or defender).
 //! * [`game::state::GameState`] is a struct that represents the current state of a game. It is generic over
 //!   `BoardState`, and includes both board state and other game state, such as the player whose
 //!   turn it is.
@@ -64,8 +65,8 @@
 //!
 //! To reduce the complexity of having to deal with generics and associated types for simple use
 //! cases, some concrete implementations of these traits are provided. These are found in the
-//! [`aliases`] module. So, for example, if you just want to play a game on a 7x7 board, you can use
-//! a `SmallBasicGame` instead of a `Game<BasicBoardState<u64>>`.
+//! [`aliases`] module. So, for example, if you just want to play a basic game on a 7x7 board, you can
+//! use a `SmallBasicGame` instead of a `Game<BasicPieceMap<u64>>`.
 //!
 //! # Serialization
 //!

@@ -44,15 +44,15 @@ impl<B: BitField> Enclosure<B> {
 }
 
 /// The result of making a play.
-pub struct DoPlayResult<B: BoardState> {
+pub struct DoPlayResult<P: PieceMap> {
     /// The game state following the play.
-    pub new_state: GameState<B>,
+    pub new_state: GameState<P>,
     /// A record of the play and its effect.
-    pub record: PlayRecord<B>,
+    pub record: PlayRecord<P>,
 }
 
-impl<B: BoardState> From<DoPlayResult<B>> for (GameState<B>, PlayRecord<B>) {
-    fn from(result: DoPlayResult<B>) -> (GameState<B>, PlayRecord<B>) {
+impl<P: PieceMap> From<DoPlayResult<P>> for (GameState<P>, PlayRecord<P>) {
+    fn from(result: DoPlayResult<P>) -> (GameState<P>, PlayRecord<P>) {
         (result.new_state, result.record)
     }
 }
@@ -66,12 +66,12 @@ impl<B: BoardState> From<DoPlayResult<B>> for (GameState<B>, PlayRecord<B>) {
 /// rather, its methods take references to such state where necessary.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct GameLogic<B: BoardState> {
+pub struct GameLogic<P: PieceMap> {
     pub rules: Ruleset,
-    pub board_geo: BoardGeometry<B>,
+    pub board_geo: BoardGeometry<P>,
 }
 
-impl<B: BoardState> GameLogic<B> {
+impl<P: PieceMap> GameLogic<P> {
     /// Create a new [`GameLogic`] struct from the given rules and starting positions.
     pub fn new(rules: Ruleset, board_length: u8) -> Self {
         Self {
@@ -92,7 +92,7 @@ impl<B: BoardState> GameLogic<B> {
     }
 
     /// Determine whether the given tile is hostile to the given piece.
-    pub fn tile_hostile(&self, tile: Tile, piece: Piece, board: &B) -> bool {
+    pub fn tile_hostile(&self, tile: Tile, piece: Piece, board: &BoardState<P>) -> bool {
         if let Some(other_piece) = board.get_piece(tile) {
             // Tile contains a piece. If the piece is of a different side, tile is hostile, unless
             // that piece is an unarmed king.
@@ -109,7 +109,7 @@ impl<B: BoardState> GameLogic<B> {
 
     /// Determine whether the position at the given coordinates is hostile to the given piece,
     /// including whether the position is a hostile edge.
-    pub fn coords_hostile(&self, coords: Coords, piece: Piece, board: &B) -> bool {
+    pub fn coords_hostile(&self, coords: Coords, piece: Piece, board: &BoardState<P>) -> bool {
         if self.board_geo.coords_in_bounds(coords) {
             self.tile_hostile(Tile::new(coords.row as u8, coords.col as u8), piece, board)
         } else {
@@ -124,7 +124,7 @@ impl<B: BoardState> GameLogic<B> {
         &self,
         play: Play,
         piece: Piece,
-        state: &GameState<B>,
+        state: &GameState<P>,
     ) -> (bool, bool) {
         let validity = self.validate_play_for_side(play, piece.side, state);
         // Whether we can occupy the tile is checked when validating the play.
@@ -152,7 +152,7 @@ impl<B: BoardState> GameLogic<B> {
         (can_occupy, can_pass)
     }
 
-    fn can_jump(&self, piece: Piece, play: Play, middle: Tile, state: &GameState<B>) -> bool {
+    fn can_jump(&self, piece: Piece, play: Play, middle: Tile, state: &GameState<P>) -> bool {
         if !self.rules.berserk {
             // Can only jump under berserk rules
             return false
@@ -190,7 +190,7 @@ impl<B: BoardState> GameLogic<B> {
         &self,
         play: Play,
         side: Side,
-        state: &GameState<B>,
+        state: &GameState<P>,
     ) -> Result<ValidPlay, PlayInvalid> {
         if state.status != Ongoing {
             return Err(GameOver);
@@ -246,14 +246,14 @@ impl<B: BoardState> GameLogic<B> {
     pub fn validate_play(
         &self,
         play: Play,
-        state: &GameState<B>,
+        state: &GameState<P>,
     ) -> Result<ValidPlay, PlayInvalid> {
         self.validate_play_for_side(play, state.side_to_play, state)
     }
 
     /// Check whether the king is beside the throne.
-    pub fn king_beside_throne(&self, board: &B) -> bool {
-        if let Some(k) = board.get_king() {
+    pub fn king_beside_throne(&self, board: &BoardState<P>) -> bool {
+        if let Some(k) = board.pieces.find_king() {
             self.board_geo
                 .neighbors(self.board_geo.special_tiles.throne)
                 .contains(&k)
@@ -264,14 +264,14 @@ impl<B: BoardState> GameLogic<B> {
     }
 
     /// Check whether the king is on the throne.
-    pub fn king_on_throne(&self, board: &B) -> bool {
-        board.get_king() == Some(self.board_geo.special_tiles.throne)
+    pub fn king_on_throne(&self, board: &BoardState<P>) -> bool {
+        board.pieces.find_king() == Some(self.board_geo.special_tiles.throne)
     }
 
     /// Check whether the king is *currently* strong (must be surrounded on all four sides to be
     /// captured), considering the game rules and the king's current position (for example, the
     /// rules may provide that the king is only strong on or beside the throne).
-    pub fn king_is_strong(&self, board: &B) -> bool {
+    pub fn king_is_strong(&self, board: &BoardState<P>) -> bool {
         match self.rules.king_strength {
             KingStrength::Strong => true,
             KingStrength::Weak => false,
@@ -310,8 +310,8 @@ impl<B: BoardState> GameLogic<B> {
         col: i8,
         enclosed_piece_types: PieceSet,
         enclosing_piece_types: PieceSet,
-        enclosure: &mut Enclosure<B::BitField>,
-        board: &B,
+        enclosure: &mut Enclosure<P::BitField>,
+        board: &BoardState<P>,
     ) -> Option<bool> {
         let coords = Coords { row, col };
         if let Ok(tile) = self.board_geo.coords_to_tile(coords) {
@@ -350,8 +350,8 @@ impl<B: BoardState> GameLogic<B> {
         enclosing_pieces: PieceSet,
         abort_on_edge: bool,
         abort_on_corner: bool,
-        board: &B,
-    ) -> Option<Enclosure<B::BitField>> {
+        board: &BoardState<P>,
+    ) -> Option<Enclosure<P::BitField>> {
         let Coords { row, col } = Coords::from(tile);
         let mut enclosure = Enclosure::default();
         if !self.row_col_enclosed(
@@ -455,10 +455,10 @@ impl<B: BoardState> GameLogic<B> {
     /// boundary piece.
     pub fn enclosure_secure(
         &self,
-        encl: &Enclosure<B::BitField>,
+        encl: &Enclosure<P::BitField>,
         inside_safe: bool,
         outside_safe: bool,
-        board: &B,
+        board: &BoardState<P>,
     ) -> bool {
         if inside_safe && outside_safe {
             // If both inside and outside the enclosure are safe, then the enclosure must be secure.
@@ -523,12 +523,12 @@ impl<B: BoardState> GameLogic<B> {
         axis: Axis,
         away_from_edge: i8,
         dir: i8,
-        state: &GameState<B>,
-    ) -> Option<B::PieceMap> {
+        state: &GameState<P>,
+    ) -> Option<P> {
         let mut t = play.to();
         // Key is an occupied tile at edge of the board (which is threatened with capture);
         // value is the tile, on the opposite side to the edge, occupied by the opposing piece.
-        let mut wall = B::PieceMap::default();
+        let mut wall = P::default();
         loop {
             let step = Play::new(t, AxisOffset::new(axis, dir));
             // Move one tile along the edge
@@ -590,8 +590,8 @@ impl<B: BoardState> GameLogic<B> {
     pub fn detect_shieldwall(
         &self,
         valid_play: ValidPlay,
-        state: &GameState<B>,
-    ) -> Option<B::PieceMap> {
+        state: &GameState<P>,
+    ) -> Option<P> {
         let play = valid_play.play;
         let sw_rule = self.rules.shieldwall?;
         let to = play.to();
@@ -626,8 +626,8 @@ impl<B: BoardState> GameLogic<B> {
     }
 
     /// Detect whether the king is in an exit fort.
-    pub fn detect_exit_fort(&self, board: &B) -> bool {
-        if let Some(king_tile) = board.get_king() {
+    pub fn detect_exit_fort(&self, board: &BoardState<P>) -> bool {
+        if let Some(king_tile) = board.pieces.find_king() {
             // King is at edge
             if !self.board_geo.tile_at_edge(king_tile) {
                 return false;
@@ -667,8 +667,8 @@ impl<B: BoardState> GameLogic<B> {
 
     pub fn detect_repetition(
         &self,
-        state: &GameState<B>,
-        position_history: &[Position<B>],
+        state: &GameState<P>,
+        position_history: &[Position<P>],
         n: usize,
     ) -> bool {
         // We already know that the position appears once, so start at 1.
@@ -698,9 +698,9 @@ impl<B: BoardState> GameLogic<B> {
         &self,
         valid_play: ValidPlay,
         moving_piece: Piece,
-        state: &GameState<B>,
-    ) -> B::PieceMap {
-        let mut captures = B::PieceMap::default();
+        state: &GameState<P>,
+    ) -> P {
+        let mut captures = P::default();
         let to = valid_play.play.to();
 
         // Detect normal captures
@@ -799,15 +799,15 @@ impl<B: BoardState> GameLogic<B> {
         &self,
         valid_play: ValidPlay,
         moving_piece: Piece,
-        state: &GameState<B>,
-        position_history: Option<&[Position<B>]>,
+        state: &GameState<P>,
+        position_history: Option<&[Position<P>]>,
     ) -> Option<GameOutcome> {
-        if state.board.count_pieces_of_side(state.side_to_play.other()) == 0 {
+        if state.board.pieces.count_pieces_of_side(state.side_to_play.other()) == 0 {
             // All opposing pieces have been captured.
             return Some(Win(AllCaptured, state.side_to_play));
         }
         if state.side_to_play == Attacker {
-            if let Some(k) = state.board.get_king() {
+            if let Some(k) = state.board.pieces.find_king() {
                 if let Some(encl_win) = self.rules.enclosure_win {
                     if let Some(encl) = self.find_enclosure(
                         k,
@@ -818,7 +818,7 @@ impl<B: BoardState> GameLogic<B> {
                         &state.board,
                     ) {
                         if encl.occupied.count()
-                            == state.board.count_pieces_of_side(Defender) as u32
+                            == state.board.pieces.count_pieces_of_side(Defender) as u32
                             && self.enclosure_secure(&encl, false, true, &state.board)
                         {
                             return Some(Win(Enclosed, Attacker));
@@ -892,15 +892,15 @@ impl<B: BoardState> GameLogic<B> {
     pub fn do_valid_play(
         &self,
         valid_play: ValidPlay,
-        mut state: GameState<B>,
-        position_history: Option<&[Position<B>]>,
-    ) -> DoPlayResult<B> {
+        mut state: GameState<P>,
+        position_history: Option<&[Position<P>]>,
+    ) -> DoPlayResult<P> {
         let play = valid_play.play;
         // First move the piece on the board
         let moving_piece = state.board.move_piece(play.from, play.to());
         // Then remove captured pieces
         let captures = self.get_captures(valid_play, moving_piece, &state);
-        state.board.remove_placed_pieces(&captures);
+        state.board.pieces.clear_tiles(captures.occupied());
         if captures.is_empty() {
             state.plays_since_capture += 1;
         } else {
@@ -942,16 +942,16 @@ impl<B: BoardState> GameLogic<B> {
     pub fn do_play(
         &self,
         play: Play,
-        state: GameState<B>,
-        position_history: Option<&[Position<B>]>,
-    ) -> Result<DoPlayResult<B>, PlayInvalid> {
+        state: GameState<P>,
+        position_history: Option<&[Position<P>]>,
+    ) -> Result<DoPlayResult<P>, PlayInvalid> {
         let valid_play = self.validate_play(play, &state)?;
         Ok(self.do_valid_play(valid_play, state, position_history))
     }
 
     /// Whether the given side could make any play given the current board.
-    pub fn side_can_play(&self, side: Side, state: &GameState<B>) -> bool {
-        for tile in state.board.occupied_by_side(side) {
+    pub fn side_can_play(&self, side: Side, state: &GameState<P>) -> bool {
+        for tile in state.board.pieces.occupied_by_side(side) {
             if self
                 .iter_plays(tile, state)
                 .expect("Tile must not be empty.")
@@ -969,8 +969,8 @@ impl<B: BoardState> GameLogic<B> {
     pub fn iter_plays<'logic, 'state>(
         &'logic self,
         tile: Tile,
-        state: &'state GameState<B>,
-    ) -> Result<ValidPlayIterator<'logic, 'state, B>, BoardError> {
+        state: &'state GameState<P>,
+    ) -> Result<ValidPlayIterator<'logic, 'state, P>, BoardError> {
         ValidPlayIterator::new(self, state, tile)
     }
 
@@ -980,7 +980,7 @@ impl<B: BoardState> GameLogic<B> {
         tile: Tile,
         other_piece: Piece,
         far_coords: Coords,
-        state: &GameState<B>,
+        state: &GameState<P>,
     ) -> Option<PlacedPiece> {
         if let Ok(far_tile) = self.board_geo.coords_to_tile(far_coords) {
             if far_tile == self.board_geo.special_tiles.throne
@@ -1005,7 +1005,6 @@ impl<B: BoardState> GameLogic<B> {
 
 #[cfg(test)]
 mod tests {
-    use crate::board::state::BoardState;
     use crate::error::PlayInvalid;
     use crate::error::PlayInvalid::{
         BlockedByPiece, MoveOntoBlockedTile, MoveThroughBlockedTile, NoPiece, OutOfBounds, TooFar,
@@ -1026,10 +1025,7 @@ mod tests {
     use crate::{basic_piecemap, tileset};
     use std::collections::HashSet;
 
-    use crate::aliases::{
-        HugeBasicBoardState, LargeBasicBoardState, MediumBasicBoardState, MediumBasicGameState,
-        SmallBasicBoardState, SmallBasicGameState,
-    };
+    use crate::aliases::{HugeBasicPieceMap, LargeBasicPieceMap, MediumBasicGameState, MediumBasicPieceMap, MediumBerserkGameState, SmallBasicBoardState, SmallBasicGameState, SmallBasicPieceMap};
     use crate::collections::piecemap::PieceMap;
     use crate::preset::rules::BRANDUBH;
     use crate::utils::check_tile_vec;
@@ -1044,22 +1040,22 @@ mod tests {
         ..rules::BRANDUBH
     };
 
-    fn assert_valid_play<B: BoardState>(logic: GameLogic<B>, play: Play, state: &GameState<B>) {
+    fn assert_valid_play<P: PieceMap>(logic: GameLogic<P>, play: Play, state: &GameState<P>) {
         assert_eq!(logic.validate_play(play, state), Ok(ValidPlay { play }));
     }
 
-    fn assert_invalid_play<B: BoardState>(
-        logic: GameLogic<B>,
+    fn assert_invalid_play<P: PieceMap>(
+        logic: GameLogic<P>,
         play: Play,
-        state: &GameState<B>,
+        state: &GameState<P>,
         reason: PlayInvalid,
     ) {
         assert_eq!(logic.validate_play(play, state), Err(reason));
     }
 
-    fn generic_test_play_validity<B: BoardState>() {
+    fn generic_test_play_validity<P: PieceMap>() {
         let logic = GameLogic::new(rules::BRANDUBH, 7);
-        let mut state: GameState<B> = GameState::new(boards::BRANDUBH, logic.rules.starting_side)
+        let mut state: GameState<P> = GameState::new(boards::BRANDUBH, logic.rules.starting_side)
             .expect("Could not initiate game state.");
 
         assert_valid_play(
@@ -1120,7 +1116,7 @@ mod tests {
         );
 
         let logic = GameLogic::new(TEST_RULES, 7);
-        let mut state: GameState<B> = GameState::new("7/5Tt/2T4/2t2t1/Tt4T/2t4/2T2K1", Defender)
+        let mut state: GameState<P> = GameState::new("7/5Tt/2T4/2t2t1/Tt4T/2t4/2T2K1", Defender)
             .expect("Could not initiate game state.");
 
         assert_invalid_play(
@@ -1147,18 +1143,18 @@ mod tests {
 
     #[test]
     fn test_play_validity() {
-        generic_test_play_validity::<SmallBasicBoardState>();
-        generic_test_play_validity::<MediumBasicBoardState>();
-        generic_test_play_validity::<LargeBasicBoardState>();
-        generic_test_play_validity::<HugeBasicBoardState>();
+        generic_test_play_validity::<SmallBasicPieceMap>();
+        generic_test_play_validity::<MediumBasicPieceMap>();
+        generic_test_play_validity::<LargeBasicPieceMap>();
+        generic_test_play_validity::<HugeBasicPieceMap>();
     }
 
-    fn generic_test_play_outcome<T: BoardState>() {
+    fn generic_test_play_outcome<P: PieceMap>() {
         // First, move the piece on the board directly and check that it picks up the correct
         // captures. Then, reverse the move, and call `do_move` to check that the correct game
         // outcome is detected.
 
-        let proto: (GameLogic<T>, GameState<T>) = (
+        let proto: (GameLogic<P>, GameState<P>) = (
             GameLogic::new(TEST_RULES, 7),
             GameState::new("4t2/5Tt/2T4/2t2t1/Tt4T/2t4/2T2K1", TEST_RULES.starting_side).unwrap(),
         );
@@ -1253,10 +1249,10 @@ mod tests {
 
     #[test]
     fn test_play_outcome() {
-        generic_test_play_outcome::<SmallBasicBoardState>();
-        generic_test_play_outcome::<MediumBasicBoardState>();
-        generic_test_play_outcome::<LargeBasicBoardState>();
-        generic_test_play_outcome::<HugeBasicBoardState>();
+        generic_test_play_outcome::<SmallBasicPieceMap>();
+        generic_test_play_outcome::<MediumBasicPieceMap>();
+        generic_test_play_outcome::<LargeBasicPieceMap>();
+        generic_test_play_outcome::<HugeBasicPieceMap>();
     }
 
     #[test]
@@ -1294,8 +1290,8 @@ mod tests {
             play: Play::from_tiles(Tile::new(3, 6), Tile::new(3, 7)).unwrap(),
         };
 
-        let corner_logic: GameLogic<MediumBasicBoardState> = GameLogic::new(rules::COPENHAGEN, 9);
-        let corner_state: GameState<MediumBasicBoardState> =
+        let corner_logic: GameLogic<MediumBasicPieceMap> = GameLogic::new(rules::COPENHAGEN, 9);
+        let corner_state: GameState<MediumBasicPieceMap> =
             GameState::new(corner_sw, Attacker).unwrap();
         assert_eq!(corner_logic.detect_shieldwall(n, &corner_state), None);
         assert_eq!(
@@ -1306,11 +1302,11 @@ mod tests {
             tileset!(Tile::new(5, 8), Tile::new(6, 8), Tile::new(7, 8))
         );
 
-        let no_corner_logic: GameLogic<MediumBasicBoardState> = GameLogic::new(no_corner_rules, 9);
+        let no_corner_logic: GameLogic<MediumBasicPieceMap> = GameLogic::new(no_corner_rules, 9);
         assert_eq!(no_corner_logic.detect_shieldwall(m, &corner_state), None);
 
-        let regular_logic: GameLogic<MediumBasicBoardState> = GameLogic::new(no_corner_rules, 9);
-        let regular_state: GameState<MediumBasicBoardState> =
+        let regular_logic: GameLogic<MediumBasicPieceMap> = GameLogic::new(no_corner_rules, 9);
+        let regular_state: GameState<MediumBasicPieceMap> =
             GameState::new(regular_sw, Attacker).unwrap();
         assert_eq!(
             regular_logic
@@ -1320,7 +1316,7 @@ mod tests {
             tileset!(Tile::new(4, 8), Tile::new(5, 8), Tile::new(6, 8))
         );
 
-        let king_state: GameState<MediumBasicBoardState> =
+        let king_state: GameState<MediumBasicPieceMap> =
             GameState::new(regular_sw_king, Attacker).unwrap();
         assert_eq!(
             regular_logic
@@ -1330,7 +1326,7 @@ mod tests {
             tileset!(Tile::new(4, 8), Tile::new(6, 8))
         );
 
-        let king_cap_logic: GameLogic<MediumBasicBoardState> =
+        let king_cap_logic: GameLogic<MediumBasicPieceMap> =
             GameLogic::new(king_capture_rules, 9);
         assert_eq!(
             king_cap_logic
@@ -1340,15 +1336,15 @@ mod tests {
             tileset!(Tile::new(4, 8), Tile::new(5, 8), Tile::new(6, 8))
         );
 
-        let gap_state: GameState<MediumBasicBoardState> =
+        let gap_state: GameState<MediumBasicPieceMap> =
             GameState::new(no_sw_gap, Attacker).unwrap();
         assert_eq!(regular_logic.detect_shieldwall(m, &gap_state), None);
 
-        let friend_state: GameState<MediumBasicBoardState> =
+        let friend_state: GameState<MediumBasicPieceMap> =
             GameState::new(no_sw_friend, Attacker).unwrap();
         assert_eq!(regular_logic.detect_shieldwall(m, &friend_state), None);
 
-        let small_state: GameState<MediumBasicBoardState> =
+        let small_state: GameState<MediumBasicPieceMap> =
             GameState::new(no_sw_small, Attacker).unwrap();
         assert_eq!(regular_logic.detect_shieldwall(m, &small_state), None);
     }
@@ -1381,8 +1377,8 @@ mod tests {
             (&setup_4, true, false, true, rules::COPENHAGEN),
         ];
         for (string, inside_safe, outside_safe, is_secure, rules) in candidates {
-            let logic: GameLogic<SmallBasicBoardState> = GameLogic::new(rules, 7);
-            let state: GameState<SmallBasicBoardState> =
+            let logic: GameLogic<SmallBasicPieceMap> = GameLogic::new(rules, 7);
+            let state: GameState<SmallBasicPieceMap> =
                 GameState::new(string, rules.starting_side).unwrap();
             let encl_opt = logic.find_enclosure(
                 Tile::new(2, 3),
@@ -1410,14 +1406,14 @@ mod tests {
         let no_fort_gap = "9/9/9/8T/9/4t2T1/7TK/8T/9";
         let no_fort_vuln = "9/9/9/9/9/6TTT/5T2K/6TTT/9";
         for s in [exit_fort_flat, exit_fort_bulge] {
-            let logic: GameLogic<MediumBasicBoardState> = GameLogic::new(rules::COPENHAGEN, 9);
-            let state: GameState<MediumBasicBoardState> =
+            let logic: GameLogic<MediumBasicPieceMap> = GameLogic::new(rules::COPENHAGEN, 9);
+            let state: GameState<MediumBasicPieceMap> =
                 GameState::new(s, logic.rules.starting_side).unwrap();
             assert!(logic.detect_exit_fort(&state.board));
         }
         for s in [no_fort_enemy, no_fort_unfree, no_fort_gap, no_fort_vuln] {
-            let logic: GameLogic<MediumBasicBoardState> = GameLogic::new(rules::COPENHAGEN, 9);
-            let state: GameState<MediumBasicBoardState> =
+            let logic: GameLogic<MediumBasicPieceMap> = GameLogic::new(rules::COPENHAGEN, 9);
+            let state: GameState<MediumBasicPieceMap> =
                 GameState::new(s, logic.rules.starting_side).unwrap();
             assert!(!logic.detect_exit_fort(&state.board));
         }
@@ -1431,7 +1427,7 @@ mod tests {
         let encl_with_soldier = "2ttt2/1t1KTt1/2tttt1/7/7/7/7";
         let encl_edge_2 = "1t2t2/1t1K1t1/2tttt1/7/7/7/7";
         let state = SmallBasicBoardState::from_str(full_enclosure).unwrap();
-        let game_logic: GameLogic<SmallBasicBoardState> =
+        let game_logic: GameLogic<SmallBasicPieceMap> =
             GameLogic::new(rules::BRANDUBH, state.side_len());
         let encl_res = game_logic.find_enclosure(
             Tile::new(1, 3),
@@ -1463,7 +1459,7 @@ mod tests {
         );
 
         let state = SmallBasicBoardState::from_str(encl_with_edge).unwrap();
-        let game_logic: GameLogic<SmallBasicBoardState> =
+        let game_logic: GameLogic<SmallBasicPieceMap> =
             GameLogic::new(rules::BRANDUBH, state.side_len());
         let encl_res = game_logic.find_enclosure(
             Tile::new(1, 3),
@@ -1503,7 +1499,7 @@ mod tests {
         );
 
         let state = SmallBasicBoardState::from_str(encl_with_corner).unwrap();
-        let game_logic: GameLogic<SmallBasicBoardState> =
+        let game_logic: GameLogic<SmallBasicPieceMap> =
             GameLogic::new(rules::BRANDUBH, state.side_len());
         let encl_res = game_logic.find_enclosure(
             Tile::new(1, 3),
@@ -1540,7 +1536,7 @@ mod tests {
         );
 
         let state = SmallBasicBoardState::from_str(encl_with_soldier).unwrap();
-        let game_logic: GameLogic<SmallBasicBoardState> =
+        let game_logic: GameLogic<SmallBasicPieceMap> =
             GameLogic::new(rules::BRANDUBH, state.side_len());
         let encl_res = game_logic.find_enclosure(
             Tile::new(1, 3),
@@ -1584,7 +1580,7 @@ mod tests {
         );
 
         let state = SmallBasicBoardState::from_str(encl_edge_2).unwrap();
-        let game_logic: GameLogic<SmallBasicBoardState> =
+        let game_logic: GameLogic<SmallBasicPieceMap> =
             GameLogic::new(rules::BRANDUBH, state.side_len());
         let encl_res = game_logic.find_enclosure(
             Tile::new(1, 3),
@@ -1600,12 +1596,12 @@ mod tests {
     #[test]
     fn test_can_play() {
         let logic = GameLogic::new(rules::BRANDUBH, 7);
-        let state: GameState<SmallBasicBoardState> =
+        let state: GameState<SmallBasicPieceMap> =
             GameState::new("2tt3/1tTKt2/2tt3/7/7/7/7", logic.rules.starting_side).unwrap();
         assert!(logic.side_can_play(Attacker, &state));
         assert!(!logic.side_can_play(Defender, &state));
 
-        let state: GameState<SmallBasicBoardState> =
+        let state: GameState<SmallBasicPieceMap> =
             GameState::new("2tKt2/3t3/7/7/7/7/7", logic.rules.starting_side).unwrap();
         assert!(logic.side_can_play(Attacker, &state));
         assert!(!logic.side_can_play(Defender, &state));
@@ -1613,7 +1609,7 @@ mod tests {
 
     #[test]
     fn test_repetitions() {
-        let mut game: Game<SmallBasicBoardState> =
+        let mut game: Game<SmallBasicPieceMap> =
             Game::new(rules::BRANDUBH, boards::BRANDUBH).unwrap();
         for _ in 0..2 {
             game.do_play(Play::from_str("d6-f6").unwrap()).unwrap();
@@ -1714,7 +1710,7 @@ mod tests {
             ..BRANDUBH
         };
         let logic = GameLogic::new(rules, 9);
-        let state = MediumBasicGameState::new("1tKt5/1tNc5/1tCn5/tN7/t2TKt3/4t4/9/9/9", Attacker).unwrap();
+        let state = MediumBerserkGameState::new("1tKt5/1tNc5/1tNc5/tN7/t2TKt3/4t4/9/9/9", Attacker).unwrap();
         // King can jump over soldier to get to corner
         assert!(logic.can_jump(KING, Play::from_str("c1-a1").unwrap(), Tile::from_str("b1").unwrap(), &state));
         // King can't jump over soldier if not to/from restricted square

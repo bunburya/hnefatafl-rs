@@ -116,9 +116,9 @@ impl Display for ValidPlay {
 /// any.
 #[derive(Eq, PartialEq, Debug, Default, Clone, Copy)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct PlayEffects<B: BoardState> {
+pub struct PlayEffects<P: PieceMap> {
     /// Tiles containing pieces that have been captured by the move.
-    pub captures: B::PieceMap,
+    pub captures: P,
     /// The outcome of the game, if the move has brought the game to an end.
     pub game_outcome: Option<GameOutcome>,
 }
@@ -126,23 +126,23 @@ pub struct PlayEffects<B: BoardState> {
 /// A record of a single play.
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct PlayRecord<B: BoardState> {
+pub struct PlayRecord<P: PieceMap> {
     /// The side that made the play.
     pub side: Side,
     /// Details of the play (piece movement) itself.
     pub play: Play,
     /// Details of the effects of the play.
-    pub effects: PlayEffects<B>,
+    pub effects: PlayEffects<P>,
 }
 
-impl<B: BoardState> PlayRecord<B> {
+impl<P: PieceMap> PlayRecord<P> {
     /// Whether these two records are equal, ignoring the outcomes of the moves.
     pub fn eq_ignore_outcome(&self, other: &Self) -> bool {
         self.side == other.side && self.play == other.play
     }
 }
 
-impl<B: BoardState> Display for PlayRecord<B> {
+impl<P: PieceMap> Display for PlayRecord<P> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.play)?;
         if !self.effects.captures.is_empty() {
@@ -175,18 +175,18 @@ impl<B: BoardState> Display for PlayRecord<B> {
 /// An iterator over the possible plays that can be made by the piece at the given tile. Note that
 /// because this struct holds a reference to the [`GameLogic`] and [`GameState`], neither may be
 /// mutated while the iterator exists. Order of iteration is not guaranteed.
-pub struct ValidPlayIterator<'a, 'b, B: BoardState> {
-    game_logic: &'a GameLogic<B>,
-    game_state: &'b GameState<B>,
+pub struct ValidPlayIterator<'a, 'b, P: PieceMap> {
+    game_logic: &'a GameLogic<P>,
+    game_state: &'b GameState<P>,
     start_tile: Tile,
     piece: Piece,
     movement: AxisOffset,
 }
 
-impl<'logic, 'state, B: BoardState> ValidPlayIterator<'logic, 'state, B> {
+impl<'logic, 'state, P: PieceMap> ValidPlayIterator<'logic, 'state, P> {
     pub fn new(
-        game_logic: &'logic GameLogic<B>,
-        game_state: &'state GameState<B>,
+        game_logic: &'logic GameLogic<P>,
+        game_state: &'state GameState<P>,
         tile: Tile,
     ) -> Result<Self, BoardError> {
         if let Some(piece) = game_state.board.get_piece(tile) {
@@ -236,7 +236,7 @@ impl<'logic, 'state, B: BoardState> ValidPlayIterator<'logic, 'state, B> {
     }
 }
 
-impl<'logic, 'state, B: BoardState> Iterator for ValidPlayIterator<'logic, 'state, B> {
+impl<'logic, 'state, P: PieceMap> Iterator for ValidPlayIterator<'logic, 'state, P> {
     type Item = ValidPlay;
 
     fn next(&mut self) -> Option<Self::Item> {

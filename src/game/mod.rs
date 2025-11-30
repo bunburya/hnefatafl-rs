@@ -70,18 +70,18 @@ pub enum GameStatus {
 /// after each turn (to allow undoing plays).
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct Game<B: BoardState> {
-    pub logic: GameLogic<B>,
-    pub state: GameState<B>,
-    pub play_history: Vec<PlayRecord<B>>,
-    pub state_history: Vec<GameState<B>>,
-    pub position_history: Vec<Position<B>>,
+pub struct Game<P: PieceMap> {
+    pub logic: GameLogic<P>,
+    pub state: GameState<P>,
+    pub play_history: Vec<PlayRecord<P>>,
+    pub state_history: Vec<GameState<P>>,
+    pub position_history: Vec<Position<P>>,
 }
 
-impl<B: BoardState> Game<B> {
+impl<P: PieceMap> Game<P> {
     /// Create a new [`Game`] from the given rules and starting positions.
     pub fn new(rules: Ruleset, starting_board: &str) -> Result<Self, ParseError> {
-        let state: GameState<B> = GameState::new(starting_board, rules.starting_side)?;
+        let state: GameState<P> = GameState::new(starting_board, rules.starting_side)?;
         let logic = GameLogic::new(rules, state.board.side_len());
 
         Ok(Self {
@@ -112,7 +112,7 @@ impl<B: BoardState> Game<B> {
     }
 
     /// Undo the most recent play of the game. Returns a record of the play that was undone.
-    pub fn undo_last_play(&mut self) -> Option<PlayRecord<B>> {
+    pub fn undo_last_play(&mut self) -> Option<PlayRecord<P>> {
         if let Some(state) = self.state_history.pop() {
             self.state = state;
             self.play_history.pop()
@@ -123,14 +123,14 @@ impl<B: BoardState> Game<B> {
 
     /// Iterate over the possible plays that can be made by the piece at the given tile. Returns an
     /// error if there is no piece at the given tile. Order of iteration is not guaranteed.
-    pub fn iter_plays(&self, tile: Tile) -> Result<ValidPlayIterator<'_, '_, B>, BoardError> {
+    pub fn iter_plays(&self, tile: Tile) -> Result<ValidPlayIterator<'_, '_, P>, BoardError> {
         ValidPlayIterator::new(&self.logic, &self.state, tile)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::aliases::SmallBasicBoardState;
+    use crate::aliases::{SmallBasicGame, SmallBasicPieceMap};
     use crate::game::Game;
     use crate::play::Play;
     use crate::preset::{boards, rules};
@@ -139,7 +139,7 @@ mod tests {
 
     #[test]
     fn test_iter_plays() {
-        let game: Game<SmallBasicBoardState> =
+        let game: SmallBasicGame =
             Game::new(rules::BRANDUBH, boards::BRANDUBH).unwrap();
         assert!(game.iter_plays(Tile::new(0, 0)).is_err());
         assert!(game.iter_plays(Tile::new(1, 0)).is_err());
@@ -202,7 +202,7 @@ mod tests {
                 .collect::<HashSet<Play>>(),
             HashSet::new()
         );
-        let game: Game<SmallBasicBoardState> =
+        let game: Game<SmallBasicPieceMap> =
             Game::new(rules::BRANDUBH, "1T5/7/7/1t3K1/7/7/7").unwrap();
 
         // Test moving through (but not onto) throne and blocking by piece
@@ -229,7 +229,7 @@ mod tests {
 
     #[test]
     fn test_undo() {
-        let mut g: Game<SmallBasicBoardState> =
+        let mut g: Game<SmallBasicPieceMap> =
             Game::new(rules::BRANDUBH, boards::BRANDUBH).unwrap();
         let state_0 = g.state.clone();
         g.do_play(Play::from_tiles(Tile::new(0, 3), Tile::new(0, 2)).unwrap())

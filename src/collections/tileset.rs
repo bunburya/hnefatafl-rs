@@ -92,8 +92,12 @@ impl<B: BitField> TileSet<B> {
 
     /// Return the first tile in the set. (Order is not generally guaranteed so in practice this
     /// is mainly useful to find the *only* tile in the set, where we know there is only one).
-    pub fn first(&self) -> Tile {
-        B::bit_to_tile(self.bitfield.trailing_zeros())
+    pub fn first(&self) -> Option<Tile> {
+        if self.is_empty() {
+            None
+        } else {
+            Some(B::bit_to_tile(self.bitfield.trailing_zeros()))
+        }
     }
 }
 

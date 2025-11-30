@@ -26,7 +26,7 @@ pub trait CommonPieceMapSuperTraits:
 }
 
 #[cfg(feature = "serde")]
-pub trait PieceMapSuperTraits: CommonPieceMapSuperTraits + Serialize + DeserializeOwned {}
+pub trait PieceMapSuperTraits: CommonPieceMapSuperTraits + Serialize {}
 
 #[cfg(not(feature = "serde"))]
 pub trait PieceMapSuperTraits: CommonPieceMapSuperTraits {}
@@ -65,7 +65,7 @@ pub trait PieceMap: PieceMapSuperTraits {
     fn remove(&mut self, t: Tile);
 
     /// Clear all tiles in the given set.
-    fn remove_tiles(&mut self, tiles: TileSet<Self::BitField>);
+    fn clear_tiles(&mut self, tiles: TileSet<Self::BitField>);
 
     /// Return a copy of this map with all pieces in the given set removed.
     fn without_pieces(&self, piece_set: PieceSet) -> Self;
@@ -138,6 +138,16 @@ pub trait PieceMap: PieceMapSuperTraits {
     /// Given one supported piece, return the next supported piece. If `None` is passed, return the
     /// first supported piece.
     fn next_piece(piece: Option<Piece>) -> Option<Piece>;
+
+    /// Return the tile containing the king, if any.
+    fn find_king(&self) -> Option<Tile>;
+
+    /// Count the number of pieces of the given side.
+    fn count_pieces_of_side(&self, side: Side) -> u32;
+
+    /// Return the set of all tiles occupied by the given side.
+    fn occupied_by_side(&self, side: Side) -> TileSet<Self::BitField>;
+
 }
 
 /// A [`PieceMap`] implemented using bitfields which is capable of representing the basic pieces
@@ -251,7 +261,7 @@ impl<B: BitField> PieceMap for BasicPieceMap<B> {
         self.king.remove(t);
     }
 
-    fn remove_tiles(&mut self, tiles: TileSet<B>) {
+    fn clear_tiles(&mut self, tiles: TileSet<B>) {
         let inv = !tiles;
         self.attacking_soldier &= inv;
         self.defending_soldier &= inv;
@@ -300,6 +310,24 @@ impl<B: BitField> PieceMap for BasicPieceMap<B> {
             Piece { side: Defender, piece_type: Soldier } => self.defending_soldier.into_iter(),
             Piece { side: Defender, piece_type: King } => self.king.into_iter(),
             _ => panic!("Invalid piece type: {:?}", piece),
+        }
+    }
+
+    fn find_king(&self) -> Option<Tile> {
+        self.king.first()
+    }
+
+    fn count_pieces_of_side(&self, side: Side) -> u32 {
+        match side {
+            Attacker => self.attacking_soldier.count(),
+            Defender => self.defending_soldier.count() + self.king.count(),
+        }
+    }
+
+    fn occupied_by_side(&self, side: Side) -> TileSet<Self::BitField> {
+        match side {
+            Attacker => self.attacking_soldier,
+            Defender => self.defending_soldier | self.king,
         }
     }
 }
@@ -508,7 +536,7 @@ impl<B: BitField> PieceMap for BerserkPieceMap<B> {
         self.king.remove(t);
     }
 
-    fn remove_tiles(&mut self, tiles: TileSet<B>) {
+    fn clear_tiles(&mut self, tiles: TileSet<B>) {
         let inv = !tiles;
         self.attacking_soldier &= inv;
         self.defending_soldier &= inv;
@@ -573,6 +601,24 @@ impl<B: BitField> PieceMap for BerserkPieceMap<B> {
             Piece { side: Defender, piece_type: Knight } => self.knight.into_iter(),
             Piece { side: Defender, piece_type: King } => self.king.into_iter(),
             _ => panic!("Invalid piece type: {:?}", piece),
+        }
+    }
+
+    fn find_king(&self) -> Option<Tile> {
+        self.king.first()
+    }
+
+    fn count_pieces_of_side(&self, side: Side) -> u32 {
+        match side {
+            Attacker => self.attacking_soldier.count() + self.commander.count(),
+            Defender => self.defending_soldier.count() + self.knight.count() + self.king.count(),
+        }
+    }
+
+    fn occupied_by_side(&self, side: Side) -> TileSet<Self::BitField> {
+        match side {
+            Attacker => self.attacking_soldier | self.commander,
+            Defender => self.defending_soldier | self.knight | self.king,
         }
     }
 

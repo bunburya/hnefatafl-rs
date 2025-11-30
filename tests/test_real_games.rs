@@ -1,5 +1,4 @@
-use hnefatafl::aliases::MediumBasicBoardState;
-use hnefatafl::board::state::BoardState;
+use hnefatafl::aliases::MediumBasicPieceMap;
 use hnefatafl::collections::piecemap::PieceMap;
 use hnefatafl::collections::tileset::TileSet;
 use hnefatafl::error::ParseError;
@@ -46,7 +45,7 @@ fn test_real_games(rules: Ruleset, starting_posn: &str, fname: &str) {
         if line.starts_with('#') {
             continue;
         }
-        let mut g: Game<MediumBasicBoardState> = Game::new(rules, starting_posn).unwrap();
+        let mut g: Game<MediumBasicPieceMap> = Game::new(rules, starting_posn).unwrap();
         let cols = line.split(',').collect::<Vec<&str>>();
         let outcome = cols.last().unwrap();
         if outcome.is_empty() {
@@ -67,7 +66,7 @@ fn test_real_games(rules: Ruleset, starting_posn: &str, fname: &str) {
                 if !c.is_empty() {
                     // Test data doesn't report capture of king as a capture using "x" notation
                     let mut without_king = captures;
-                    without_king.remove(g.state.board.get_king().unwrap());
+                    without_king.remove(g.state.board.pieces.find_king().unwrap());
                     assert_eq!(without_king.occupied(), TileSet::from(c.iter()));
                 }
 
