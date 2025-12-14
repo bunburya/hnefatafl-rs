@@ -133,7 +133,7 @@ pub trait PieceMap: PieceMapSuperTraits {
     }
 
     /// Return an iterator over all tiles containing the given piece.
-    fn get_iter(&self, piece: Piece) -> BitfieldTileIter<Self::BitField>;
+    fn iter_tiles_for_piece(&self, piece: Piece) -> BitfieldTileIter<Self::BitField>;
 
     /// Given one supported piece, return the next supported piece. If `None` is passed, return the
     /// first supported piece.
@@ -229,7 +229,7 @@ impl<B: BitField> PieceMap for BasicPieceMap<B> {
         match piece {
             Piece {
                 piece_type: Soldier,
-                side: Side::Attacker,
+                side: Attacker,
             } => {
                 self.attacking_soldier.insert(t);
                 self.defending_soldier.remove(t);
@@ -237,7 +237,7 @@ impl<B: BitField> PieceMap for BasicPieceMap<B> {
             }
             Piece {
                 piece_type: Soldier,
-                side: Side::Defender,
+                side: Defender,
             } => {
                 self.defending_soldier.insert(t);
                 self.attacking_soldier.remove(t);
@@ -245,7 +245,7 @@ impl<B: BitField> PieceMap for BasicPieceMap<B> {
             }
             Piece {
                 piece_type: King,
-                side: Side::Defender,
+                side: Defender,
             } => {
                 self.king.insert(t);
                 self.attacking_soldier.remove(t);
@@ -294,6 +294,15 @@ impl<B: BitField> PieceMap for BasicPieceMap<B> {
             && self.king.is_empty()
     }
 
+    fn iter_tiles_for_piece(&self, piece: Piece) -> BitfieldTileIter<Self::BitField> {
+        match piece {
+            Piece { side: Attacker, piece_type: Soldier } => self.attacking_soldier.into_iter(),
+            Piece { side: Defender, piece_type: Soldier } => self.defending_soldier.into_iter(),
+            Piece { side: Defender, piece_type: King } => self.king.into_iter(),
+            _ => panic!("Invalid piece type: {:?}", piece),
+        }
+    }
+
     fn next_piece(piece: Option<Piece>) -> Option<Piece> {
         match piece {
             None => Some(Piece::attacker(Soldier)),
@@ -301,15 +310,6 @@ impl<B: BitField> PieceMap for BasicPieceMap<B> {
             Some(Piece { side: Defender, piece_type: Soldier }) => Some(Piece::king()),
             Some(Piece { side: Defender, piece_type: King }) => None,
             other => panic!("Invalid piece type: {:?}", other),
-        }
-    }
-
-    fn get_iter(&self, piece: Piece) -> BitfieldTileIter<Self::BitField> {
-        match piece {
-            Piece { side: Attacker, piece_type: Soldier } => self.attacking_soldier.into_iter(),
-            Piece { side: Defender, piece_type: Soldier } => self.defending_soldier.into_iter(),
-            Piece { side: Defender, piece_type: King } => self.king.into_iter(),
-            _ => panic!("Invalid piece type: {:?}", piece),
         }
     }
 
@@ -581,6 +581,17 @@ impl<B: BitField> PieceMap for BerserkPieceMap<B> {
             && self.king.is_empty()
     }
 
+    fn iter_tiles_for_piece(&self, piece: Piece) -> BitfieldTileIter<Self::BitField> {
+        match piece {
+            Piece { side: Attacker, piece_type: Soldier } => self.attacking_soldier.into_iter(),
+            Piece { side: Defender, piece_type: Soldier } => self.defending_soldier.into_iter(),
+            Piece { side: Attacker, piece_type: Commander } => self.commander.into_iter(),
+            Piece { side: Defender, piece_type: Knight } => self.knight.into_iter(),
+            Piece { side: Defender, piece_type: King } => self.king.into_iter(),
+            _ => panic!("Invalid piece type: {:?}", piece),
+        }
+    }
+
     fn next_piece(piece: Option<Piece>) -> Option<Piece> {
         match piece {
             None => Some(Piece::attacker(Soldier)),
@@ -590,17 +601,6 @@ impl<B: BitField> PieceMap for BerserkPieceMap<B> {
             Some(Piece { side: Attacker, piece_type: Commander }) => Some(Piece::defender(Knight)),
             Some(Piece { side: Defender, piece_type: Knight }) => None,
             other => panic!("Invalid piece type: {:?}", other),
-        }
-    }
-
-    fn get_iter(&self, piece: Piece) -> BitfieldTileIter<Self::BitField> {
-        match piece {
-            Piece { side: Attacker, piece_type: Soldier } => self.attacking_soldier.into_iter(),
-            Piece { side: Defender, piece_type: Soldier } => self.defending_soldier.into_iter(),
-            Piece { side: Attacker, piece_type: Commander } => self.commander.into_iter(),
-            Piece { side: Defender, piece_type: Knight } => self.knight.into_iter(),
-            Piece { side: Defender, piece_type: King } => self.king.into_iter(),
-            _ => panic!("Invalid piece type: {:?}", piece),
         }
     }
 
@@ -661,7 +661,7 @@ impl<P: PieceMap> PieceMapIterator<P> {
         let p = P::next_piece(None).expect("`PieceMap` must support at least one piece.");
         Self {
             piece_map,
-            current_iter: piece_map.get_iter(p),
+            current_iter: piece_map.iter_tiles_for_piece(p),
             current_piece: Piece::attacker(Soldier),
         }
     }
@@ -678,7 +678,7 @@ impl<P: PieceMap> Iterator for PieceMapIterator<P> {
                 });
             } else {
                 self.current_piece = P::next_piece(Some(self.current_piece))?;
-                self.current_iter = self.piece_map.get_iter(self.current_piece)
+                self.current_iter = self.piece_map.iter_tiles_for_piece(self.current_piece)
             }
         }
     }

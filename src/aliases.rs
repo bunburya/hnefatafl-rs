@@ -9,19 +9,19 @@
 //! `Basic` in the name means that it supports the basic tafl pieces, namely, attacking soldiers,
 //! defending soldiers and defending king (no knights, commanders, etc.).
 
+use crate::big_bitfields::{B256, B512};
 use crate::board::state::BoardState;
 use crate::game::logic::GameLogic;
 use crate::game::state::GameState;
 use crate::game::Game;
 use crate::play::PlayRecord;
-use primitive_types::{U256, U512};
 use crate::collections::BasicPieceMap;
 use crate::collections::piecemap::BerserkPieceMap;
 
 pub type SmallBitfield = u64;
 pub type MediumBitfield = u128;
-pub type LargeBitfield = U256;
-pub type HugeBitfield = U512;
+pub type LargeBitfield = B256;
+pub type HugeBitfield = B512;
 
 pub type SmallBasicPieceMap = BasicPieceMap<SmallBitfield>;
 pub type MediumBasicPieceMap = BasicPieceMap<MediumBitfield>;

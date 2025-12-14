@@ -1,5 +1,5 @@
+use crate::big_bitfields::{B256, B512};
 use crate::tiles::Tile;
-use primitive_types::{U256, U512};
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not, Shl, Shr};
@@ -73,7 +73,7 @@ pub trait BitField: BitFieldSuperTraits {
 
     /// Return the memory representation of this integer as a byte array in big-endian (network)
     /// byte order.
-    fn to_be_bytes(&self) -> Self::Bytes;
+    fn to_be_bytes(self) -> Self::Bytes;
 
     /// Create an integer value from its representation as a byte array in big endian.
     fn from_be_bytes(bytes: Self::Bytes) -> Self;
@@ -88,7 +88,7 @@ pub trait BitField: BitFieldSuperTraits {
     /// Create a bitmask for the given tile. Only the bit corresponding to the tile's position on
     /// the board will be set.
     fn tile_mask(t: Tile) -> Self {
-        Self::from(1) << ((t.row * Self::ROW_WIDTH) + t.col).into()
+        Self::from(1) << ((t.row as u32 * Self::ROW_WIDTH as u32) + t.col as u32)
     }
 
     /// Covert the given bit index to a tile.
@@ -118,7 +118,7 @@ pub trait BitField: BitFieldSuperTraits {
 /// to implement the trait for; the second should be the byte value to use for
 /// [`BitField::ROW_WIDTH`]. This macro is for use with the standard library integer types.
 #[macro_export]
-macro_rules! impl_bitfield {
+macro_rules! impl_bitfield_int {
     ($t:ty, $row_width:expr) => {
         impl_zero_array!($t);
 
@@ -130,8 +130,8 @@ macro_rules! impl_bitfield {
                 <$t>::count_ones(*self)
             }
 
-            fn to_be_bytes(&self) -> Self::Bytes {
-                <$t>::to_be_bytes(*self)
+            fn to_be_bytes(self) -> Self::Bytes {
+                <$t>::to_be_bytes(self)
             }
 
             fn from_be_bytes(bytes: Self::Bytes) -> Self {
@@ -151,7 +151,7 @@ macro_rules! impl_bitfield {
             }
 
             fn clear(&mut self) {
-                *self = 0;
+                *self = 0
             }
         }
     };
@@ -165,7 +165,7 @@ macro_rules! impl_bitfield {
 /// [`crate::impl_bitfield!`] macro on the `primitive_types` types) could result in weird and
 /// difficult to debug errors like stack overflows.
 #[macro_export]
-macro_rules! impl_bitfield_bigint {
+macro_rules! impl_bitfield_bbf {
     ($t:ty, $row_width:expr) => {
         impl_zero_array!($t);
 
@@ -174,37 +174,55 @@ macro_rules! impl_bitfield_bigint {
             const ROW_WIDTH: u8 = $row_width;
 
             fn count_ones(&self) -> u32 {
-                self.to_be_bytes().iter().map(|b| b.count_ones()).sum()
+                <$t>::to_be_bytes(*self).iter().map(|b| b.count_ones()).sum()
             }
 
-            fn to_be_bytes(&self) -> Self::Bytes {
-                <$t>::to_big_endian(self)
+            fn to_be_bytes(self) -> Self::Bytes {
+                <$t>::to_be_bytes(self)
             }
 
             fn from_be_bytes(bytes: Self::Bytes) -> Self {
-                <$t>::from_big_endian(&bytes)
+                <$t>::from_be_bytes(bytes)
             }
 
             fn trailing_zeros(&self) -> u32 {
-                <$t>::trailing_zeros(self)
+                let mut tz = 0;
+                for &b in self.to_be_bytes().as_ref().iter().rev() {
+                    if b == 0 {
+                        tz += 8
+                    } else {
+                        tz += b.trailing_zeros();
+                        break
+                    }
+                }
+                tz
             }
 
             fn leading_zeros(&self) -> u32 {
-                <$t>::leading_zeros(self)
+                let mut tz = 0;
+                for &b in self.to_be_bytes().as_ref() {
+                    if b == 0 {
+                        tz += 8
+                    } else {
+                        tz += b.leading_zeros();
+                        break
+                    }
+                }
+                tz
             }
 
             fn is_empty(&self) -> bool {
-                *self == Self::zero()
+                *self == <$t>::zero()
             }
 
             fn clear(&mut self) {
-                *self = Self::zero();
+                *self = <$t>::zero()
             }
         }
     };
 }
 
-impl_bitfield!(u64, 7);
-impl_bitfield!(u128, 11);
-impl_bitfield_bigint!(U256, 15);
-impl_bitfield_bigint!(U512, 21);
+impl_bitfield_int!(u64, 7);
+impl_bitfield_int!(u128, 11);
+impl_bitfield_bbf!(B256, 15);
+impl_bitfield_bbf!(B512, 21);

@@ -15,7 +15,7 @@ use crate::game::WinReason::{AllCaptured, Enclosed, ExitFort, KingCaptured, King
 use crate::game::{DrawReason, GameOutcome, WinReason};
 use crate::pieces::PieceType::{Commander, King, Knight, Soldier};
 use crate::pieces::Side::{Attacker, Defender};
-use crate::pieces::{Piece, PieceSet, PieceType, PlacedPiece, Side, KING};
+use crate::pieces::{Piece, PieceSet, PlacedPiece, Side, KING};
 use crate::play::{Play, PlayEffects, PlayRecord, ValidPlay, ValidPlayIterator};
 use crate::rules::EnclosureWinRules::WithoutEdgeAccess;
 use crate::rules::KingAttack::{Anvil, Armed, Hammer};
@@ -134,8 +134,8 @@ impl<P: PieceMap> GameLogic<P> {
             Err(MoveOntoBlockedTile) => {
                 // Generally, the only way you could be unable to move onto a tile but be able to
                 // move past it is if the tile is an empty throne and the rules permit passing
-                // through, but not occupying, the throne. Of course, this will differ for knights
-                // and commanders when implemented.
+                // through, but not occupying, the throne. 
+                // NOTE: Need to update for berserk rules.
                 if play.to() == self.board_geo.special_tiles.throne {
                     self.rules.passable_tiles.throne.contains(piece)
                         && !state
@@ -214,6 +214,7 @@ impl<P: PieceMap> GameLogic<P> {
                 }
                 let between = self.board_geo.tiles_between(from, to);
                 if between.iter().any(|t| state.board.tile_occupied(*t)) {
+                    // TODO: Implement berserk jumping
                     return Err(BlockedByPiece);
                 }
                 if !self.rules.occupiable_tiles.corners.contains(piece)
@@ -787,6 +788,11 @@ impl<P: PieceMap> GameLogic<P> {
             }
         }
 
+        // TODO: Detect berserk captures
+        //if self.rules.berserk {
+        //    if valid_play.play.
+        //}
+
         // Detect shieldwall captures
         if let Some(walled) = self.detect_shieldwall(valid_play, state) {
             captures.extend(&walled);
@@ -1027,7 +1033,6 @@ mod tests {
 
     use crate::aliases::{HugeBasicPieceMap, LargeBasicPieceMap, MediumBasicGameState, MediumBasicPieceMap, MediumBerserkGameState, SmallBasicBoardState, SmallBasicGameState, SmallBasicPieceMap};
     use crate::collections::piecemap::PieceMap;
-    use crate::preset::rules::BRANDUBH;
     use crate::utils::check_tile_vec;
     use std::str::FromStr;
 
@@ -1035,7 +1040,7 @@ mod tests {
         slow_pieces: PieceSet::from_piece_type(King),
         passable_tiles: PassRules {
             throne: PieceSet::none(),
-            ..BRANDUBH.passable_tiles
+            ..rules::BRANDUBH.passable_tiles
         },
         ..rules::BRANDUBH
     };
@@ -1707,7 +1712,7 @@ mod tests {
     fn test_can_jump() {
         let rules = Ruleset {
             berserk: true,
-            ..BRANDUBH
+            ..rules::BRANDUBH
         };
         let logic = GameLogic::new(rules, 9);
         let state = MediumBerserkGameState::new("1tKt5/1tNc5/1tNc5/tN7/t2TKt3/4t4/9/9/9", Attacker).unwrap();

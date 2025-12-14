@@ -130,12 +130,13 @@ impl<P: PieceMap> Game<P> {
 
 #[cfg(test)]
 mod tests {
-    use crate::aliases::{SmallBasicGame, SmallBasicPieceMap};
+    use crate::aliases::{LargeBasicGame, SmallBasicGame, SmallBasicPieceMap};
     use crate::game::Game;
     use crate::play::Play;
     use crate::preset::{boards, rules};
     use crate::tiles::Tile;
     use std::collections::HashSet;
+    use std::str::FromStr;
 
     #[test]
     fn test_iter_plays() {
@@ -231,18 +232,18 @@ mod tests {
     fn test_undo() {
         let mut g: Game<SmallBasicPieceMap> =
             Game::new(rules::BRANDUBH, boards::BRANDUBH).unwrap();
-        let state_0 = g.state.clone();
+        let state_0 = g.state;
         g.do_play(Play::from_tiles(Tile::new(0, 3), Tile::new(0, 2)).unwrap())
             .unwrap();
-        let state_1 = g.state.clone();
+        let state_1 = g.state;
         assert_ne!(state_0, state_1);
         g.do_play(Play::from_tiles(Tile::new(2, 3), Tile::new(2, 1)).unwrap())
             .unwrap();
-        let state_2 = g.state.clone();
+        let state_2 = g.state;
         assert_ne!(state_0, state_2);
         g.do_play(Play::from_tiles(Tile::new(1, 3), Tile::new(1, 1)).unwrap())
             .unwrap();
-        let state_3 = g.state.clone();
+        let state_3 = g.state;
         assert_ne!(state_0, state_3);
         g.undo_last_play();
         assert_eq!(g.state, state_2);
@@ -252,6 +253,19 @@ mod tests {
         assert_eq!(g.state, state_0);
         g.undo_last_play();
         assert_eq!(g.state, state_0);
+    }
+
+    #[test]
+    fn test_big_board() {
+        pub const COPPERGATE: &str =
+            "5ttttt5/6ttt6/7t7/7t7/7T7/t5TTT5t/tt3T1T1T3tt/ttttTTTKTTTtttt/tt3T1T1T3tt/t5TTT5t/7T7/7t7/7t7/6ttt6/5ttttt5";
+        let mut game: LargeBasicGame = Game::new(rules::COPENHAGEN, COPPERGATE).unwrap();
+        game.do_play(Play::from_str("g2-g5").unwrap()).unwrap();
+        game.do_play(Play::from_str("f7-f5").unwrap()).unwrap();
+        assert_eq!(
+            game.state.board.to_fen(),
+            "5ttttt5/7tt6/7t7/7t7/5T1T7/t5TTT5t/tt5T1T3tt/ttttTTTKTTTtttt/tt3T1T1T3tt/t5TTT5t/7T7/7t7/7t7/6ttt6/5ttttt5"
+        );
     }
 }
 

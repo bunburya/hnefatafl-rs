@@ -1,13 +1,12 @@
-use crate::bitfield::BitField;
 use crate::error::ParseError;
 use crate::error::ParseError::BadLineLen;
-use crate::pieces::{Piece, Side};
+use crate::pieces::Piece;
 use crate::tiles::Tile;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::Hash;
 use std::str::FromStr;
 
-use crate::collections::piecemap::{BasicPieceMap, PieceMap};
+use crate::collections::piecemap::PieceMap;
 use crate::collections::pieceset::PieceSet;
 use crate::collections::tileset::TileSet;
 #[cfg(feature = "serde")]
@@ -86,7 +85,7 @@ impl<P: PieceMap> BoardState<P> {
         Ok(Self { pieces, side_len })
     }
 
-    /// Parse board state from a string in the format output by [`Self::to_display_str`].
+    /// Parse board state from a string in the format output by [`Self::display_str`].
     fn from_display_str(display_str: &str) -> Result<Self, ParseError> {
         let s = display_str.trim();
         let mut state = Self::default();
@@ -112,7 +111,7 @@ impl<P: PieceMap> BoardState<P> {
     }
 
     /// Return a string representing the board state, in a format suitable for printing.
-    fn to_display_str(&self) -> String {
+    fn display_str(&self) -> String {
         let mut s = String::new();
         for r in 0..self.side_len {
             for c in 0..self.side_len {
@@ -154,7 +153,7 @@ impl<P: PieceMap> FromStr for BoardState<P> {
 
 impl<P: PieceMap> Display for BoardState<P> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.to_display_str())
+        write!(f, "{}", self.display_str())
     }
 }
 
