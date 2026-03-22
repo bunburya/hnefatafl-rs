@@ -715,23 +715,7 @@ impl<P: PieceMap> GameLogic<P> {
                         // Friendly neighbour so no possibility for capture
                         continue;
                     }
-                    // Special case to deal with situation where strong king is beside his throne
-                    // and captured by three hostile pieces, which is not detected by the default
-                    // logic. (Do we need this if empty throne is hostile?)
-                    if other_piece.piece_type == King
-                        && self.king_beside_throne(&state.board)
-                        && self.rules.king_strength == KingStrength::StrongByThrone
-                        && (self.rules.occupiable_tiles.throne.is_empty()
-                            || self.rules.occupiable_tiles.throne.is_king_only())
-                        && self.board_geo.neighbors(n).iter().all(|t| {
-                            t == &self.board_geo.special_tiles.throne
-                                || self.tile_hostile(*t, other_piece, &state.board)
-                        })
-                    {
-                        captures.set(n, other_piece);
-                        continue;
-                    }
-
+                    
                     let signed_to_row = to.row as i8;
                     let signed_to_col = to.col as i8;
                     let signed_n_row = n.row as i8;
@@ -1630,7 +1614,7 @@ mod tests {
 
     #[test]
     fn test_strong_king_capture() {
-        let logic = GameLogic::new(rules::BRANDUBH, 7);
+        let logic = GameLogic::new(rules::COPENHAGEN, 7);
         let king = PlacedPiece {
             tile: Tile::new(3, 4),
             piece: KING,

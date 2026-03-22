@@ -1,9 +1,6 @@
 ## Immediate priorities
 
 - [ ] Review against https://rust-lang.github.io/api-guidelines/.
-- [ ] Improve center square logic.
-  - [ ] Remove special case for strong king beside throne from game logic. The king can be captured by three pieces
-    beside the throne if the empty throne is hostile to the king.
 - [ ] Game protocol (JSON?)
   - [ ] Textual representation of game rules.
   - [ ] JSON representation of game state.
