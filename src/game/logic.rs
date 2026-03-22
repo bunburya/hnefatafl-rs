@@ -26,6 +26,10 @@ use crate::utils::UniqueStack;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
+const UNJUMPABLE: PieceSet = PieceSet::from_piece_type(King)
+    .with_piece_type(Knight)
+    .with_piece_type(Commander);
+
 /// A space on the board that is enclosed by pieces.
 #[derive(Debug, Default)]
 pub struct Enclosure<B: BitField> {
@@ -152,20 +156,25 @@ impl<P: PieceMap> GameLogic<P> {
         (can_occupy, can_pass)
     }
 
-    fn can_jump(&self, piece: Piece, play: Play, middle: Tile, state: &GameState<P>) -> bool {
+    /// Whether the given play represents a valid jump.
+    fn can_jump(&self, piece: Piece, play: Play, state: &GameState<P>) -> bool {
         if !self.rules.berserk {
             // Can only jump under berserk rules
             return false
         }
-        let mid_piece = state.board.get_piece(middle).expect("Middle tile must contain piece.");
-        if mid_piece.side == piece.side {
-            // Can't jump over own pieces
+        let between = self.board_geo.tiles_between(play.from, play.to());
+        if between.len() != 1 {
+            // Can only jump over one space at a time
             return false
         }
-        if mid_piece.piece_type == Knight
-            || mid_piece.piece_type == Commander
-            || mid_piece.piece_type == King {
-            // Can't jump over a knight, commander, or king
+        let middle = between[0];
+        if let Some(mid_piece) = state.board.get_piece(middle) {
+            if UNJUMPABLE.contains(mid_piece) {
+                // Can't jump over king, knight, or commander
+                return false
+            }
+        } else {
+            // Can't jump over empty space
             return false
         }
         if piece.piece_type == King {
@@ -213,8 +222,8 @@ impl<P: PieceMap> GameLogic<P> {
                     return Err(BlockedByPiece);
                 }
                 let between = self.board_geo.tiles_between(from, to);
-                if between.iter().any(|t| state.board.tile_occupied(*t)) {
-                    // TODO: Implement berserk jumping
+                if between.iter().any(|t| state.board.tile_occupied(*t))
+                    && !self.can_jump(piece, play, state) {
                     return Err(BlockedByPiece);
                 }
                 if !self.rules.occupiable_tiles.corners.contains(piece)
@@ -715,7 +724,7 @@ impl<P: PieceMap> GameLogic<P> {
                         // Friendly neighbour so no possibility for capture
                         continue;
                     }
-                    
+
                     let signed_to_row = to.row as i8;
                     let signed_to_col = to.col as i8;
                     let signed_n_row = n.row as i8;
@@ -1701,15 +1710,24 @@ mod tests {
         let logic = GameLogic::new(rules, 9);
         let state = MediumBerserkGameState::new("1tKt5/1tNc5/1tNc5/tN7/t2TKt3/4t4/9/9/9", Attacker).unwrap();
         // King can jump over soldier to get to corner
-        assert!(logic.can_jump(KING, Play::from_str("c1-a1").unwrap(), Tile::from_str("b1").unwrap(), &state));
+        assert!(logic.can_jump(KING, Play::from_str("c1-a1").unwrap(), &state));
+        assert!(logic.validate_play_for_side(Play::from_str("c1-a1").unwrap(), Defender, &state).is_ok());
         // King can't jump over soldier if not to/from restricted square
-        assert!(!logic.can_jump(KING, Play::from_str("c1-e1").unwrap(), Tile::from_str("d1").unwrap(), &state));
+        assert!(!logic.can_jump(KING, Play::from_str("c1-e1").unwrap(), &state));
+        assert_eq!(
+            logic.validate_play_for_side(Play::from_str("c1-e1").unwrap(), Defender, &state),
+            Err(BlockedByPiece)
+        );
         // Knight can jump over soldier
-        assert!(logic.can_jump(Piece::defender(Knight), Play::from_str("c2-a2").unwrap(), Tile::from_str("b2").unwrap(), &state));
+        assert!(logic.can_jump(Piece::defender(Knight), Play::from_str("c2-a2").unwrap(), &state));
+        assert!(logic.validate_play_for_side(Play::from_str("c2-a2").unwrap(), Defender, &state).is_ok());
+
         // Knight can't jump over commander
-        assert!(!logic.can_jump(Piece::defender(Knight), Play::from_str("c2-e2").unwrap(), Tile::from_str("d2").unwrap(), &state));
-
-
+        assert!(!logic.can_jump(Piece::defender(Knight), Play::from_str("c2-e2").unwrap(), &state));
+        assert_eq!(
+            logic.validate_play_for_side(Play::from_str("c2-e2").unwrap(), Defender, &state),
+            Err(BlockedByPiece)
+        );
 
     }
 }
