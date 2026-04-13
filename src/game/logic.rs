@@ -158,7 +158,7 @@ impl<P: PieceMap> GameLogic<P> {
 
     /// Whether the given play represents a valid jump.
     fn can_jump(&self, piece: Piece, play: Play, state: &GameState<P>) -> bool {
-        if !self.rules.berserk {
+        if !self.rules.jumping {
             // Can only jump under berserk rules
             return false
         }
@@ -169,6 +169,10 @@ impl<P: PieceMap> GameLogic<P> {
         }
         let middle = between[0];
         if let Some(mid_piece) = state.board.get_piece(middle) {
+            if piece.side == mid_piece.side {
+                // Can't jump over pieces of the same side
+                return false
+            }
             if UNJUMPABLE.contains(mid_piece) {
                 // Can't jump over king, knight, or commander
                 return false
@@ -206,6 +210,7 @@ impl<P: PieceMap> GameLogic<P> {
         }
         let from = play.from;
         let to = play.to();
+        let mut is_jump = false;
         match state.board.get_piece(from) {
             None => Err(NoPiece),
             Some(piece) => {
@@ -222,9 +227,12 @@ impl<P: PieceMap> GameLogic<P> {
                     return Err(BlockedByPiece);
                 }
                 let between = self.board_geo.tiles_between(from, to);
-                if between.iter().any(|t| state.board.tile_occupied(*t))
-                    && !self.can_jump(piece, play, state) {
-                    return Err(BlockedByPiece);
+                if between.iter().any(|t| state.board.tile_occupied(*t)) {
+                    if self.can_jump(piece, play, state) {
+                        is_jump = true;
+                    } else {
+                        return Err(BlockedByPiece);
+                    }
                 }
                 if !self.rules.occupiable_tiles.corners.contains(piece)
                     && self.board_geo.special_tiles.corners.contains(to)
@@ -245,7 +253,7 @@ impl<P: PieceMap> GameLogic<P> {
                     // Slow piece can't move more than one space at a time
                     return Err(TooFar);
                 }
-                Ok(ValidPlay { play })
+                Ok(ValidPlay { play, is_jump })
             }
         }
     }
@@ -781,10 +789,13 @@ impl<P: PieceMap> GameLogic<P> {
             }
         }
 
-        // TODO: Detect berserk captures
-        //if self.rules.berserk {
-        //    if valid_play.play.
-        //}
+        if self.rules.jumping && valid_play.is_jump && moving_piece.piece_type == Knight {
+            let middle = *self.board_geo.tiles_between(valid_play.play.from, to).first()
+                .expect("Jump should have intermediate tile.");
+            let middle_piece = state.board.get_piece(middle)
+                .expect("Jump should have occupied intermediate tile.");
+            captures.set(middle, middle_piece);
+        }
 
         // Detect shieldwall captures
         if let Some(walled) = self.detect_shieldwall(valid_play, state) {
@@ -817,7 +828,7 @@ impl<P: PieceMap> GameLogic<P> {
                         &state.board,
                     ) {
                         if encl.occupied.count()
-                            == state.board.pieces.count_pieces_of_side(Defender) as u32
+                            == state.board.pieces.count_pieces_of_side(Defender)
                             && self.enclosure_secure(&encl, false, true, &state.board)
                         {
                             return Some(Win(Enclosed, Attacker));
@@ -1038,8 +1049,13 @@ mod tests {
         ..rules::BRANDUBH
     };
 
+    const TEST_JUMP_RULES: Ruleset = Ruleset {
+        jumping: true,
+        ..rules::BRANDUBH
+    };
+
     fn assert_valid_play<P: PieceMap>(logic: GameLogic<P>, play: Play, state: &GameState<P>) {
-        assert_eq!(logic.validate_play(play, state), Ok(ValidPlay { play }));
+        assert_eq!(logic.validate_play(play, state), Ok(ValidPlay { play, is_jump: false }));
     }
 
     fn assert_invalid_play<P: PieceMap>(
@@ -1176,8 +1192,8 @@ mod tests {
                     piece: Piece::defender(King)
                 }
             )
-            .into_iter()
-            .collect::<HashSet<_>>()
+                .into_iter()
+                .collect::<HashSet<_>>()
         );
         state.board.move_piece(vp.play.to(), vp.play.from);
         assert_eq!(
@@ -1193,6 +1209,7 @@ mod tests {
         state.side_to_play = Defender;
         let vp = ValidPlay {
             play: Play::from_tiles(Tile::new(4, 6), Tile::new(4, 2)).unwrap(),
+            is_jump: false
         };
         let piece = state.board.move_piece(vp.play.from, vp.play.to());
         assert_eq!(
@@ -1203,8 +1220,8 @@ mod tests {
                 PlacedPiece::new(Tile::new(3, 2), Piece::new(Soldier, Attacker)),
                 PlacedPiece::new(Tile::new(5, 2), Piece::new(Soldier, Attacker))
             )
-            .into_iter()
-            .collect()
+                .into_iter()
+                .collect()
         );
         state.board.move_piece(vp.play.to(), vp.play.from);
         assert_eq!(
@@ -1280,12 +1297,15 @@ mod tests {
 
         let cm = ValidPlay {
             play: Play::from_tiles(Tile::new(4, 6), Tile::new(4, 8)).unwrap(),
+            is_jump: false,
         };
         let m = ValidPlay {
             play: Play::from_tiles(Tile::new(3, 6), Tile::new(3, 8)).unwrap(),
+            is_jump: false,
         };
         let n = ValidPlay {
             play: Play::from_tiles(Tile::new(3, 6), Tile::new(3, 7)).unwrap(),
+            is_jump: false,
         };
 
         let corner_logic: GameLogic<MediumBasicPieceMap> = GameLogic::new(rules::COPENHAGEN, 9);
@@ -1702,25 +1722,32 @@ mod tests {
     }
 
     #[test]
-    fn test_can_jump() {
-        let rules = Ruleset {
-            berserk: true,
-            ..rules::BRANDUBH
-        };
-        let logic = GameLogic::new(rules, 9);
+    fn test_jump() {
+        let logic = GameLogic::new(TEST_JUMP_RULES, 9);
         let state = MediumBerserkGameState::new("1tKt5/1tNc5/1tNc5/tN7/t2TKt3/4t4/9/9/9", Attacker).unwrap();
+
         // King can jump over soldier to get to corner
         assert!(logic.can_jump(KING, Play::from_str("c1-a1").unwrap(), &state));
-        assert!(logic.validate_play_for_side(Play::from_str("c1-a1").unwrap(), Defender, &state).is_ok());
+        let vp = logic.validate_play_for_side(Play::from_str("c1-a1").unwrap(), Defender, &state).unwrap();
+        assert!(vp.is_jump);
+        let outcome = logic.do_valid_play(vp, state, None);
+        // King doesn't capture
+        assert!(outcome.record.effects.captures.is_empty());
+
         // King can't jump over soldier if not to/from restricted square
         assert!(!logic.can_jump(KING, Play::from_str("c1-e1").unwrap(), &state));
         assert_eq!(
             logic.validate_play_for_side(Play::from_str("c1-e1").unwrap(), Defender, &state),
             Err(BlockedByPiece)
         );
+
         // Knight can jump over soldier
         assert!(logic.can_jump(Piece::defender(Knight), Play::from_str("c2-a2").unwrap(), &state));
-        assert!(logic.validate_play_for_side(Play::from_str("c2-a2").unwrap(), Defender, &state).is_ok());
+        let vp = logic.validate_play_for_side(Play::from_str("c2-a2").unwrap(), Defender, &state).unwrap();
+        assert!(vp.is_jump);
+        let outcome = logic.do_valid_play(vp, state, None);
+        // Knight captures
+        assert_eq!(outcome.record.effects.captures.occupied(), tileset!(Tile::from_str("b2").unwrap()));
 
         // Knight can't jump over commander
         assert!(!logic.can_jump(Piece::defender(Knight), Play::from_str("c2-e2").unwrap(), &state));
@@ -1728,6 +1755,5 @@ mod tests {
             logic.validate_play_for_side(Play::from_str("c2-e2").unwrap(), Defender, &state),
             Err(BlockedByPiece)
         );
-
     }
 }

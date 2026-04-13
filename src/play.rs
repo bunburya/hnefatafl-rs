@@ -104,6 +104,7 @@ impl Display for Play {
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct ValidPlay {
     pub play: Play,
+    pub is_jump: bool,
 }
 
 impl Display for ValidPlay {
@@ -260,6 +261,7 @@ impl<'logic, 'state, P: PieceMap> Iterator for ValidPlayIterator<'logic, 'state,
                     return Some(ValidPlay {
                         play: Play::from_tiles(self.start_tile, dest_tile)
                             .expect("Tiles should be on same axis."),
+                        is_jump: false,
                     });
                 } else if can_pass {
                     // We can't occupy this tile, but we can pass it, so go back to the start of the

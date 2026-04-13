@@ -128,6 +128,13 @@ pub struct Ruleset {
     /// three enemies and one friendly soldier, that friendly soldier may be captured against the
     /// occupied throne).
     pub linnaean_capture: bool,
-    /// Whether berserk rules are enabled.
-    pub berserk: bool,
+    /// Whether jumping rules are enabled. Jumping rules are:
+    ///
+    /// * A knight, commander or (in some cases) the king may "jump" over a single tile which
+    ///   contains an enemy soldier.
+    /// * It is not permitted to jump over a knight, a commander or the king.
+    /// * The king may only jump over an enemy soldier from and to restricted squares.
+    /// * A knight captures an enemy soldier by jumping over it. The commanders and king do not
+    ///   capture in this way.
+    pub jumping: bool,
 }

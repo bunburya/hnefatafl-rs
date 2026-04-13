@@ -41,7 +41,7 @@ pub mod rules {
         }),
         draw_on_no_plays: false,
         linnaean_capture: false,
-        berserk: false,
+        jumping: false,
     };
 
     /// Rules for Federation Brandubh.
@@ -73,7 +73,7 @@ pub mod rules {
         }),
         draw_on_no_plays: false,
         linnaean_capture: false,
-        berserk: false,
+        jumping: false,
     };
 
     /// Rules for Magpie.
@@ -102,7 +102,7 @@ pub mod rules {
         repetition_rule: None,
         draw_on_no_plays: false,
         linnaean_capture: false,
-        berserk: false,
+        jumping: false,
     };
 
     /// Rules for Linnaeus Tablut.
@@ -134,7 +134,7 @@ pub mod rules {
         }),
         draw_on_no_plays: true,
         linnaean_capture: true,
-        berserk: false,
+        jumping: false,
     };
 }
 
