@@ -5,9 +5,7 @@ pub mod rules {
     use crate::rules::EnclosureWinRules::WithoutEdgeAccess;
     use crate::rules::KingAttack::Armed;
     use crate::rules::KingStrength::{Strong, StrongByThrone};
-    use crate::rules::{
-        HostilityRules, OccupyRules, PassRules, RepetitionRule, Ruleset, ShieldwallRules,
-    };
+    use crate::rules::{HostilityRules, JumpRules, OccupyRules, PassRules, RepetitionRule, Ruleset, ShieldwallRules};
 
     /// Rules for Copenhagen Hnefatafl.
     pub const COPENHAGEN: Ruleset = Ruleset {
@@ -41,7 +39,7 @@ pub mod rules {
         }),
         draw_on_no_plays: false,
         linnaean_capture: false,
-        jumping: false,
+        jump_rules: JumpRules::none(),
     };
 
     /// Rules for Federation Brandubh.
@@ -73,7 +71,7 @@ pub mod rules {
         }),
         draw_on_no_plays: false,
         linnaean_capture: false,
-        jumping: false,
+        jump_rules: JumpRules::none(),
     };
 
     /// Rules for Magpie.
@@ -102,7 +100,7 @@ pub mod rules {
         repetition_rule: None,
         draw_on_no_plays: false,
         linnaean_capture: false,
-        jumping: false,
+        jump_rules: JumpRules::none(),
     };
 
     /// Rules for Linnaeus Tablut.
@@ -134,7 +132,7 @@ pub mod rules {
         }),
         draw_on_no_plays: true,
         linnaean_capture: true,
-        jumping: false,
+        jump_rules: JumpRules::none(),
     };
 }
 

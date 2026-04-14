@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 /// A set of (unplaced) pieces. Can contain pieces of each side.
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Default)]
 pub struct PieceSet(u16);
 
 impl From<u16> for PieceSet {

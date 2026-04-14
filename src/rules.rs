@@ -3,6 +3,8 @@ use std::cmp::PartialEq;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
+use crate::collections::PieceTypeDict;
+use crate::pieces::PieceType::{Commander, King, Knight, Soldier};
 
 /// Rules relating to whether and when the king is strong (must be surrounded by hostile tiles on
 /// all four sides to be captured).
@@ -89,6 +91,49 @@ pub struct RepetitionRule {
     pub is_loss: bool,
 }
 
+/// Describe a single piece type's ability to jump over other pieces.
+#[derive(PartialEq, Eq, Clone, Copy, Debug, Default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct JumpAbility {
+    /// Whether the piece may only jump to or from special tiles.
+    pub special_only: bool,
+    /// Whether the piece may capture a piece by jumping over it.
+    pub can_capture: bool
+}
+
+/// Rules governing when pieces may jump over other (opposing) pieces.
+///
+/// **NOTE:** In order for a piece to be able to make a capturing jump, it must be present in both
+/// `can_jump` *and* `can_capture`. A piece appearing in `can_capture` but not `can_jump` has no
+/// effect.
+#[derive(PartialEq, Eq, Clone, Copy, Debug, Default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct JumpRules {
+    /// What pieces can jump.
+    pub can_jump: PieceTypeDict<Option<JumpAbility>>,
+    /// Pieces that may be jumped over.
+    pub can_be_jumped: PieceSet,
+}
+
+impl JumpRules {
+    /// Create a [`JumpRules`] that does not permit any jumping.
+    pub const fn none() -> Self {
+        Self {
+            can_jump: PieceTypeDict::new(None),
+            can_be_jumped: PieceSet::none(),
+        }
+    }
+}
+
+/// The [`JumpRules`] that generally apply in berserk games.
+pub const BERSERK_JUMP_RULES: JumpRules = JumpRules {
+    can_jump: PieceTypeDict::new(None)
+        .with(King, Some(JumpAbility { special_only: true, can_capture: false }))
+        .with(Knight, Some(JumpAbility { special_only: false, can_capture: true }))
+        .with(Commander, Some(JumpAbility { special_only: false, can_capture: false })),
+    can_be_jumped: PieceSet::from_piece_type(Soldier)
+};
+
 /// A set of rules for a tafl game.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -128,13 +173,7 @@ pub struct Ruleset {
     /// three enemies and one friendly soldier, that friendly soldier may be captured against the
     /// occupied throne).
     pub linnaean_capture: bool,
-    /// Whether jumping rules are enabled. Jumping rules are:
-    ///
-    /// * A knight, commander or (in some cases) the king may "jump" over a single tile which
-    ///   contains an enemy soldier.
-    /// * It is not permitted to jump over a knight, a commander or the king.
-    /// * The king may only jump over an enemy soldier from and to restricted squares.
-    /// * A knight captures an enemy soldier by jumping over it. The commanders and king do not
-    ///   capture in this way.
-    pub jumping: bool,
+    /// Rules governing when pieces may jump over other (opposing) pieces. A jump is only possible
+    /// over a single tile that is occupied by an enemy piece.
+    pub jump_rules: JumpRules,
 }

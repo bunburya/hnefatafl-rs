@@ -19,7 +19,7 @@ use crate::pieces::{Piece, PieceSet, PlacedPiece, Side, KING};
 use crate::play::{Play, PlayEffects, PlayRecord, ValidPlay, ValidPlayIterator};
 use crate::rules::EnclosureWinRules::WithoutEdgeAccess;
 use crate::rules::KingAttack::{Anvil, Armed, Hammer};
-use crate::rules::{KingStrength, RepetitionRule, Ruleset, ShieldwallRules};
+use crate::rules::{JumpAbility, KingStrength, RepetitionRule, Ruleset, ShieldwallRules};
 use crate::tiles::Axis::{Horizontal, Vertical};
 use crate::tiles::{Axis, AxisOffset, Coords, RowColOffset, Tile};
 use crate::utils::UniqueStack;
@@ -158,42 +158,41 @@ impl<P: PieceMap> GameLogic<P> {
 
     /// Whether the given play represents a valid jump.
     fn can_jump(&self, piece: Piece, play: Play, state: &GameState<P>) -> bool {
-        if !self.rules.jumping {
-            // Can only jump under berserk rules
-            return false
-        }
-        let between = self.board_geo.tiles_between(play.from, play.to());
-        if between.len() != 1 {
-            // Can only jump over one space at a time
-            return false
-        }
-        let middle = between[0];
-        if let Some(mid_piece) = state.board.get_piece(middle) {
-            if piece.side == mid_piece.side {
-                // Can't jump over pieces of the same side
+        if let Some(can_jump) = self.rules.jump_rules.can_jump.get(piece.piece_type) {
+            let between = self.board_geo.tiles_between(play.from, play.to());
+            if between.len() != 1 {
+                // Can only jump over one space at a time
                 return false
             }
-            if UNJUMPABLE.contains(mid_piece) {
-                // Can't jump over king, knight, or commander
-                return false
-            }
-        } else {
-            // Can't jump over empty space
-            return false
-        }
-        if piece.piece_type == King {
-            // King can only jump to or from special tile (corner or throne)
-            for t in [play.from, play.to()] {
-                if self.board_geo.special_tiles.corners.contains(t)
-                    || self.board_geo.special_tiles.throne == t {
-                    return true
+            let middle = between[0];
+            if let Some(mid_piece) = state.board.get_piece(middle) {
+                if piece.side == mid_piece.side {
+                    // Can't jump over pieces of the same side
+                    return false
                 }
+                if !self.rules.jump_rules.can_be_jumped.contains(mid_piece) {
+                    // Middle piece can't be jumped over
+                    return false
+                }
+            } else {
+                // Can't jump over empty space
+                return false
             }
-            return false
-        } else if piece.piece_type == Knight || piece.piece_type == Commander {
-            return true
+            return if can_jump.special_only {
+                // Piece can only jump to or from special tile (corner or throne)
+                for t in [play.from, play.to()] {
+                    if self.board_geo.special_tiles.corners.contains(t)
+                        || self.board_geo.special_tiles.throne == t {
+                        return true
+                    }
+                }
+                false
+            } else {
+                true
+            }
         }
         false
+
     }
 
     /// Check whether a play is valid for the given side. Returns a `Result` which contains a
@@ -789,7 +788,9 @@ impl<P: PieceMap> GameLogic<P> {
             }
         }
 
-        if self.rules.jumping && valid_play.is_jump && moving_piece.piece_type == Knight {
+        if valid_play.is_jump && self.rules.jump_rules.can_jump.get(moving_piece.piece_type)
+                .is_some_and(|ja| ja.can_capture) {
+
             let middle = *self.board_geo.tiles_between(valid_play.play.from, to).first()
                 .expect("Jump should have intermediate tile.");
             let middle_piece = state.board.get_piece(middle)
@@ -1030,7 +1031,7 @@ mod tests {
     use crate::pieces::{Piece, PieceSet, PlacedPiece, KING};
     use crate::play::{Play, ValidPlay};
     use crate::preset::{boards, rules};
-    use crate::rules::{HostilityRules, PassRules, Ruleset, ShieldwallRules};
+    use crate::rules::{HostilityRules, PassRules, Ruleset, ShieldwallRules, BERSERK_JUMP_RULES};
     use crate::tiles::Tile;
     use crate::{basic_piecemap, tileset};
     use std::collections::HashSet;
@@ -1050,7 +1051,7 @@ mod tests {
     };
 
     const TEST_JUMP_RULES: Ruleset = Ruleset {
-        jumping: true,
+        jump_rules: BERSERK_JUMP_RULES,
         ..rules::BRANDUBH
     };
 
