@@ -1,6 +1,8 @@
 use std::fmt::Debug;
-use serde::{Deserialize, Serialize};
 use crate::pieces::PieceType;
+
+#[cfg(feature = "serde")]
+use serde::{Serialize, Deserialize};
 
 /// A generic struct that allows each [`PieceType`] to be associated with a value.
 ///

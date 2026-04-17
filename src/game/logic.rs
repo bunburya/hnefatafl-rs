@@ -13,22 +13,18 @@ use crate::game::GameOutcome::{Draw, Win};
 use crate::game::GameStatus::{Ongoing, Over};
 use crate::game::WinReason::{AllCaptured, Enclosed, ExitFort, KingCaptured, KingEscaped};
 use crate::game::{DrawReason, GameOutcome, WinReason};
-use crate::pieces::PieceType::{Commander, King, Knight, Soldier};
+use crate::pieces::PieceType::{Commander, King, Soldier};
 use crate::pieces::Side::{Attacker, Defender};
 use crate::pieces::{Piece, PieceSet, PlacedPiece, Side, KING};
 use crate::play::{Play, PlayEffects, PlayRecord, ValidPlay, ValidPlayIterator};
 use crate::rules::EnclosureWinRules::WithoutEdgeAccess;
 use crate::rules::KingAttack::{Anvil, Armed, Hammer};
-use crate::rules::{JumpAbility, KingStrength, RepetitionRule, Ruleset, ShieldwallRules};
+use crate::rules::{KingStrength, RepetitionRule, Ruleset, ShieldwallRules};
 use crate::tiles::Axis::{Horizontal, Vertical};
 use crate::tiles::{Axis, AxisOffset, Coords, RowColOffset, Tile};
 use crate::utils::UniqueStack;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
-
-const UNJUMPABLE: PieceSet = PieceSet::from_piece_type(King)
-    .with_piece_type(Knight)
-    .with_piece_type(Commander);
 
 /// A space on the board that is enclosed by pieces.
 #[derive(Debug, Default)]
@@ -710,6 +706,25 @@ impl<P: PieceMap> GameLogic<P> {
         false
     }
 
+    /// Detect whether the king has been captured by two commanders
+    pub fn detect_commander_capture(
+        &self,
+        moving_piece: Piece,
+        other_piece: Piece,
+        far_coords: Coords,
+        state: &GameState<P>
+    ) -> bool {
+        if let Ok(t) = self.board_geo.coords_to_tile(far_coords) {
+            moving_piece == Piece::attacker(Commander) && other_piece == KING
+                && !self.king_on_throne(&state.board) && !self.king_beside_throne(&state.board)
+                && (self.board_geo.special_tiles.corners.contains(t)
+                    || state.board.get_piece(t) == Some(Piece::attacker(Commander)))
+        } else {
+            false
+        }
+
+    }
+
     /// Get the tiles containing pieces captured by the given play.
     pub fn get_captures(
         &self,
@@ -749,41 +764,54 @@ impl<P: PieceMap> GameLogic<P> {
                         // moving piece and another hostile tile. So it is captured, *unless* it
                         // is a strong king.
                         if (other_piece.piece_type == King) && self.king_is_strong(&state.board) {
-                            // Get the tiles surrounding `n` on the perpendicular axis.
-                            let n_coords = Coords::from(n);
-                            let perp_hostile = if to.row == n.row {
-                                self.coords_hostile(
-                                    n_coords + RowColOffset::new(1, 0),
-                                    other_piece,
-                                    &state.board,
-                                ) && self.coords_hostile(
-                                    n_coords + RowColOffset::new(-1, 0),
-                                    other_piece,
-                                    &state.board,
-                                )
+                            // First check for a commander capture (between two commanders).
+                            if self.detect_commander_capture(moving_piece, other_piece, far_coords, state) {
+                                captures.set(n, other_piece);
                             } else {
-                                self.coords_hostile(
-                                    n_coords + RowColOffset::new(0, 1),
-                                    other_piece,
-                                    &state.board,
-                                ) && self.coords_hostile(
-                                    n_coords + RowColOffset::new(0, -1),
-                                    other_piece,
-                                    &state.board,
-                                )
-                            };
-                            if !perp_hostile {
-                                continue;
+                                // Get the tiles surrounding `n` on the perpendicular axis.
+                                let n_coords = Coords::from(n);
+                                let perp_hostile = if to.row == n.row {
+                                    self.coords_hostile(
+                                        n_coords + RowColOffset::new(1, 0),
+                                        other_piece,
+                                        &state.board,
+                                    ) && self.coords_hostile(
+                                        n_coords + RowColOffset::new(-1, 0),
+                                        other_piece,
+                                        &state.board,
+                                    )
+                                } else {
+                                    self.coords_hostile(
+                                        n_coords + RowColOffset::new(0, 1),
+                                        other_piece,
+                                        &state.board,
+                                    ) && self.coords_hostile(
+                                        n_coords + RowColOffset::new(0, -1),
+                                        other_piece,
+                                        &state.board,
+                                    )
+                                };
+                                if !perp_hostile {
+                                    continue;
+                                }
                             }
+                            captures.set(n, other_piece);
+                        } else {
+                            captures.set(n, other_piece);
                         }
-                        captures.set(n, other_piece);
                     } else if self.rules.linnaean_capture && state.side_to_play == Attacker {
                         if let Some(_pp) =
                             self.detect_linnaean_capture(n, other_piece, far_coords, state)
                         {
                             captures.set(n, other_piece);
                         }
+                    // Check again for a commander capture (against a corner) as these may not be
+                    // detected above where corners are not usually hostile to the king.
+                    } else if self.detect_commander_capture(moving_piece, other_piece, far_coords, state) {
+                        captures.set(n, other_piece);
                     }
+
+
                 }
             }
         }
@@ -881,10 +909,10 @@ impl<P: PieceMap> GameLogic<P> {
 
         if !self.side_can_play(state.side_to_play.other(), state) {
             // Other side has no playable moves.
-            if self.rules.draw_on_no_plays {
-                return Some(Draw(DrawReason::NoPlays));
+            return if self.rules.draw_on_no_plays {
+                Some(Draw(DrawReason::NoPlays))
             } else {
-                return Some(Win(WinReason::NoPlays, state.side_to_play));
+                Some(Win(WinReason::NoPlays, state.side_to_play))
             }
         }
 
@@ -1036,7 +1064,7 @@ mod tests {
     use crate::{basic_piecemap, tileset};
     use std::collections::HashSet;
 
-    use crate::aliases::{HugeBasicPieceMap, LargeBasicPieceMap, MediumBasicGameState, MediumBasicPieceMap, MediumBerserkGameState, SmallBasicBoardState, SmallBasicGameState, SmallBasicPieceMap};
+    use crate::aliases::{HugeBasicPieceMap, LargeBasicPieceMap, MediumBasicGameState, MediumBasicPieceMap, MediumBerserkGameState, MediumBerserkPieceMap, SmallBasicBoardState, SmallBasicGameState, SmallBasicPieceMap};
     use crate::collections::piecemap::PieceMap;
     use crate::utils::check_tile_vec;
     use std::str::FromStr;
@@ -1173,7 +1201,7 @@ mod tests {
             GameLogic::new(TEST_RULES, 7),
             GameState::new("4t2/5Tt/2T4/2t2t1/Tt4T/2t4/2T2K1", TEST_RULES.starting_side).unwrap(),
         );
-        let (logic, mut state) = proto.clone();
+        let (logic, mut state) = proto;
         let vp = logic
             .validate_play(
                 Play::from_tiles(Tile::new(0, 4), Tile::new(6, 4)).unwrap(),
@@ -1206,7 +1234,7 @@ mod tests {
             Over(Win(KingCaptured, Attacker))
         );
 
-        let (logic, mut state) = proto.clone();
+        let (logic, mut state) = proto;
         state.side_to_play = Defender;
         let vp = ValidPlay {
             play: Play::from_tiles(Tile::new(4, 6), Tile::new(4, 2)).unwrap(),
@@ -1230,7 +1258,7 @@ mod tests {
             Ongoing
         );
 
-        let (logic, mut state) = proto.clone();
+        let (logic, mut state) = proto;
         state.side_to_play = Defender;
         let vp = logic
             .validate_play(
@@ -1246,7 +1274,7 @@ mod tests {
             Over(Win(KingEscaped, Defender))
         );
 
-        let (logic, mut state) = proto.clone();
+        let (logic, mut state) = proto;
         state.side_to_play = Defender;
         let vp = logic
             .validate_play(
@@ -1756,5 +1784,32 @@ mod tests {
             logic.validate_play_for_side(Play::from_str("c2-e2").unwrap(), Defender, &state),
             Err(BlockedByPiece)
         );
+    }
+
+    #[test]
+    fn test_commander_capture() {
+        let logic: GameLogic<MediumBerserkPieceMap> = GameLogic::new(rules::COPENHAGEN, 7);
+
+        // King is captured on two sides by commanders away from the throne.
+        let board = MediumBerserkGameState::new("c1Kc3/7/7/7/7/7/7", Attacker).unwrap();
+        let outcome = logic.do_play(Play::from_str("a1-b1").unwrap(), board, None).unwrap();
+        println!("{:?}", outcome.record);
+        assert!(!outcome.record.effects.captures.king.is_empty());
+
+        // King is captured between a commander and a hostile corner.
+        let board = MediumBerserkGameState::new("1K1c3/7/7/7/7/7/7", Attacker).unwrap();
+        let outcome = logic.do_play(Play::from_str("d1-c1").unwrap(), board, None).unwrap();
+        println!("{:?}", outcome.record);
+        assert!(!outcome.record.effects.captures.king.is_empty());
+
+        // King is between a commander and a regular piece, so it is not captured.
+        let board = MediumBerserkGameState::new("t1Kc3/7/7/7/7/7/7", Attacker).unwrap();
+        let outcome = logic.do_play(Play::from_str("a1-b1").unwrap(), board, None).unwrap();
+        assert!(outcome.record.effects.captures.king.is_empty());
+
+        // King is between two commanders while beside the throne, so it is not captured.
+        let board = MediumBerserkGameState::new("7/7/7/c1Kc3/7/7/7", Attacker).unwrap();
+        let outcome = logic.do_play(Play::from_str("a4-b4").unwrap(), board, None).unwrap();
+        assert!(outcome.record.effects.captures.king.is_empty());
     }
 }

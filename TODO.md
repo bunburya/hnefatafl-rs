@@ -19,7 +19,6 @@
 
 ## Beyond
 
-- [ ] Implement bigints to remove dependency.
 - [ ] Python interface
 - [ ] tafl server
 - [ ] `no_std` support

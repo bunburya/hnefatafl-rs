@@ -131,6 +131,15 @@ impl<P: PieceMap> BoardGeometry<P> {
         self.neighbors(tile).iter().all(|t| state.tile_occupied(*t))
     }
 
+    /// Check whether the given `Coords` refer to a corner.
+    pub fn coords_are_corner(&self, coords: Coords) -> bool {
+        if let Ok(t) = self.coords_to_tile(coords) {
+            self.special_tiles.corners.contains(t)
+        } else {
+            false
+        }
+    }
+
     /// Return an iterator over all tiles on the board.
     pub fn iter_tiles(&self) -> TileIterator {
         TileIterator::new(self.side_len)
