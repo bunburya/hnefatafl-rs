@@ -59,7 +59,7 @@ impl Display for Side {
     }
 }
 
-/// The different types of pieces that can occupy a board.
+/// The different types of pieces that can occupy a board. Not all will be available in every game.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum PieceType {

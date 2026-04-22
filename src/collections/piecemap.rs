@@ -8,7 +8,7 @@ use std::fmt::Debug;
 use std::hash::Hash;
 
 use crate::collections::pieceset::PieceSet;
-use crate::error::ParseError;
+use crate::error::{ParseError, PieceMapError};
 use crate::error::ParseError::BadLineLen;
 #[cfg(feature = "serde")]
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -54,7 +54,7 @@ pub trait PieceMap: PieceMapSuperTraits {
     }
 
     /// Insert the given piece at the given tile.
-    fn set(&mut self, t: Tile, piece: Piece);
+    fn set(&mut self, t: Tile, piece: Piece) -> Result<(), PieceMapError>;
 
     /// Insert the given piece at the relevant tile.
     fn set_placed_piece(&mut self, p: PlacedPiece) {
@@ -225,7 +225,7 @@ impl<B: BitField> PieceMap for BasicPieceMap<B> {
         ts.contains(t)
     }
 
-    fn set(&mut self, t: Tile, piece: Piece) {
+    fn set(&mut self, t: Tile, piece: Piece) -> Result<(), PieceMapError> {
         match piece {
             Piece {
                 piece_type: Soldier,
@@ -251,8 +251,9 @@ impl<B: BitField> PieceMap for BasicPieceMap<B> {
                 self.attacking_soldier.remove(t);
                 self.defending_soldier.remove(t);
             }
-            other => panic!("Invalid piece type: {:?}.", other),
+            other => return Err(PieceMapError::UnsupportedPiece(other)),
         }
+        Ok(())
     }
 
     fn remove(&mut self, t: Tile) {
@@ -472,7 +473,7 @@ impl<B: BitField> PieceMap for BerserkPieceMap<B> {
         ts.contains(t)
     }
 
-    fn set(&mut self, t: Tile, piece: Piece) {
+    fn set(&mut self, t: Tile, piece: Piece) -> Result<(), PieceMapError> {
         match piece {
             Piece {
                 piece_type: Soldier,
@@ -524,8 +525,9 @@ impl<B: BitField> PieceMap for BerserkPieceMap<B> {
                 self.knight.remove(t);
                 self.king.insert(t);
             }
-            other => panic!("Invalid piece type: {:?}.", other),
+            other => return Err(PieceMapError::UnsupportedPiece(other)),
         }
+        Ok(())
     }
 
     fn remove(&mut self, t: Tile) {

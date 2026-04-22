@@ -16,8 +16,8 @@ use crate::game::GameOutcome::{Draw, Win};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-/// A single move of a piece from one tile to another. (Named "Play" rather than "Move" as the lower-cased version of
-/// the latter would clash with the Rust keyword.)
+/// A single move of a piece from one tile to another. (Named "Play" rather than "Move" as the
+/// lower-cased version of the latter would clash with the Rust keyword.)
 ///
 /// This is implemented as a combination of source tile, axis of movement and displacement (with a
 /// negative displacement representing a move "backwards" along the relevant axis, ie, to a

@@ -1,11 +1,11 @@
-use crate::error::ParseError::{
-    BadChar, BadInt, BadLineLen, BadPlay, BadString, BadStringLen, EmptyString,
-};
+use crate::error::ParseError::{BadBoard, BadChar, BadInt, BadLineLen, BadPlay, BadString, BadStringLen, EmptyString};
 use std::fmt::{Display, Formatter};
 use std::num::ParseIntError;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
+use crate::pieces::{Piece, PieceType};
+use crate::tiles::Tile;
 
 /// Errors that may be encountered when parsing a string.
 #[derive(Debug, Eq, PartialEq)]
@@ -27,6 +27,8 @@ pub enum ParseError {
     BadPlay(PlayError),
     /// A generic error type where the given string could not be parsed for some reason.
     BadString(String),
+    /// Encountered a [`BoardError`] when parsing a string.
+    BadBoard(BoardError),
 }
 
 impl Display for ParseError {
@@ -39,6 +41,7 @@ impl Display for ParseError {
             BadInt(e) => write!(f, "could not parse integer: {e}"),
             BadPlay(e) => write!(f, "could not parse play: {e}"),
             BadString(s) => write!(f, "could not parse string: {s}"),
+            BadBoard(e) => write!(f, "could not parse board: {e}"),
         }
     }
 }
@@ -46,6 +49,12 @@ impl Display for ParseError {
 impl From<ParseIntError> for ParseError {
     fn from(value: ParseIntError) -> Self {
         BadInt(value)
+    }
+}
+
+impl From<BoardError> for ParseError {
+    fn from(value: BoardError) -> Self {
+        BadBoard(value)
     }
 }
 
@@ -74,13 +83,19 @@ pub enum BoardError {
     OutOfBounds,
     /// There is no piece at the given tile, where one is expected.
     NoPiece,
+    /// The board is too small.
+    TooSmall,
+    /// The given piece type is not supported.
+    UnsupportedPieceType(PieceType)
 }
 
 impl Display for BoardError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             BoardError::OutOfBounds => write!(f, "coordinates are out of bounds"),
             BoardError::NoPiece => write!(f, "no piece at the given tile"),
+            BoardError::TooSmall => write!(f, "board is too small"),
+            BoardError::UnsupportedPieceType(pt) => write!(f, "unsupported piece type: {pt:?}"),
         }
     }
 }
@@ -127,4 +142,11 @@ impl Display for PlayInvalid {
             PlayInvalid::GameOver => write!(f, "game is already over"),
         }
     }
+}
+
+pub enum PieceMapError {
+    /// There is no piece at the given tile, where one was expected.
+    NoPiece(Tile),
+    /// The given piece type is not supported.
+    UnsupportedPiece(Piece),
 }

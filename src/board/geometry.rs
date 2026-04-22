@@ -40,10 +40,14 @@ pub struct BoardGeometry<P: PieceMap> {
 
 impl<P: PieceMap> BoardGeometry<P> {
     /// Create an empty board with the given side length.
-    pub fn new(side_len: u8) -> Self {
-        Self {
-            side_len,
-            special_tiles: SpecialTiles::from(side_len),
+    pub fn new(side_len: u8) -> Result<Self, BoardError> {
+        if side_len < 3 {
+            Err(BoardError::TooSmall)
+        } else {
+            Ok(Self {
+                side_len,
+                special_tiles: SpecialTiles::from(side_len),
+            })
         }
     }
 
@@ -73,6 +77,8 @@ impl<P: PieceMap> BoardGeometry<P> {
     }
 
     /// Find a tile's neighbours (ie, the directly above, below and to either side of it).
+    // TODO: Remove `Vec` allocation here. Neighbours are variable as tile may be at edge of board,
+    // but we could implement custom iterator for this.
     pub fn neighbors(&self, tile: Tile) -> Vec<Tile> {
         let row = tile.row;
         let col = tile.col;
@@ -93,6 +99,7 @@ impl<P: PieceMap> BoardGeometry<P> {
 
     /// Get all the tiles between the given two tiles. If given tiles do not share a row or column,
     /// an empty vector is returned.
+    // TODO: Figure out if we could remove the `Vec` allocation here.
     pub fn tiles_between(&self, t1: Tile, t2: Tile) -> Vec<Tile> {
         let mut tiles: Vec<Tile> = vec![];
         let (r1, c1, r2, c2) = (t1.row, t1.col, t2.row, t2.col);
@@ -182,7 +189,7 @@ mod tests {
 
     #[test]
     fn test_neighbors() {
-        let geo: BoardGeometry<SmallBasicPieceMap> = BoardGeometry::new(7);
+        let geo: BoardGeometry<SmallBasicPieceMap> = BoardGeometry::new(7).unwrap();
         let n = geo.neighbors(Tile::new(0, 0));
         check_tile_vec(n, vec![Tile::new(0, 1), Tile::new(1, 0)]);
 
@@ -215,7 +222,7 @@ mod tests {
 
     #[test]
     fn test_far_tile() {
-        let geo: BoardGeometry<SmallBasicPieceMap> = BoardGeometry::new(7);
+        let geo: BoardGeometry<SmallBasicPieceMap> = BoardGeometry::new(7).unwrap();
         assert_eq!(geo.far_tile(Tile::new(0, 0), Tile::new(0, 1)), Some(Tile::new(0, 2)));
         assert_eq!(geo.far_tile(Tile::new(1, 1), Tile::new(2, 3)), Some(Tile::new(3, 5)));
         assert_eq!(geo.far_tile(Tile::new(1, 1), Tile::new(1, 1)), Some(Tile::new(1, 1)));

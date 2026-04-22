@@ -82,7 +82,7 @@ impl<P: PieceMap> Game<P> {
     /// Create a new [`Game`] from the given rules and starting positions.
     pub fn new(rules: Ruleset, starting_board: &str) -> Result<Self, ParseError> {
         let state: GameState<P> = GameState::new(starting_board, rules.starting_side)?;
-        let logic = GameLogic::new(rules, state.board.side_len());
+        let logic = GameLogic::new(rules, state.board.side_len())?;
 
         Ok(Self {
             state,
