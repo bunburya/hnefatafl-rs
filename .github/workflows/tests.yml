@@ -1,0 +1,19 @@
+on: push
+name: cargo test
+
+jobs:
+  cargo_test:
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      # required for workflows in private repositories
+      # contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+            persist-credentials: false
+
+      - name: Run cargo test
+        run: |
+          cargo test
