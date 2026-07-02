@@ -1,7 +1,7 @@
 use crate::board::state::BoardState;
 use crate::collections::tileset::TileSet;
 use crate::error::BoardError;
-use crate::tiles::{AxisOffset, Coords, RowColOffset, Tile, TileIterator};
+use crate::tiles::{Coords, RowColOffset, Tile, BoardIterator};
 
 use crate::collections::PieceMap;
 #[cfg(feature = "serde")]
@@ -148,8 +148,8 @@ impl<P: PieceMap> BoardGeometry<P> {
     }
 
     /// Return an iterator over all tiles on the board.
-    pub fn iter_tiles(&self) -> TileIterator {
-        TileIterator::new(self.side_len)
+    pub fn iter_tiles(&self) -> BoardIterator {
+        BoardIterator::new(self.side_len)
     }
 
     /// Generate the FEN string describing the current board state

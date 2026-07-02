@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::cmp::PartialEq;
 use std::fmt::Display;
 use crate::collections::PieceMap;
+use crate::tiles::Tile;
 
 /// A struct containing the minimum information needed to uniquely identify a position in the game.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
@@ -56,6 +57,9 @@ pub struct GameState<P: PieceMap> {
     pub status: GameStatus,
     /// Number of plays that have been taken by either side.
     pub turn: usize,
+    /// The location of the piece, if any, that is in "berserk" mode (ie, can move again). If
+    /// `None`, the game is not currently in berserk mode.
+    pub berserker_tile: Option<Tile>
 }
 
 impl<P: PieceMap> GameState<P> {
@@ -66,6 +70,7 @@ impl<P: PieceMap> GameState<P> {
             plays_since_capture: 0,
             status: Ongoing,
             turn: 0,
+            berserker_tile: None,
         })
     }
 }

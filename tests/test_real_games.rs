@@ -60,9 +60,9 @@ fn test_real_games(rules: Ruleset, starting_posn: &str, fname: &str) {
                 let vp_res = g.logic.validate_play(p, &g.state);
                 //println!("{vp_res:?}");
                 let vp = vp_res.unwrap();
-                let piece = g.state.board.move_piece(p.from, p.to());
+                let piece = g.state.board.move_piece(p.from, p.to()).unwrap();
                 let captures = g.logic.get_captures(vp, piece, &g.state);
-                g.state.board.move_piece(p.to(), p.from);
+                g.state.board.move_piece(p.to(), p.from).expect("could not move piece");
                 if !c.is_empty() {
                     // Test data doesn't report capture of king as a capture using "x" notation
                     let mut without_king = captures;

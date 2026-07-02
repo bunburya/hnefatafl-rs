@@ -105,6 +105,7 @@ impl Display for Play {
 pub struct ValidPlay {
     pub play: Play,
     pub is_jump: bool,
+    pub is_berserk: bool,
 }
 
 impl Display for ValidPlay {
@@ -262,6 +263,7 @@ impl<'logic, 'state, P: PieceMap> Iterator for ValidPlayIterator<'logic, 'state,
                         play: Play::from_tiles(self.start_tile, dest_tile)
                             .expect("Tiles should be on same axis."),
                         is_jump: false,
+                        is_berserk: self.game_state.berserker_tile.is_some(),
                     });
                 } else if can_pass {
                     // We can't occupy this tile, but we can pass it, so go back to the start of the

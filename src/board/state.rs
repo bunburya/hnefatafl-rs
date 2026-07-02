@@ -1,4 +1,4 @@
-use crate::error::ParseError;
+use crate::error::{BoardError, ParseError};
 use crate::error::ParseError::BadLineLen;
 use crate::pieces::Piece;
 use crate::tiles::Tile;
@@ -58,11 +58,16 @@ impl<P: PieceMap> BoardState<P> {
     /// Move a piece from one position to another. This does not check whether a move is valid; it
     /// just unsets the bit at `from` and sets the bit at `to`. Returns the piece that was moved.
     /// Panics if there is no piece at `from`.
-    pub fn move_piece(&mut self, from: Tile, to: Tile) -> Piece {
-        let piece = self.get_piece(from).expect("No piece to move.");
-        self.set_piece(to, piece);
-        self.clear_tile(from);
-        piece
+    pub fn move_piece(&mut self, from: Tile, to: Tile) -> Result<Piece, BoardError> {
+        if let Some(piece) = self.get_piece(from) {
+            self.set_piece(to, piece);
+            self.clear_tile(from);
+            Ok(piece)
+        } else {
+            Err(BoardError::NoPiece)
+        }
+
+
     }
 
     /// Swap the pieces at two positions.

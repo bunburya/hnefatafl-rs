@@ -125,6 +125,16 @@ impl JumpRules {
     }
 }
 
+/// Rules governing berserk mode.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum BerserkRule {
+    /// A capturing piece can (and must) make a further capture if a capture is available.
+    MustCapture,
+    /// A capturing piece can (and must) make another play if a legal play is available.
+    MustPlay
+}
+
 /// The [`JumpRules`] that generally apply in berserk games.
 pub const BERSERK_JUMP_RULES: JumpRules = JumpRules {
     can_jump: PieceTypeDict::new(None)
@@ -176,4 +186,7 @@ pub struct Ruleset {
     /// Rules governing when pieces may jump over other (opposing) pieces. A jump is only possible
     /// over a single tile that is occupied by an enemy piece.
     pub jump_rules: JumpRules,
+    /// Rule governing berserk mode (circumstances in which capturing pieces may make further
+    /// moves).
+    pub berserk_rule: Option<BerserkRule>
 }

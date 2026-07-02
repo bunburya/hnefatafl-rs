@@ -5,7 +5,7 @@ pub mod rules {
     use crate::rules::EnclosureWinRules::WithoutEdgeAccess;
     use crate::rules::KingAttack::Armed;
     use crate::rules::KingStrength::{Strong, StrongByThrone};
-    use crate::rules::{HostilityRules, JumpRules, OccupyRules, PassRules, RepetitionRule, Ruleset, ShieldwallRules};
+    use crate::rules::{BerserkRule, HostilityRules, JumpRules, OccupyRules, PassRules, RepetitionRule, Ruleset, ShieldwallRules, BERSERK_JUMP_RULES};
 
     /// Rules for Copenhagen Hnefatafl.
     pub const COPENHAGEN: Ruleset = Ruleset {
@@ -40,6 +40,7 @@ pub mod rules {
         draw_on_no_plays: false,
         linnaean_capture: false,
         jump_rules: JumpRules::none(),
+        berserk_rule: None
     };
 
     /// Rules for Federation Brandubh.
@@ -72,6 +73,7 @@ pub mod rules {
         draw_on_no_plays: false,
         linnaean_capture: false,
         jump_rules: JumpRules::none(),
+        berserk_rule: None
     };
 
     /// Rules for Magpie.
@@ -101,6 +103,7 @@ pub mod rules {
         draw_on_no_plays: false,
         linnaean_capture: false,
         jump_rules: JumpRules::none(),
+        berserk_rule: None
     };
 
     /// Rules for Linnaeus Tablut.
@@ -133,6 +136,13 @@ pub mod rules {
         draw_on_no_plays: true,
         linnaean_capture: true,
         jump_rules: JumpRules::none(),
+        berserk_rule: None
+    };
+
+    pub const BERSERK: Ruleset = Ruleset {
+        jump_rules: BERSERK_JUMP_RULES,
+        berserk_rule: Some(BerserkRule::MustCapture),
+        ..COPENHAGEN
     };
 }
 
@@ -145,5 +155,8 @@ pub mod boards {
     pub const MAGPIE: &str = "3t3/1t3t1/3T3/t1TKT1t/3T3/1t3t1/3t3";
 
     pub const TABLUT: &str = "3ttt3/4t4/4T4/t3T3t/ttTTKTTtt/t3T3t/4T4/4t4/3ttt3";
+
+    pub const BERSERK: &str =
+        "3ttttt3/5c5/11/t4T4t/t3NTT3t/tc1TTKTT1ct/t3TTT3t/t4T4t/11/5c5/3ttttt3";
     
 }

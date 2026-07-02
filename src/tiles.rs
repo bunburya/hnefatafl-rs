@@ -189,13 +189,13 @@ impl Axis {
 }
 
 /// Iterator over all tiles on a board.
-pub struct TileIterator {
+pub struct BoardIterator {
     side_len: u8,
     current_row: u8,
     current_col: u8,
 }
 
-impl TileIterator {
+impl BoardIterator {
     pub(crate) fn new(side_len: u8) -> Self {
         Self {
             side_len,
@@ -205,7 +205,7 @@ impl TileIterator {
     }
 }
 
-impl Iterator for TileIterator {
+impl Iterator for BoardIterator {
     type Item = Tile;
     fn next(&mut self) -> Option<Self::Item> {
         if self.current_row >= self.side_len {

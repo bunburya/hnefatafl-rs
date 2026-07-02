@@ -3,10 +3,7 @@ use crate::board::geometry::BoardGeometry;
 use crate::board::state::BoardState;
 use crate::collections::piecemap::PieceMap;
 use crate::collections::tileset::TileSet;
-use crate::error::PlayInvalid::{
-    BlockedByPiece, GameOver, MoveOntoBlockedTile, MoveThroughBlockedTile, NoCommonAxis, NoPiece,
-    OutOfBounds, TooFar, WrongPlayer,
-};
+use crate::error::PlayInvalid::{BlockedByPiece, GameOver, MoveOntoBlockedTile, MoveThroughBlockedTile, NoBerserkCapture, NoCommonAxis, NoPiece, NotBerserker, OutOfBounds, TooFar, WrongPlayer};
 use crate::error::{BoardError, PlayInvalid};
 use crate::game::state::{GameState, Position};
 use crate::game::GameOutcome::{Draw, Win};
@@ -19,7 +16,7 @@ use crate::pieces::{Piece, PieceSet, PlacedPiece, Side, KING};
 use crate::play::{Play, PlayEffects, PlayRecord, ValidPlay, ValidPlayIterator};
 use crate::rules::EnclosureWinRules::WithoutEdgeAccess;
 use crate::rules::KingAttack::{Anvil, Armed, Hammer};
-use crate::rules::{KingStrength, RepetitionRule, Ruleset, ShieldwallRules};
+use crate::rules::{BerserkRule, KingStrength, RepetitionRule, Ruleset, ShieldwallRules};
 use crate::tiles::Axis::{Horizontal, Vertical};
 use crate::tiles::{Axis, AxisOffset, Coords, RowColOffset, Tile};
 use crate::utils::UniqueStack;
@@ -133,14 +130,15 @@ impl<P: PieceMap> GameLogic<P> {
             Ok(_) => true,
             Err(MoveOntoBlockedTile) => {
                 // Generally, the only way you could be unable to move onto a tile but be able to
-                // move past it is if the tile is an empty throne and the rules permit passing
-                // through, but not occupying, the throne. 
-                // NOTE: Need to update for berserk rules.
+                // move past it is if (1) the tile is an empty throne and the rules permit passing
+                // through, but not occupying, the throne, OR (2) the move is a permitted jump.
+                // NOTE: Need to update for jumping rules.
                 if play.to() == self.board_geo.special_tiles.throne {
-                    self.rules.passable_tiles.throne.contains(piece)
+                    (self.rules.passable_tiles.throne.contains(piece)
                         && !state
                             .board
-                            .tile_occupied(self.board_geo.special_tiles.throne)
+                            .tile_occupied(self.board_geo.special_tiles.throne))
+                    || self.can_jump(piece, play, state)
                 } else {
                     // If special tile is not a throne, it must be a corner, so cannot be passed.
                     // This will be different when base camps and fortresses are implemented.
@@ -206,7 +204,8 @@ impl<P: PieceMap> GameLogic<P> {
         let from = play.from;
         let to = play.to();
         let mut is_jump = false;
-        match state.board.get_piece(from) {
+        let moving_piece = state.board.get_piece(from);
+        match moving_piece {
             None => Err(NoPiece),
             Some(piece) => {
                 if piece.side != side {
@@ -248,7 +247,25 @@ impl<P: PieceMap> GameLogic<P> {
                     // Slow piece can't move more than one space at a time
                     return Err(TooFar);
                 }
-                Ok(ValidPlay { play, is_jump })
+                if let Some(t) = state.berserker_tile {
+                    if t != play.from {
+                        return Err(NotBerserker);
+                    }
+                }
+                let vp = ValidPlay { play, is_jump, is_berserk: state.berserker_tile.is_some() };
+
+                // We need to actually get the play outcome to check it is a valid berserk move
+                // under the "must capture" berserk rule. This is inefficient as we calculate play
+                // outcome twice. Could implement some quicker way of detecting if the play is a
+                // capturing or winning play, or could try and save the result of the calculation.
+                if vp.is_berserk && (self.rules.berserk_rule == Some(BerserkRule::MustCapture)) {
+                    let effects = self.do_valid_play(vp, *state, None).record.effects;
+                    if effects.captures.is_empty() && effects.game_outcome.is_none() {
+                        return Err(NoBerserkCapture);
+                    }
+                }
+
+                Ok(vp)
             }
         }
     }
@@ -907,7 +924,7 @@ impl<P: PieceMap> GameLogic<P> {
             }
         }
 
-        if !self.side_can_play(state.side_to_play.other(), state) {
+        if !valid_play.is_berserk && !self.side_can_play(state.side_to_play.other(), state) {
             // Other side has no playable moves.
             return if self.rules.draw_on_no_plays {
                 Some(Draw(DrawReason::NoPlays))
@@ -936,7 +953,8 @@ impl<P: PieceMap> GameLogic<P> {
     ) -> DoPlayResult<P> {
         let play = valid_play.play;
         // First move the piece on the board
-        let moving_piece = state.board.move_piece(play.from, play.to());
+        let moving_piece = state.board.move_piece(play.from, play.to())
+            .expect("ValidPlay should involve a piece to move.");
         // Then remove captured pieces
         let captures = self.get_captures(valid_play, moving_piece, &state);
         state.board.pieces.clear_tiles(captures.occupied());
@@ -965,7 +983,43 @@ impl<P: PieceMap> GameLogic<P> {
             effects: outcome,
         };
 
-        state.side_to_play = state.side_to_play.other();
+        // Detect berserk mode
+        if let Some(b) = self.rules.berserk_rule {
+            state.berserker_tile = None;
+            if !record.effects.captures.is_empty() {
+                if let Ok(valid_play_iter) = self.iter_plays(play.to(), &state) {
+                    // Get the legal play available to the piece that just moved
+                    for p in valid_play_iter {
+                        match b {
+                            BerserkRule::MustPlay => {
+                                // If there is any legal play, set the berserker tile to the
+                                // piece's current tile and stop checking
+                                state.berserker_tile = Some(play.to());
+                                break;
+                            },
+                            BerserkRule::MustCapture => {
+                                // If the play makes a capture or is an escaping move for the king,
+                                // set the berserker tile to the piece's current tile and stop
+                                // checking
+                                let effects = self.do_valid_play(p, state, None)
+                                    .record.effects;
+
+                                if !effects.captures.is_empty()
+                                    || effects.game_outcome == Some(Win(KingEscaped, Defender)) {
+                                    state.berserker_tile = Some(play.to());
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                }
+            }
+        }
+
+        if state.berserker_tile.is_none() {
+            state.side_to_play = state.side_to_play.other();
+        }
         state.status = game_status;
 
         DoPlayResult {
@@ -1045,15 +1099,13 @@ impl<P: PieceMap> GameLogic<P> {
 #[cfg(test)]
 mod tests {
     use crate::error::PlayInvalid;
-    use crate::error::PlayInvalid::{
-        BlockedByPiece, MoveOntoBlockedTile, MoveThroughBlockedTile, NoPiece, OutOfBounds, TooFar,
-    };
+    use crate::error::PlayInvalid::{BlockedByPiece, MoveOntoBlockedTile, MoveThroughBlockedTile, NoBerserkCapture, NoPiece, NotBerserker, OutOfBounds, TooFar, WrongPlayer};
     use crate::game::logic::GameLogic;
     use crate::game::state::GameState;
-    use crate::game::Game;
     use crate::game::GameOutcome::Win;
     use crate::game::GameStatus::{Ongoing, Over};
     use crate::game::WinReason::{KingCaptured, KingEscaped, Repetition};
+    use crate::game::Game;
     use crate::pieces::PieceType::{King, Knight, Soldier};
     use crate::pieces::Side::{Attacker, Defender};
     use crate::pieces::{Piece, PieceSet, PlacedPiece, KING};
@@ -1084,7 +1136,11 @@ mod tests {
     };
 
     fn assert_valid_play<P: PieceMap>(logic: GameLogic<P>, play: Play, state: &GameState<P>) {
-        assert_eq!(logic.validate_play(play, state), Ok(ValidPlay { play, is_jump: false }));
+        assert_eq!(logic.validate_play(play, state), Ok(ValidPlay {
+            play,
+            is_jump: false,
+            is_berserk: false,
+        }));
     }
 
     fn assert_invalid_play<P: PieceMap>(
@@ -1208,7 +1264,7 @@ mod tests {
                 &state,
             )
             .unwrap();
-        let piece = state.board.move_piece(vp.play.from, vp.play.to());
+        let piece = state.board.move_piece(vp.play.from, vp.play.to()).unwrap();
         assert_eq!(
             logic
                 .get_captures(vp, piece, &state)
@@ -1238,9 +1294,10 @@ mod tests {
         state.side_to_play = Defender;
         let vp = ValidPlay {
             play: Play::from_tiles(Tile::new(4, 6), Tile::new(4, 2)).unwrap(),
-            is_jump: false
+            is_jump: false,
+            is_berserk: false
         };
-        let piece = state.board.move_piece(vp.play.from, vp.play.to());
+        let piece = state.board.move_piece(vp.play.from, vp.play.to()).unwrap();
         assert_eq!(
             logic.get_captures(vp, piece, &state),
             basic_piecemap!(
@@ -1266,7 +1323,7 @@ mod tests {
                 &state,
             )
             .unwrap();
-        let piece = state.board.move_piece(vp.play.from, vp.play.to());
+        let piece = state.board.move_piece(vp.play.from, vp.play.to()).unwrap();
         assert!(logic.get_captures(vp, piece, &state).is_empty());
         state.board.move_piece(vp.play.to(), vp.play.from);
         assert_eq!(
@@ -1282,7 +1339,7 @@ mod tests {
                 &state,
             )
             .unwrap();
-        let piece = state.board.move_piece(vp.play.from, vp.play.to());
+        let piece = state.board.move_piece(vp.play.from, vp.play.to()).unwrap();
         assert!(logic.get_captures(vp, piece, &state).is_empty());
         state.board.move_piece(vp.play.to(), vp.play.from);
         assert_eq!(
@@ -1327,14 +1384,17 @@ mod tests {
         let cm = ValidPlay {
             play: Play::from_tiles(Tile::new(4, 6), Tile::new(4, 8)).unwrap(),
             is_jump: false,
+            is_berserk: false
         };
         let m = ValidPlay {
             play: Play::from_tiles(Tile::new(3, 6), Tile::new(3, 8)).unwrap(),
             is_jump: false,
+            is_berserk: false
         };
         let n = ValidPlay {
             play: Play::from_tiles(Tile::new(3, 6), Tile::new(3, 7)).unwrap(),
             is_jump: false,
+            is_berserk: false
         };
 
         let corner_logic: GameLogic<MediumBasicPieceMap> = GameLogic::new(rules::COPENHAGEN, 9).unwrap();
@@ -1791,25 +1851,64 @@ mod tests {
         let logic: GameLogic<MediumBerserkPieceMap> = GameLogic::new(rules::COPENHAGEN, 7).unwrap();
 
         // King is captured on two sides by commanders away from the throne.
-        let board = MediumBerserkGameState::new("c1Kc3/7/7/7/7/7/7", Attacker).unwrap();
-        let outcome = logic.do_play(Play::from_str("a1-b1").unwrap(), board, None).unwrap();
+        let game_state = MediumBerserkGameState::new("c1Kc3/7/7/7/7/7/7", Attacker).unwrap();
+        let outcome = logic.do_play(Play::from_str("a1-b1").unwrap(), game_state, None).unwrap();
         println!("{:?}", outcome.record);
         assert!(!outcome.record.effects.captures.king.is_empty());
 
         // King is captured between a commander and a hostile corner.
-        let board = MediumBerserkGameState::new("1K1c3/7/7/7/7/7/7", Attacker).unwrap();
-        let outcome = logic.do_play(Play::from_str("d1-c1").unwrap(), board, None).unwrap();
+        let game_state = MediumBerserkGameState::new("1K1c3/7/7/7/7/7/7", Attacker).unwrap();
+        let outcome = logic.do_play(Play::from_str("d1-c1").unwrap(), game_state, None).unwrap();
         println!("{:?}", outcome.record);
         assert!(!outcome.record.effects.captures.king.is_empty());
 
         // King is between a commander and a regular piece, so it is not captured.
-        let board = MediumBerserkGameState::new("t1Kc3/7/7/7/7/7/7", Attacker).unwrap();
-        let outcome = logic.do_play(Play::from_str("a1-b1").unwrap(), board, None).unwrap();
+        let game_state = MediumBerserkGameState::new("t1Kc3/7/7/7/7/7/7", Attacker).unwrap();
+        let outcome = logic.do_play(Play::from_str("a1-b1").unwrap(), game_state, None).unwrap();
         assert!(outcome.record.effects.captures.king.is_empty());
 
         // King is between two commanders while beside the throne, so it is not captured.
-        let board = MediumBerserkGameState::new("7/7/7/c1Kc3/7/7/7", Attacker).unwrap();
-        let outcome = logic.do_play(Play::from_str("a4-b4").unwrap(), board, None).unwrap();
+        let game_state = MediumBerserkGameState::new("7/7/7/c1Kc3/7/7/7", Attacker).unwrap();
+        let outcome = logic.do_play(Play::from_str("a4-b4").unwrap(), game_state, None).unwrap();
         assert!(outcome.record.effects.captures.king.is_empty());
+    }
+
+    #[test]
+    fn test_berserk() {
+        let board =
+            "5tT4/4K6/11/t9t/t9t/9ct/t4TT3t/t9t/11/5c5/5tT4";
+
+        let mut game: Game<MediumBerserkPieceMap> = Game::new(rules::BERSERK, board).unwrap();
+        game.state.side_to_play = Defender;
+
+        game.do_play(
+            Play::from_str("e2-e1").unwrap(),
+        ).unwrap();
+
+        assert!(!game.play_history.last().unwrap().effects.captures.is_empty());
+        assert_eq!(game.state.berserker_tile, Some(Tile::from_str("e1").unwrap()));
+        assert_eq!(game.state.side_to_play, Defender);
+
+        assert_eq!(
+            game.do_play(Play::from_str("a4-b4").unwrap()),
+            Err(WrongPlayer)
+        );
+        assert_eq!(
+            game.do_play(Play::from_str("g1-g2").unwrap()),
+            Err(NotBerserker)
+        );
+        assert_eq!(
+            game.do_play(Play::from_str("e1-e2").unwrap()),
+            Err(NoBerserkCapture)
+        );
+        game.do_play(Play::from_str("e1-e11").unwrap()).unwrap();
+        assert_eq!(game.state.berserker_tile, Some(Tile::from_str("e11").unwrap()));
+        assert_eq!(game.state.side_to_play, Defender);
+        assert!(game.do_play(Play::from_str("e11-a11").unwrap()).is_ok());
+        assert_eq!(game.state.status, Over(Win(KingEscaped, Defender)));
+
+
+
+
     }
 }

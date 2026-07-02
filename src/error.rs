@@ -124,6 +124,11 @@ pub enum PlayInvalid {
     TooFar,
     /// Game is already over.
     GameOver,
+    /// The game is in berserk mode and the moving piece is not the berserker.
+    NotBerserker,
+    /// The rules require that a berserker must capture, and this play by a berserker does not
+    /// capture.
+    NoBerserkCapture
 }
 
 impl Display for PlayInvalid {
@@ -140,6 +145,8 @@ impl Display for PlayInvalid {
             PlayInvalid::MoveOntoBlockedTile => write!(f, "piece cannot occupy destination tile"),
             PlayInvalid::TooFar => write!(f, "piece cannot travel this far in one turn"),
             PlayInvalid::GameOver => write!(f, "game is already over"),
+            PlayInvalid::NotBerserker => write!(f, "only the berserker may move"),
+            PlayInvalid::NoBerserkCapture => write!(f, "berserker must capture"),
         }
     }
 }
