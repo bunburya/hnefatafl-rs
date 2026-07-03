@@ -39,10 +39,12 @@ pub enum WinReason {
 #[derive(Eq, PartialEq, Debug, Copy, Clone, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum DrawReason {
-    /// A move has been repeated too many times.
+    /// A play has been repeated too many times.
     Repetition,
     /// Player has no legal plays available.
     NoPlays,
+    /// Too many plays have occurred without a capture.
+    NoCaptures
 }
 
 /// The outcome of a single game.

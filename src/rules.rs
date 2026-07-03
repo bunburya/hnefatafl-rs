@@ -4,7 +4,19 @@ use std::cmp::PartialEq;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 use crate::collections::PieceTypeDict;
+use crate::error::ParseError;
 use crate::pieces::PieceType::{Commander, King, Knight, Soldier};
+
+pub trait FromOtn where Self: Sized {
+    /// Create an instance of [`Self`] from an appropriate OpenTafl Notation string.
+    fn from_otn(otn: &str) -> Result<Self, ParseError>;
+}
+
+pub trait ToOtn {
+    /// Generate an OpenTafl Notation string describing this struct.
+    fn to_otn(&self) -> String;
+}
+
 
 /// Rules relating to whether and when the king is strong (must be surrounded by hostile tiles on
 /// all four sides to be captured).
@@ -179,6 +191,9 @@ pub struct Ruleset {
     /// Whether the game is drawn when one player has no legal plays available to it. If `false`,
     /// the player with no available plays loses.
     pub draw_on_no_plays: bool,
+    /// Whether the game should end in a draw after a certain number of consecutive playes without
+    /// any captures.
+    pub draw_after_captureless_plays: Option<usize>,
     /// Whether the game supports "Linnaean capture" (if the king is on the throne, surrounded by
     /// three enemies and one friendly soldier, that friendly soldier may be captured against the
     /// occupied throne).

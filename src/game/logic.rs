@@ -924,8 +924,13 @@ impl<P: PieceMap> GameLogic<P> {
             }
         }
 
+        if let Some(n) = self.rules.draw_after_captureless_plays {
+            if state.plays_since_capture >= n {
+                return Some(Draw(DrawReason::NoCaptures))
+            }
+        }
+
         if !valid_play.is_berserk && !self.side_can_play(state.side_to_play.other(), state) {
-            // Other side has no playable moves.
             return if self.rules.draw_on_no_plays {
                 Some(Draw(DrawReason::NoPlays))
             } else {
@@ -1102,7 +1107,7 @@ mod tests {
     use crate::error::PlayInvalid::{BlockedByPiece, MoveOntoBlockedTile, MoveThroughBlockedTile, NoBerserkCapture, NoPiece, NotBerserker, OutOfBounds, TooFar, WrongPlayer};
     use crate::game::logic::GameLogic;
     use crate::game::state::GameState;
-    use crate::game::GameOutcome::Win;
+    use crate::game::GameOutcome::{Draw, Win};
     use crate::game::GameStatus::{Ongoing, Over};
     use crate::game::WinReason::{KingCaptured, KingEscaped, Repetition};
     use crate::game::Game;
@@ -1120,6 +1125,7 @@ mod tests {
     use crate::collections::piecemap::PieceMap;
     use crate::utils::check_tile_vec;
     use std::str::FromStr;
+    use crate::game::DrawReason::NoCaptures;
 
     const TEST_RULES: Ruleset = Ruleset {
         slow_pieces: PieceSet::from_piece_type(King),
@@ -1811,6 +1817,28 @@ mod tests {
     }
 
     #[test]
+    fn test_captureless_draw() {
+        let rules = Ruleset {
+            draw_after_captureless_plays: Some(5),
+            ..rules::COPENHAGEN
+        };
+        let mut game: Game<MediumBasicPieceMap> = Game::new(rules, boards::COPENHAGEN).unwrap();
+        game.do_play(Play::from_str("k8-i8").unwrap()).unwrap();
+        game.do_play(Play::from_str("g5-i5").unwrap()).unwrap();
+        game.do_play(Play::from_str("h1-h3").unwrap()).unwrap();
+        game.do_play(Play::from_str("e5-b5").unwrap()).unwrap();
+
+        let mut drawn_game = game.clone();
+        drawn_game.do_play(Play::from_str("a7-b7").unwrap()).unwrap();
+        assert_eq!(drawn_game.state.status, Over(Draw(NoCaptures)));
+
+        let mut undrawn_game = game.clone();
+        undrawn_game.do_play(Play::from_str("a4-b4").unwrap()).unwrap();
+        assert_eq!(undrawn_game.state.status, Ongoing);
+
+    }
+
+    #[test]
     fn test_jump() {
         let logic = GameLogic::new(TEST_JUMP_RULES, 9).unwrap();
         let state = MediumBerserkGameState::new("1tKt5/1tNc5/1tNc5/tN7/t2TKt3/4t4/9/9/9", Attacker).unwrap();
@@ -1874,7 +1902,7 @@ mod tests {
     }
 
     #[test]
-    fn test_berserk() {
+    fn test_berserk_king_must_capture() {
         let board =
             "5tT4/4K6/11/t9t/t9t/9ct/t4TT3t/t9t/11/5c5/5tT4";
 
@@ -1906,9 +1934,38 @@ mod tests {
         assert_eq!(game.state.side_to_play, Defender);
         assert!(game.do_play(Play::from_str("e11-a11").unwrap()).is_ok());
         assert_eq!(game.state.status, Over(Win(KingEscaped, Defender)));
+    }
 
+    #[test]
+    fn test_berserk_soldier_must_capture() {
+        let board =
+            "5tT4/4T6/11/t9t/t9t/9ct/t4TK3t/t9t/11/5c5/5tT4";
 
+        let mut game: Game<MediumBerserkPieceMap> = Game::new(rules::BERSERK, board).unwrap();
+        game.state.side_to_play = Defender;
 
+        game.do_play(
+            Play::from_str("e2-e1").unwrap(),
+        ).unwrap();
 
+        assert!(!game.play_history.last().unwrap().effects.captures.is_empty());
+        assert_eq!(game.state.berserker_tile, Some(Tile::from_str("e1").unwrap()));
+        assert_eq!(game.state.side_to_play, Defender);
+
+        assert_eq!(
+            game.do_play(Play::from_str("a4-b4").unwrap()),
+            Err(WrongPlayer)
+        );
+        assert_eq!(
+            game.do_play(Play::from_str("g1-g2").unwrap()),
+            Err(NotBerserker)
+        );
+        assert_eq!(
+            game.do_play(Play::from_str("e1-e2").unwrap()),
+            Err(NoBerserkCapture)
+        );
+        game.do_play(Play::from_str("e1-e11").unwrap()).unwrap();
+        assert_eq!(game.state.berserker_tile, None);
+        assert_eq!(game.state.side_to_play, Attacker);
     }
 }

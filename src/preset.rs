@@ -38,6 +38,7 @@ pub mod rules {
             is_loss: true,
         }),
         draw_on_no_plays: false,
+        draw_after_captureless_plays: None,
         linnaean_capture: false,
         jump_rules: JumpRules::none(),
         berserk_rule: None
@@ -71,6 +72,7 @@ pub mod rules {
             is_loss: true,
         }),
         draw_on_no_plays: false,
+        draw_after_captureless_plays: None,
         linnaean_capture: false,
         jump_rules: JumpRules::none(),
         berserk_rule: None
@@ -101,6 +103,7 @@ pub mod rules {
         enclosure_win: None,
         repetition_rule: None,
         draw_on_no_plays: false,
+        draw_after_captureless_plays: None,
         linnaean_capture: false,
         jump_rules: JumpRules::none(),
         berserk_rule: None
@@ -134,6 +137,7 @@ pub mod rules {
             is_loss: false,
         }),
         draw_on_no_plays: true,
+        draw_after_captureless_plays: None,
         linnaean_capture: true,
         jump_rules: JumpRules::none(),
         berserk_rule: None
