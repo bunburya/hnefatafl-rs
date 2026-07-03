@@ -1,4 +1,3 @@
-use crate::error::ParseError::{BadBoard, BadChar, BadInt, BadLineLen, BadPlay, BadString, BadStringLen, EmptyString};
 use std::fmt::{Display, Formatter};
 use std::num::ParseIntError;
 
@@ -29,32 +28,35 @@ pub enum ParseError {
     BadString(String),
     /// Encountered a [`BoardError`] when parsing a string.
     BadBoard(BoardError),
+    /// String is invalid OpenTafl Notation.
+    BadOtn
 }
 
 impl Display for ParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            BadStringLen(len) => write!(f, "string is wrong length: {len}"),
-            BadLineLen(len) => write!(f, "line is wrong length: {len}"),
-            BadChar(c) => write!(f, "unexpected character: {c}"),
-            EmptyString => write!(f, "empty string"),
-            BadInt(e) => write!(f, "could not parse integer: {e}"),
-            BadPlay(e) => write!(f, "could not parse play: {e}"),
-            BadString(s) => write!(f, "could not parse string: {s}"),
-            BadBoard(e) => write!(f, "could not parse board: {e}"),
+            ParseError::BadStringLen(len) => write!(f, "string is wrong length: {len}"),
+            ParseError::BadLineLen(len) => write!(f, "line is wrong length: {len}"),
+            ParseError::BadChar(c) => write!(f, "unexpected character: {c}"),
+            ParseError::EmptyString => write!(f, "empty string"),
+            ParseError::BadInt(e) => write!(f, "could not parse integer: {e}"),
+            ParseError::BadPlay(e) => write!(f, "could not parse play: {e}"),
+            ParseError::BadString(s) => write!(f, "could not parse string: {s}"),
+            ParseError::BadBoard(e) => write!(f, "could not parse board: {e}"),
+            ParseError::BadOtn => write!(f, "string is not valid OpenTafl Notation"),
         }
     }
 }
 
 impl From<ParseIntError> for ParseError {
     fn from(value: ParseIntError) -> Self {
-        BadInt(value)
+        ParseError::BadInt(value)
     }
 }
 
 impl From<BoardError> for ParseError {
     fn from(value: BoardError) -> Self {
-        BadBoard(value)
+        ParseError::BadBoard(value)
     }
 }
 
