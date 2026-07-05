@@ -1,6 +1,6 @@
 use crate::bitfield::BitField;
 use crate::collections::tileset::{BitfieldTileIter, TileSet};
-use crate::pieces::PieceType::{King, Soldier, Knight, Commander, Guard, Mercenary};
+use crate::pieces::PieceType::{King, Soldier, Knight, Commander};
 use crate::pieces::Side::{Attacker, Defender};
 use crate::pieces::{Piece, PlacedPiece, Side};
 use crate::tiles::Tile;
@@ -150,212 +150,216 @@ pub trait PieceMap: PieceMapSuperTraits {
 
 }
 
-/// A [`PieceMap`] implemented using bitfields which is capable of representing the basic pieces
-/// (attacking and defending soldiers, and defending king).
-#[derive(Copy, Clone, Hash, Eq, PartialEq, Default, Debug)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-#[cfg_attr(
-    feature = "serde",
-    serde(bound = "B: serde::Serialize + serde::de::DeserializeOwned")
-)]
-pub struct BasicPieceMap<B: BitField> {
-    pub attacking_soldier: TileSet<B>,
-    pub defending_soldier: TileSet<B>,
-    pub king: TileSet<B>,
+// --- PieceMap generation macro -------------------------------------------------------------------
+//
+// The concrete `PieceMap` implementations are structurally identical: one `TileSet` "plane" per
+// supported (side, piece type) combination, with every trait method being a fixed fold over those
+// planes. Rather than hand-write (and hand-synchronise) that boilerplate for each variant, the
+// `define_piecemap!` macro generates a specialised struct and its full `PieceMap` impl from a list
+// of `field => (Side, PieceType)` entries. Each generated map still allocates only the planes it
+// declares (so the memory/copy profile is identical to a hand-written struct), but the per-plane
+// bookkeeping is defined exactly once here.
+
+/// Internal helper: yields `self.$field.first()` for the king plane, `None` otherwise. Used to give
+/// `find_king` O(1) direct access to the king plane without the caller having to know which field
+/// it is.
+macro_rules! __pm_king_tile {
+    ($self:ident, $field:ident, King) => { $self.$field.first() };
+    ($self:ident, $field:ident, $other:ident) => { None::<Tile> };
 }
 
-impl<B: BitField> CommonPieceMapSuperTraits for BasicPieceMap<B> {}
+/// Internal helper: yields `self.$field.count()` when the plane's side matches the queried side,
+/// else `0`.
+macro_rules! __pm_side_count {
+    ($self:ident, $field:ident, Attacker, Attacker) => { $self.$field.count() };
+    ($self:ident, $field:ident, Defender, Defender) => { $self.$field.count() };
+    ($self:ident, $field:ident, $plane:ident, $queried:ident) => { 0u32 };
+}
 
-#[cfg(feature = "serde")]
-impl<B: BitField> PieceMapSuperTraits for BasicPieceMap<B> where B: Serialize + DeserializeOwned {}
+/// Internal helper: yields `self.$field` (a `TileSet`) when the plane's side matches the queried
+/// side, else an empty `TileSet`.
+macro_rules! __pm_side_tiles {
+    ($self:ident, $field:ident, Attacker, Attacker) => { $self.$field };
+    ($self:ident, $field:ident, Defender, Defender) => { $self.$field };
+    ($self:ident, $field:ident, $plane:ident, $queried:ident) => { TileSet::empty() };
+}
 
-#[cfg(not(feature = "serde"))]
-impl<B: BitField> PieceMapSuperTraits for BasicPieceMap<B> {}
-
-impl<B: BitField> PieceMap for BasicPieceMap<B> {
-    type BitField = B;
-
-    fn occupied(&self) -> TileSet<B> {
-        self.attacking_soldier | self.defending_soldier | self.king
-    }
-
-    fn occupied_by(&self, piece_set: PieceSet) -> TileSet<B> {
-        let mut ts = TileSet::empty();
-        if piece_set.contains(Piece::attacker(Soldier)) {
-            ts.extend(&self.attacking_soldier);
+/// Generate a specialised [`PieceMap`] struct and its full trait implementation from a list of
+/// `field => (Side, PieceType)` planes. See the module-level note above for the rationale.
+macro_rules! define_piecemap {
+    (
+        $(#[$meta:meta])*
+        $name:ident { $( $field:ident => ($side:ident, $ptype:ident) ),* $(,)? }
+    ) => {
+        $(#[$meta])*
+        #[derive(Copy, Clone, Hash, Eq, PartialEq, Default, Debug)]
+        #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+        #[cfg_attr(
+            feature = "serde",
+            serde(bound = "B: serde::Serialize + serde::de::DeserializeOwned")
+        )]
+        pub struct $name<B: BitField> {
+            $( pub $field: TileSet<B>, )*
         }
-        if piece_set.contains(Piece::defender(Soldier)) {
-            ts.extend(&self.defending_soldier);
-        }
-        if piece_set.contains(Piece::king()) {
-            ts.extend(&self.king);
-        }
-        ts
-    }
 
-    fn get(&self, t: Tile) -> Option<Piece> {
-        let mask = B::tile_mask(t);
-        if self.attacking_soldier.contains_mask(mask) {
-            Some(Piece::attacker(Soldier))
-        } else if self.defending_soldier.contains_mask(mask) {
-            Some(Piece::defender(Soldier))
-        } else if self.king.contains_mask(mask) {
-            Some(Piece::king())
-        } else {
-            None
-        }
-    }
+        impl<B: BitField> CommonPieceMapSuperTraits for $name<B> {}
 
-    fn contains_piece(&self, t: Tile, piece: Piece) -> bool {
-        let ts = match piece {
-            Piece {
-                side: Attacker,
-                piece_type: Soldier,
-            } => self.attacking_soldier,
-            Piece {
-                side: Defender,
-                piece_type: Soldier,
-            } => self.defending_soldier,
-            Piece {
-                side: Defender,
-                piece_type: King,
-            } => self.king,
-            _ => return false,
-        };
-        ts.contains(t)
-    }
+        #[cfg(feature = "serde")]
+        impl<B: BitField> PieceMapSuperTraits for $name<B> where B: Serialize + DeserializeOwned {}
 
-    fn set(&mut self, t: Tile, piece: Piece) -> Result<(), PieceMapError> {
-        match piece {
-            Piece {
-                piece_type: Soldier,
-                side: Attacker,
-            } => {
-                self.attacking_soldier.insert(t);
-                self.defending_soldier.remove(t);
-                self.king.remove(t);
+        #[cfg(not(feature = "serde"))]
+        impl<B: BitField> PieceMapSuperTraits for $name<B> {}
+
+        impl<B: BitField> PieceMap for $name<B> {
+            type BitField = B;
+
+            fn occupied(&self) -> TileSet<B> {
+                TileSet::empty() $( | self.$field )*
             }
-            Piece {
-                piece_type: Soldier,
-                side: Defender,
-            } => {
-                self.defending_soldier.insert(t);
-                self.attacking_soldier.remove(t);
-                self.king.remove(t);
+
+            fn occupied_by(&self, piece_set: PieceSet) -> TileSet<B> {
+                let mut ts = TileSet::empty();
+                $(
+                    if piece_set.contains(Piece::new($ptype, $side)) {
+                        ts.extend(&self.$field);
+                    }
+                )*
+                ts
             }
-            Piece {
-                piece_type: King,
-                side: Defender,
-            } => {
-                self.king.insert(t);
-                self.attacking_soldier.remove(t);
-                self.defending_soldier.remove(t);
+
+            fn get(&self, t: Tile) -> Option<Piece> {
+                let mask = B::tile_mask(t);
+                $(
+                    if self.$field.contains_mask(mask) {
+                        return Some(Piece::new($ptype, $side));
+                    }
+                )*
+                None
             }
-            other => return Err(PieceMapError::UnsupportedPiece(other)),
+
+            fn contains_piece(&self, t: Tile, piece: Piece) -> bool {
+                let ts = match piece {
+                    $( Piece { side: $side, piece_type: $ptype } => self.$field, )*
+                    _ => return false,
+                };
+                ts.contains(t)
+            }
+
+            fn set(&mut self, t: Tile, piece: Piece) -> Result<(), PieceMapError> {
+                match piece {
+                    $(
+                        Piece { side: $side, piece_type: $ptype } => {
+                            // Clear every plane at `t` first, then set the matching one, so a tile
+                            // is never simultaneously occupied by two pieces.
+                            self.remove(t);
+                            self.$field.insert(t);
+                        }
+                    )*
+                    other => return Err(PieceMapError::UnsupportedPiece(other)),
+                }
+                Ok(())
+            }
+
+            fn remove(&mut self, t: Tile) {
+                $( self.$field.remove(t); )*
+            }
+
+            fn clear_tiles(&mut self, tiles: TileSet<B>) {
+                let inv = !tiles;
+                $( self.$field &= inv; )*
+            }
+
+            fn without_pieces(&self, piece_set: PieceSet) -> Self {
+                let mut w = Self::default();
+                $(
+                    if piece_set.contains(Piece::new($ptype, $side)) {
+                        w.$field = self.$field;
+                    }
+                )*
+                w
+            }
+
+            fn extend(&mut self, other: &Self) {
+                $( self.$field.extend(&other.$field); )*
+            }
+
+            fn is_empty(&self) -> bool {
+                true $( && self.$field.is_empty() )*
+            }
+
+            fn iter_tiles_for_piece(&self, piece: Piece) -> BitfieldTileIter<Self::BitField> {
+                match piece {
+                    $( Piece { side: $side, piece_type: $ptype } => self.$field.into_iter(), )*
+                    _ => panic!("Invalid piece type: {:?}", piece),
+                }
+            }
+
+            fn next_piece(piece: Option<Piece>) -> Option<Piece> {
+                // Planes in declaration order; iteration walks this sequence.
+                const ORDER: &[Piece] = &[ $( Piece::new($ptype, $side) ),* ];
+                match piece {
+                    None => ORDER.first().copied(),
+                    Some(p) => match ORDER.iter().position(|x| *x == p) {
+                        Some(i) => ORDER.get(i + 1).copied(),
+                        None => panic!("Invalid piece type: {:?}", p),
+                    },
+                }
+            }
+
+            fn find_king(&self) -> Option<Tile> {
+                None::<Tile> $( .or_else(|| __pm_king_tile!(self, $field, $ptype)) )*
+            }
+
+            fn count_pieces_of_side(&self, side: Side) -> u32 {
+                match side {
+                    Attacker => 0u32 $( + __pm_side_count!(self, $field, $side, Attacker) )*,
+                    Defender => 0u32 $( + __pm_side_count!(self, $field, $side, Defender) )*,
+                }
+            }
+
+            fn occupied_by_side(&self, side: Side) -> TileSet<Self::BitField> {
+                match side {
+                    Attacker => TileSet::empty() $( | __pm_side_tiles!(self, $field, $side, Attacker) )*,
+                    Defender => TileSet::empty() $( | __pm_side_tiles!(self, $field, $side, Defender) )*,
+                }
+            }
         }
-        Ok(())
-    }
 
-    fn remove(&mut self, t: Tile) {
-        self.attacking_soldier.remove(t);
-        self.defending_soldier.remove(t);
-        self.king.remove(t);
-    }
-
-    fn clear_tiles(&mut self, tiles: TileSet<B>) {
-        let inv = !tiles;
-        self.attacking_soldier &= inv;
-        self.defending_soldier &= inv;
-        self.king &= inv;
-    }
-
-    fn without_pieces(&self, piece_set: PieceSet) -> Self {
-        let mut w = Self::default();
-        if piece_set.contains(Piece::attacker(Soldier)) {
-            w.attacking_soldier = self.attacking_soldier;
+        impl<B: BitField> IntoIterator for $name<B> {
+            type Item = PlacedPiece;
+            type IntoIter = PieceMapIterator<$name<B>>;
+            fn into_iter(self) -> Self::IntoIter {
+                PieceMapIterator::new(self)
+            }
         }
-        if piece_set.contains(Piece::defender(Soldier)) {
-            w.defending_soldier = self.defending_soldier;
+
+        impl<B: BitField> IntoIterator for &$name<B> {
+            type Item = PlacedPiece;
+            type IntoIter = PieceMapIterator<$name<B>>;
+            fn into_iter(self) -> Self::IntoIter {
+                PieceMapIterator::new(*self)
+            }
         }
-        if piece_set.contains(Piece::king()) {
-            w.king = self.king;
+
+        impl<B: BitField> FromIterator<PlacedPiece> for $name<B> {
+            fn from_iter<T: IntoIterator<Item = PlacedPiece>>(iter: T) -> Self {
+                let mut tmp = Self::default();
+                for p in iter {
+                    tmp.set_placed_piece(p);
+                }
+                tmp
+            }
         }
-        w
-    }
-
-    fn extend(&mut self, other: &Self) {
-        self.attacking_soldier.extend(&other.attacking_soldier);
-        self.defending_soldier.extend(&other.defending_soldier);
-        self.king.extend(&other.king);
-    }
-
-    fn is_empty(&self) -> bool {
-        self.attacking_soldier.is_empty()
-            && self.defending_soldier.is_empty()
-            && self.king.is_empty()
-    }
-
-    fn iter_tiles_for_piece(&self, piece: Piece) -> BitfieldTileIter<Self::BitField> {
-        match piece {
-            Piece { side: Attacker, piece_type: Soldier } => self.attacking_soldier.into_iter(),
-            Piece { side: Defender, piece_type: Soldier } => self.defending_soldier.into_iter(),
-            Piece { side: Defender, piece_type: King } => self.king.into_iter(),
-            _ => panic!("Invalid piece type: {:?}", piece),
-        }
-    }
-
-    fn next_piece(piece: Option<Piece>) -> Option<Piece> {
-        match piece {
-            None => Some(Piece::attacker(Soldier)),
-            Some(Piece { side: Attacker, piece_type: Soldier }) => Some(Piece::defender(Soldier)),
-            Some(Piece { side: Defender, piece_type: Soldier }) => Some(Piece::king()),
-            Some(Piece { side: Defender, piece_type: King }) => None,
-            other => panic!("Invalid piece type: {:?}", other),
-        }
-    }
-
-    fn find_king(&self) -> Option<Tile> {
-        self.king.first()
-    }
-
-    fn count_pieces_of_side(&self, side: Side) -> u32 {
-        match side {
-            Attacker => self.attacking_soldier.count(),
-            Defender => self.defending_soldier.count() + self.king.count(),
-        }
-    }
-
-    fn occupied_by_side(&self, side: Side) -> TileSet<Self::BitField> {
-        match side {
-            Attacker => self.attacking_soldier,
-            Defender => self.defending_soldier | self.king,
-        }
-    }
+    };
 }
 
-impl<B: BitField> IntoIterator for BasicPieceMap<B> {
-    type Item = PlacedPiece;
-    type IntoIter = PieceMapIterator<BasicPieceMap<B>>;
-    fn into_iter(self) -> Self::IntoIter {
-        PieceMapIterator::new(self)
-    }
-}
-
-impl<B: BitField> IntoIterator for &BasicPieceMap<B> {
-    type Item = PlacedPiece;
-    type IntoIter = PieceMapIterator<BasicPieceMap<B>>;
-    fn into_iter(self) -> Self::IntoIter {
-        PieceMapIterator::new(*self)
-    }
-}
-
-impl<B: BitField> FromIterator<PlacedPiece> for BasicPieceMap<B> {
-    fn from_iter<T: IntoIterator<Item = PlacedPiece>>(iter: T) -> Self {
-        let mut tmp = Self::default();
-        for p in iter {
-            tmp.set_placed_piece(p);
-        }
-        tmp
+define_piecemap! {
+    /// A [`PieceMap`] implemented using bitfields which is capable of representing the basic pieces
+    /// (attacking and defending soldiers, and defending king).
+    BasicPieceMap {
+        attacking_soldier => (Attacker, Soldier),
+        defending_soldier => (Defender, Soldier),
+        king              => (Defender, King),
     }
 }
 
@@ -375,280 +379,16 @@ macro_rules! basic_piecemap {
     };
 }
 
-
-/// A [`PieceMap`] implemented using bitfields which is capable of representing all supported pieces
-/// (attacking and defending soldiers, knights, commanders, guards and mercenaries, and defending
-/// king).
-#[derive(Copy, Clone, Hash, Eq, PartialEq, Default, Debug)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-#[cfg_attr(
-    feature = "serde",
-    serde(bound = "B: serde::Serialize + serde::de::DeserializeOwned"),
-)]
-pub struct BerserkPieceMap<B: BitField> {
-    pub attacking_soldier: TileSet<B>,
-    pub defending_soldier: TileSet<B>,
-    pub commander: TileSet<B>,
-    pub knight: TileSet<B>,
-    pub king: TileSet<B>,
-
-}
-
-impl<B: BitField> CommonPieceMapSuperTraits for BerserkPieceMap<B> {}
-
-#[cfg(feature = "serde")]
-impl<B: BitField> PieceMapSuperTraits for BerserkPieceMap<B> where B: Serialize + DeserializeOwned {}
-
-#[cfg(not(feature = "serde"))]
-impl<B: BitField> PieceMapSuperTraits for BerserkPieceMap<B> {}
-
-impl<B: BitField> PieceMap for BerserkPieceMap<B> {
-    type BitField = B;
-
-    fn occupied(&self) -> TileSet<B> {
-        self.attacking_soldier | self.defending_soldier | self.commander | self.knight | self.king
-    }
-
-    fn occupied_by(&self, piece_set: PieceSet) -> TileSet<B> {
-        let mut ts = TileSet::empty();
-        if piece_set.contains(Piece::attacker(Soldier)) {
-            ts.extend(&self.attacking_soldier);
-        }
-        if piece_set.contains(Piece::defender(Soldier)) {
-            ts.extend(&self.defending_soldier);
-        }
-        if piece_set.contains(Piece::attacker(Commander)) {
-            ts.extend(&self.commander);
-        }
-        if piece_set.contains(Piece::defender(Knight)) {
-            ts.extend(&self.knight);
-        }
-        if piece_set.contains(Piece::king()) {
-            ts.extend(&self.king);
-        }
-        ts
-    }
-
-    fn get(&self, t: Tile) -> Option<Piece> {
-        let mask = B::tile_mask(t);
-        if self.attacking_soldier.contains_mask(mask) {
-            Some(Piece::attacker(Soldier))
-        } else if self.defending_soldier.contains_mask(mask) {
-            Some(Piece::defender(Soldier))
-        } else if self.commander.contains_mask(mask) {
-            Some(Piece::attacker(Commander))
-        } else if self.knight.contains_mask(mask) {
-            Some(Piece::defender(Knight))
-        } else if self.king.contains_mask(mask) {
-            Some(Piece::king())
-        } else {
-            None
-        }
-    }
-
-    fn contains_piece(&self, t: Tile, piece: Piece) -> bool {
-        let ts = match piece {
-            Piece {
-                side: Attacker,
-                piece_type: Soldier,
-            } => self.attacking_soldier,
-            Piece {
-                side: Defender,
-                piece_type: Soldier,
-            } => self.defending_soldier,
-            Piece {
-                side: Attacker,
-                piece_type: Commander,
-            } => self.commander,
-            Piece {
-                side: Defender,
-                piece_type: Knight,
-            } => self.knight,
-            Piece {
-                side: Defender,
-                piece_type: King,
-            } => self.king,
-            _ => return false,
-        };
-        ts.contains(t)
-    }
-
-    fn set(&mut self, t: Tile, piece: Piece) -> Result<(), PieceMapError> {
-        match piece {
-            Piece {
-                piece_type: Soldier,
-                side: Attacker,
-            } => {
-                self.attacking_soldier.insert(t);
-                self.defending_soldier.remove(t);
-                self.commander.remove(t);
-                self.knight.remove(t);
-                self.king.remove(t);
-            }
-            Piece {
-                piece_type: Soldier,
-                side: Defender,
-            } => {
-                self.defending_soldier.insert(t);
-                self.attacking_soldier.remove(t);
-                self.commander.remove(t);
-                self.knight.remove(t);
-                self.king.remove(t);
-            },
-            Piece {
-                piece_type: Commander,
-                side: Attacker,
-            } => {
-                self.defending_soldier.remove(t);
-                self.attacking_soldier.remove(t);
-                self.commander.insert(t);
-                self.knight.remove(t);
-                self.king.remove(t);
-            },
-            Piece {
-                piece_type: Knight,
-                side: Defender,
-            } => {
-                self.defending_soldier.remove(t);
-                self.attacking_soldier.remove(t);
-                self.commander.remove(t);
-                self.knight.insert(t);
-                self.king.remove(t);
-            },
-            Piece {
-                piece_type: King,
-                side: Defender,
-            } => {
-                self.attacking_soldier.remove(t);
-                self.defending_soldier.remove(t);
-                self.commander.remove(t);
-                self.knight.remove(t);
-                self.king.insert(t);
-            }
-            other => return Err(PieceMapError::UnsupportedPiece(other)),
-        }
-        Ok(())
-    }
-
-    fn remove(&mut self, t: Tile) {
-        self.attacking_soldier.remove(t);
-        self.defending_soldier.remove(t);
-        self.commander.remove(t);
-        self.knight.remove(t);
-        self.king.remove(t);
-    }
-
-    fn clear_tiles(&mut self, tiles: TileSet<B>) {
-        let inv = !tiles;
-        self.attacking_soldier &= inv;
-        self.defending_soldier &= inv;
-        self.commander &= inv;
-        self.knight &= inv;
-        self.king &= inv;
-    }
-
-    fn without_pieces(&self, piece_set: PieceSet) -> Self {
-        let mut w = Self::default();
-        if piece_set.contains(Piece::attacker(Soldier)) {
-            w.attacking_soldier = self.attacking_soldier;
-        }
-        if piece_set.contains(Piece::defender(Soldier)) {
-            w.defending_soldier = self.defending_soldier;
-        }
-        if piece_set.contains(Piece::attacker(Commander)) {
-            w.commander = self.commander;
-        }
-        if piece_set.contains(Piece::defender(Knight)) {
-            w.knight = self.knight;
-        }
-        if piece_set.contains(Piece::king()) {
-            w.king = self.king;
-        }
-        w
-    }
-
-    fn extend(&mut self, other: &Self) {
-        self.attacking_soldier.extend(&other.attacking_soldier);
-        self.defending_soldier.extend(&other.defending_soldier);
-        self.commander.extend(&other.commander);
-        self.knight.extend(&other.knight);
-        self.king.extend(&other.king);
-    }
-
-    fn is_empty(&self) -> bool {
-        self.attacking_soldier.is_empty()
-            && self.defending_soldier.is_empty()
-            && self.commander.is_empty()
-            && self.knight.is_empty()
-            && self.king.is_empty()
-    }
-
-    fn iter_tiles_for_piece(&self, piece: Piece) -> BitfieldTileIter<Self::BitField> {
-        match piece {
-            Piece { side: Attacker, piece_type: Soldier } => self.attacking_soldier.into_iter(),
-            Piece { side: Defender, piece_type: Soldier } => self.defending_soldier.into_iter(),
-            Piece { side: Attacker, piece_type: Commander } => self.commander.into_iter(),
-            Piece { side: Defender, piece_type: Knight } => self.knight.into_iter(),
-            Piece { side: Defender, piece_type: King } => self.king.into_iter(),
-            _ => panic!("Invalid piece type: {:?}", piece),
-        }
-    }
-
-    fn next_piece(piece: Option<Piece>) -> Option<Piece> {
-        match piece {
-            None => Some(Piece::attacker(Soldier)),
-            Some(Piece { side: Attacker, piece_type: Soldier }) => Some(Piece::defender(Soldier)),
-            Some(Piece { side: Defender, piece_type: Soldier }) => Some(Piece::king()),
-            Some(Piece { side: Defender, piece_type: King }) => Some(Piece::attacker(Commander)),
-            Some(Piece { side: Attacker, piece_type: Commander }) => Some(Piece::defender(Knight)),
-            Some(Piece { side: Defender, piece_type: Knight }) => None,
-            other => panic!("Invalid piece type: {:?}", other),
-        }
-    }
-
-    fn find_king(&self) -> Option<Tile> {
-        self.king.first()
-    }
-
-    fn count_pieces_of_side(&self, side: Side) -> u32 {
-        match side {
-            Attacker => self.attacking_soldier.count() + self.commander.count(),
-            Defender => self.defending_soldier.count() + self.knight.count() + self.king.count(),
-        }
-    }
-
-    fn occupied_by_side(&self, side: Side) -> TileSet<Self::BitField> {
-        match side {
-            Attacker => self.attacking_soldier | self.commander,
-            Defender => self.defending_soldier | self.knight | self.king,
-        }
-    }
-
-}
-
-impl<B: BitField> IntoIterator for BerserkPieceMap<B> {
-    type Item = PlacedPiece;
-    type IntoIter = PieceMapIterator<BerserkPieceMap<B>>;
-    fn into_iter(self) -> Self::IntoIter {
-        PieceMapIterator::new(self)
-    }
-}
-
-impl<B: BitField> IntoIterator for &BerserkPieceMap<B> {
-    type Item = PlacedPiece;
-    type IntoIter = PieceMapIterator<BerserkPieceMap<B>>;
-    fn into_iter(self) -> Self::IntoIter {
-        PieceMapIterator::new(*self)
-    }
-}
-
-impl<B: BitField> FromIterator<PlacedPiece> for BerserkPieceMap<B> {
-    fn from_iter<T: IntoIterator<Item = PlacedPiece>>(iter: T) -> Self {
-        let mut tmp = Self::default();
-        for p in iter {
-            tmp.set_placed_piece(p);
-        }
-        tmp
+define_piecemap! {
+    /// A [`PieceMap`] implemented using bitfields which is capable of representing the pieces used in
+    /// berserk variants: attacking and defending soldiers, an attacking commander, a defending
+    /// knight, and the defending king.
+    BerserkPieceMap {
+        attacking_soldier => (Attacker, Soldier),
+        defending_soldier => (Defender, Soldier),
+        commander         => (Attacker, Commander),
+        knight            => (Defender, Knight),
+        king              => (Defender, King),
     }
 }
 
@@ -664,7 +404,7 @@ impl<P: PieceMap> PieceMapIterator<P> {
         Self {
             piece_map,
             current_iter: piece_map.iter_tiles_for_piece(p),
-            current_piece: Piece::attacker(Soldier),
+            current_piece: p,
         }
     }
 }
