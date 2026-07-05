@@ -9,7 +9,6 @@
 
 - [ ] Specify maximum move distance for each piece type.
 - [ ] Implement support for other piece types.
-- [ ] Implement middleweight king strength
 
 ## OpenTafl integration
 

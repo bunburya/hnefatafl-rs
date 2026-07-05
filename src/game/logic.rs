@@ -93,6 +93,7 @@ impl<P: PieceMap> GameLogic<P> {
         if let Some(other_piece) = board.get_piece(tile) {
             // Tile contains a piece. If the piece is of a different side, tile is hostile, unless
             // that piece is an unarmed king.
+            // Note: Will need to change this to reflect unarmed guards
             (other_piece.side != piece.side)
                 && (other_piece.piece_type != King
                     || self.rules.king_attack == Armed
@@ -105,12 +106,20 @@ impl<P: PieceMap> GameLogic<P> {
     }
 
     /// Determine whether the position at the given coordinates is hostile to the given piece,
-    /// including whether the position is a hostile edge.
-    pub fn coords_hostile(&self, coords: Coords, piece: Piece, board: &BoardState<P>) -> bool {
+    /// including whether the position is a hostile edge. If `oob_hostile` is true, out of bounds
+    /// coordinates are considered hostile (even if the rules don't state that an edge is hostile).
+    /// This is used in testing for king capture under [`KingStrength::Middleweight`] rules.
+    pub fn coords_hostile(
+        &self,
+        coords: Coords,
+        piece: Piece,
+        board: &BoardState<P>,
+    ) -> bool {
         if self.board_geo.coords_in_bounds(coords) {
             self.tile_hostile(Tile::new(coords.row as u8, coords.col as u8), piece, board)
         } else {
-            self.rules.hostile_tiles.edge.contains(piece)
+            ((piece.piece_type == King) && (self.rules.king_strength == KingStrength::Middleweight))
+                || self.rules.hostile_tiles.edge.contains(piece)
         }
     }
 
@@ -304,7 +313,7 @@ impl<P: PieceMap> GameLogic<P> {
     pub fn king_is_strong(&self, board: &BoardState<P>) -> bool {
         match self.rules.king_strength {
             KingStrength::Strong => true,
-            KingStrength::Weak => false,
+            KingStrength::Weak | KingStrength::Middleweight => false,
             KingStrength::StrongByThrone => {
                 self.king_beside_throne(board) || self.king_on_throne(board)
             }
@@ -776,11 +785,17 @@ impl<P: PieceMap> GameLogic<P> {
                     };
                     // Check if the tile on the other side of the neighbour is a hostile tile, or if
                     // the neighbour is on the edge and the edge is treated as hostile to that piece
-                    if self.coords_hostile(far_coords, other_piece, &state.board) {
+                    if self.coords_hostile(
+                        far_coords,
+                        other_piece,
+                        &state.board
+                    ) {
                         // We know that the neighbouring opposing piece is surrounded by the
                         // moving piece and another hostile tile. So it is captured, *unless* it
                         // is a strong king.
-                        if (other_piece.piece_type == King) && self.king_is_strong(&state.board) {
+                        if (other_piece.piece_type == King)
+                            && (self.king_is_strong(&state.board)
+                                || (self.rules.king_strength == KingStrength::Middleweight)) {
                             // First check for a commander capture (between two commanders).
                             if self.detect_commander_capture(moving_piece, other_piece, far_coords, state) {
                                 captures.set(n, other_piece);
@@ -791,41 +806,45 @@ impl<P: PieceMap> GameLogic<P> {
                                     self.coords_hostile(
                                         n_coords + RowColOffset::new(1, 0),
                                         other_piece,
-                                        &state.board,
+                                        &state.board
                                     ) && self.coords_hostile(
                                         n_coords + RowColOffset::new(-1, 0),
                                         other_piece,
-                                        &state.board,
+                                        &state.board
                                     )
                                 } else {
                                     self.coords_hostile(
                                         n_coords + RowColOffset::new(0, 1),
                                         other_piece,
-                                        &state.board,
+                                        &state.board
                                     ) && self.coords_hostile(
                                         n_coords + RowColOffset::new(0, -1),
                                         other_piece,
-                                        &state.board,
+                                        &state.board
                                     )
                                 };
                                 if !perp_hostile {
                                     continue;
                                 }
                             }
-                            captures.set(n, other_piece);
+                            captures.set(n, other_piece)
+                                .expect("`other_piece` should be supported by this PieceMap.");
                         } else {
-                            captures.set(n, other_piece);
+                            captures.set(n, other_piece)
+                                .expect("`other_piece` should be supported by this PieceMap.");
                         }
                     } else if self.rules.linnaean_capture && state.side_to_play == Attacker {
                         if let Some(_pp) =
                             self.detect_linnaean_capture(n, other_piece, far_coords, state)
                         {
-                            captures.set(n, other_piece);
+                            captures.set(n, other_piece)
+                                .expect("`other_piece` should be supported by this PieceMap.");
                         }
                     // Check again for a commander capture (against a corner) as these may not be
                     // detected above where corners are not usually hostile to the king.
                     } else if self.detect_commander_capture(moving_piece, other_piece, far_coords, state) {
-                        captures.set(n, other_piece);
+                        captures.set(n, other_piece)
+                            .expect("`other_piece` should be supported by this PieceMap.");
                     }
 
 
@@ -1116,7 +1135,7 @@ mod tests {
     use crate::pieces::{Piece, PieceSet, PlacedPiece, KING};
     use crate::play::{Play, ValidPlay};
     use crate::preset::{boards, rules};
-    use crate::rules::{HostilityRules, PassRules, Ruleset, ShieldwallRules, BERSERK_JUMP_RULES};
+    use crate::rules::{HostilityRules, KingStrength, PassRules, Ruleset, ShieldwallRules, BERSERK_JUMP_RULES};
     use crate::tiles::Tile;
     use crate::{basic_piecemap, tileset};
     use std::collections::HashSet;
@@ -1126,6 +1145,7 @@ mod tests {
     use crate::utils::check_tile_vec;
     use std::str::FromStr;
     use crate::game::DrawReason::NoCaptures;
+    use crate::preset::rules::COPENHAGEN;
 
     const TEST_RULES: Ruleset = Ruleset {
         slow_pieces: PieceSet::from_piece_type(King),
@@ -1799,6 +1819,28 @@ mod tests {
             .into();
         assert!(record.effects.captures.is_empty());
         assert_eq!(record.effects.game_outcome, None);
+    }
+
+    #[test]
+    fn test_middleweight_capture() {
+
+        let mut game: Game<SmallBasicPieceMap> = Game::new(
+            COPENHAGEN,
+            "3Kt2/2tt3/7/T5t/7/7"
+        ).unwrap();
+        game.do_play(Play::from_str("c2-c1").unwrap()).unwrap();
+        assert_eq!(game.state.status, Ongoing);
+
+        let rules = Ruleset {
+            king_strength: KingStrength::Middleweight,
+            ..COPENHAGEN
+        };
+        let mut game: Game<SmallBasicPieceMap> = Game::new(
+            rules,
+            "3Kt2/2tt3/7/T5t/7/7"
+        ).unwrap();
+        game.do_play(Play::from_str("c2-c1").unwrap()).unwrap();
+        assert_eq!(game.state.status, Over(Win(KingCaptured, Attacker)));
     }
 
     #[test]

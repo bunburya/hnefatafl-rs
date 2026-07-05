@@ -25,6 +25,9 @@ A very basic demo (a terminal-based Brandubh game) is also implemented (run `car
 This crate is an early work in progress and I plan to add more features and expand support for the tafl family of games
 in future.
 
-There are many different variants of tafl, and this crate does not support all possible rules. In particular, the
-"berserk" rules are not yet implemented, nor are any of the other variants which involve extra pieces beyond soldiers
-and the king.
+There are many different variants of tafl, and this crate does not support all possible rules. For example, guards and
+mercenaries (which are used in some variants such as Alea Evangelii) are not yet supported.
+
+It is intended in the future to implement conversion between `hnefatafl-rs` rules, game states, etc, and 
+[OpenTafl notation](https://github.com/jslater89/OpenTafl/blob/master/opentafl-notation-spec.txt) (or some other,
+similar notation).

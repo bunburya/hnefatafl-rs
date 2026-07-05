@@ -153,6 +153,8 @@ impl Display for PlayInvalid {
     }
 }
 
+#[derive(Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum PieceMapError {
     /// There is no piece at the given tile, where one was expected.
     NoPiece(Tile),

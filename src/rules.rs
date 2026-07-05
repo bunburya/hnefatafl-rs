@@ -28,6 +28,9 @@ pub enum KingStrength {
     /// King can be captured by two hostile pieces or tiles, except on or near the throne when four
     /// are necessary.
     StrongByThrone,
+    /// King is captured if all neighbouring tiles are hostile (ie, if the king is by the edge,
+    /// it can be captured if surrounded by three hostile tiles).
+    Middleweight,
     /// King may be captured by two hostile pieces or tiles, in the same way as other pieces.
     Weak,
 }
@@ -43,6 +46,8 @@ pub enum KingAttack {
     Anvil,
     /// King may initiate captures but cannot be captured against.
     Hammer,
+    /// King may not participate in captures
+    Unarmed
 }
 
 /// What pieces certain special tiles are considered hostile to.
