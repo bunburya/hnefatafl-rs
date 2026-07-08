@@ -252,8 +252,8 @@ impl<P: PieceMap> GameLogic<P> {
                 {
                     return Err(MoveThroughBlockedTile);
                 }
-                if self.rules.slow_pieces.contains(piece) && play.distance() > 1 {
-                    // Slow piece can't move more than one space at a time
+                if self.rules.speed.get(piece).is_some_and(|s| play.distance() > s) {
+                    // Piece moving more than its max distance per play
                     return Err(TooFar);
                 }
                 if let Some(t) = state.berserker_tile {
@@ -1144,11 +1144,12 @@ mod tests {
     use crate::collections::piecemap::PieceMap;
     use crate::utils::check_tile_vec;
     use std::str::FromStr;
+    use crate::collections::piecedict::PieceDict;
     use crate::game::DrawReason::NoCaptures;
     use crate::preset::rules::COPENHAGEN;
 
     const TEST_RULES: Ruleset = Ruleset {
-        slow_pieces: PieceSet::from_piece_type(King),
+        speed: PieceDict::new(None).with(KING, Some(1)),
         passable_tiles: PassRules {
             throne: PieceSet::none(),
             ..rules::BRANDUBH.passable_tiles

@@ -1,5 +1,6 @@
 pub mod rules {
-    use crate::pieces::PieceType::{King, Soldier};
+    use crate::collections::piecedict::PieceDict;
+    use crate::pieces::PieceType::Soldier;
     use crate::pieces::Side::Attacker;
     use crate::pieces::{PieceSet, BASIC_PIECES, KING};
     use crate::rules::EnclosureWinRules::WithoutEdgeAccess;
@@ -30,7 +31,7 @@ pub mod rules {
         passable_tiles: PassRules {
             throne: PieceSet::all(),
         },
-        slow_pieces: PieceSet::none(),
+        speed: PieceDict::new(None),
         starting_side: Attacker,
         enclosure_win: Some(WithoutEdgeAccess),
         repetition_rule: Some(RepetitionRule {
@@ -64,7 +65,7 @@ pub mod rules {
         passable_tiles: PassRules {
             throne: PieceSet::all(),
         },
-        slow_pieces: PieceSet::none(),
+        speed: PieceDict::new(None),
         starting_side: Attacker,
         enclosure_win: Some(WithoutEdgeAccess),
         repetition_rule: Some(RepetitionRule {
@@ -98,7 +99,7 @@ pub mod rules {
         passable_tiles: PassRules {
             throne: PieceSet::from_piece(KING),
         },
-        slow_pieces: PieceSet::from_piece_type(King),
+        speed: PieceDict::new(None).with(KING, Some(1)),
         starting_side: Attacker,
         enclosure_win: None,
         repetition_rule: None,
@@ -129,8 +130,7 @@ pub mod rules {
         passable_tiles: PassRules {
             throne: PieceSet::all(),
         },
-        slow_pieces: PieceSet::none(),
-        starting_side: Attacker,
+        speed: PieceDict::new(None),        starting_side: Attacker,
         enclosure_win: None,
         repetition_rule: Some(RepetitionRule {
             n_repetitions: 3,

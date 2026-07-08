@@ -3,6 +3,7 @@ use std::cmp::PartialEq;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
+use crate::collections::PieceDict;
 use crate::collections::PieceTypeDict;
 use crate::error::ParseError;
 use crate::pieces::PieceType::{Commander, King, Knight, Soldier};
@@ -185,8 +186,8 @@ pub struct Ruleset {
     pub occupiable_tiles: OccupyRules,
     /// What pieces may pass through special tiles.
     pub passable_tiles: PassRules,
-    /// Types of piece whose movement is restricted to one tile per move.
-    pub slow_pieces: PieceSet,
+    /// How many tiles each piece can move in a single play.
+    pub speed: PieceDict<Option<u8>>,
     /// Which side goes first.
     pub starting_side: Side,
     /// Whether attacker can win by enclosing all defending pieces.
