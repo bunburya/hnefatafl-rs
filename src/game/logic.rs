@@ -1,5 +1,5 @@
 use crate::bitfield::BitField;
-use crate::board::geometry::BoardGeometry;
+use crate::board::geometry::{BoardGeometry, SpecialTilePlacementRules};
 use crate::board::state::BoardState;
 use crate::collections::piecemap::PieceMap;
 use crate::collections::tileset::TileSet;
@@ -70,22 +70,61 @@ pub struct GameLogic<P: PieceMap> {
 
 impl<P: PieceMap> GameLogic<P> {
     /// Create a new [`GameLogic`] struct from the given rules and starting positions.
-    pub fn new(rules: Ruleset, board_length: u8) -> Result<Self, BoardError> {
+    pub fn new(rules: Ruleset, board_length: u8, special_tile_rules: SpecialTilePlacementRules<P::BitField>) -> Result<Self, BoardError> {
         Ok(Self {
             rules,
-            board_geo: BoardGeometry::new(board_length)?,
+            board_geo: BoardGeometry::new(board_length, special_tile_rules)?,
         })
     }
 
     /// Determine whether the given tile is hostile specifically by reference to the rules regarding
     /// hostility of special tiles.
-    pub fn special_tile_hostile(&self, tile: Tile, piece: Piece) -> bool {
-        (self.rules.hostile_tiles.throne.contains(piece)
-            && tile == self.board_geo.special_tiles.throne)
-            || (self.rules.hostile_tiles.corners.contains(piece)
-                && self.board_geo.special_tiles.corners.contains(tile))
-            || (self.rules.hostile_tiles.edge.contains(piece)
-                && !self.board_geo.tile_in_bounds(tile))
+    pub fn special_tile_hostile(&self, tile: Tile, piece: Piece) -> Option<bool> {
+        if self.board_geo.special_tiles.throne.contains(tile) {
+            Some(self.rules.hostile_tiles.special_tiles.throne.contains(piece))
+        } else if self.board_geo.special_tiles.corners.contains(tile) {
+            Some(self.rules.hostile_tiles.special_tiles.corners.contains(piece))
+        } else if self.board_geo.special_tiles.attacker_fortresses.contains(tile) {
+            Some(self.rules.hostile_tiles.special_tiles.attacker_fortresses.contains(piece))
+        } else if self.board_geo.special_tiles.defender_fortresses.contains(tile) {
+            Some(self.rules.hostile_tiles.special_tiles.defender_fortresses.contains(piece))
+        } else if !self.board_geo.tile_in_bounds(tile) {
+            Some(self.rules.hostile_tiles.edge.contains(piece))
+        } else {
+            None
+        }
+    }
+
+    /// Determine whether the given tile is occupiable specifically by reference to the rules regarding
+    /// hostility of special tiles.
+    pub fn special_tile_occupiable(&self, tile: Tile, piece: Piece) -> Option<bool> {
+        if self.board_geo.special_tiles.throne.contains(tile) {
+            Some(self.rules.occupiable_tiles.throne.contains(piece))
+        } else if self.board_geo.special_tiles.corners.contains(tile) {
+            Some(self.rules.occupiable_tiles.corners.contains(piece))
+        } else if self.board_geo.special_tiles.attacker_fortresses.contains(tile) {
+            Some(self.rules.occupiable_tiles.attacker_fortresses.contains(piece))
+        } else if self.board_geo.special_tiles.defender_fortresses.contains(tile) {
+            Some(self.rules.occupiable_tiles.defender_fortresses.contains(piece))
+        } else {
+            None
+        }
+    }
+
+    /// Determine whether the given tile is passable specifically by reference to the rules regarding
+    /// hostility of special tiles.
+    pub fn special_tile_passable(&self, tile: Tile, piece: Piece) -> Option<bool> {
+        if self.board_geo.special_tiles.throne.contains(tile) {
+            Some(self.rules.passable_tiles.throne.contains(piece))
+        } else if self.board_geo.special_tiles.corners.contains(tile) {
+            Some(self.rules.passable_tiles.corners.contains(piece))
+        } else if self.board_geo.special_tiles.attacker_fortresses.contains(tile) {
+            Some(self.rules.passable_tiles.attacker_fortresses.contains(piece))
+        } else if self.board_geo.special_tiles.defender_fortresses.contains(tile) {
+            Some(self.rules.passable_tiles.defender_fortresses.contains(piece))
+        } else {
+            None
+        }
     }
 
     /// Determine whether the given tile is hostile to the given piece.
@@ -101,7 +140,7 @@ impl<P: PieceMap> GameLogic<P> {
         } else {
             // Tile is empty. So it is only hostile if it is a special tile/edge and the rules state
             // that it is hostile to the given piece.
-            self.special_tile_hostile(tile, piece)
+            self.special_tile_hostile(tile, piece).unwrap_or(false)
         }
     }
 
@@ -138,21 +177,14 @@ impl<P: PieceMap> GameLogic<P> {
         let can_pass = match validity {
             Ok(_) => true,
             Err(MoveOntoBlockedTile) => {
-                // Generally, the only way you could be unable to move onto a tile but be able to
-                // move past it is if (1) the tile is an empty throne and the rules permit passing
-                // through, but not occupying, the throne, OR (2) the move is a permitted jump.
-                // NOTE: Need to update for jumping rules.
-                if play.to() == self.board_geo.special_tiles.throne {
-                    (self.rules.passable_tiles.throne.contains(piece)
-                        && !state
-                            .board
-                            .tile_occupied(self.board_geo.special_tiles.throne))
+                // If you cannot move onto a tile, you could only pass it if it is an unoccupied
+                // special tile that you are permitted to pass. If it is not a special tile, or you
+                // are not permitted to pass that special tile, you cannot pass (unless you can
+                // jump).
+                (!state.board.tile_occupied(play.to())
+                    && self.special_tile_passable(play.to(), piece).unwrap_or(false))
                     || self.can_jump(piece, play, state)
-                } else {
-                    // If special tile is not a throne, it must be a corner, so cannot be passed.
-                    // This will be different when base camps and fortresses are implemented.
-                    false
-                }
+
             }
             _ => false,
         };
@@ -185,7 +217,7 @@ impl<P: PieceMap> GameLogic<P> {
                 // Piece can only jump to or from special tile (corner or throne)
                 for t in [play.from, play.to()] {
                     if self.board_geo.special_tiles.corners.contains(t)
-                        || self.board_geo.special_tiles.throne == t {
+                        || self.board_geo.special_tiles.throne.contains(t) {
                         return true
                     }
                 }
@@ -243,12 +275,12 @@ impl<P: PieceMap> GameLogic<P> {
                     return Err(MoveOntoBlockedTile);
                 }
                 if !self.rules.occupiable_tiles.throne.contains(piece)
-                    && (to == self.board_geo.special_tiles.throne)
+                    && (self.board_geo.special_tiles.throne.contains(to))
                 {
                     return Err(MoveOntoBlockedTile);
                 }
                 if !self.rules.passable_tiles.throne.contains(piece)
-                    && between.contains(&self.board_geo.special_tiles.throne)
+                    && between.iter().any(|t| self.board_geo.special_tiles.throne.contains(*t))
                 {
                     return Err(MoveThroughBlockedTile);
                 }
@@ -293,9 +325,12 @@ impl<P: PieceMap> GameLogic<P> {
     /// Check whether the king is beside the throne.
     pub fn king_beside_throne(&self, board: &BoardState<P>) -> bool {
         if let Some(k) = board.pieces.find_king() {
-            self.board_geo
-                .neighbors(self.board_geo.special_tiles.throne)
-                .contains(&k)
+            for n in self.board_geo.neighbors(k) {
+                if self.board_geo.special_tiles.throne.contains(n) {
+                    return true
+                }
+            }
+            false
         } else {
             // No king = not beside throne
             false
@@ -304,7 +339,8 @@ impl<P: PieceMap> GameLogic<P> {
 
     /// Check whether the king is on the throne.
     pub fn king_on_throne(&self, board: &BoardState<P>) -> bool {
-        board.pieces.find_king() == Some(self.board_geo.special_tiles.throne)
+        board.pieces.find_king()
+            .is_some_and(|t| self.board_geo.special_tiles.throne.contains(t))
     }
 
     /// Check whether the king is *currently* strong (must be surrounded on all four sides to be
@@ -328,7 +364,7 @@ impl<P: PieceMap> GameLogic<P> {
             return false;
         }
         let t = Tile::new(coords.row as u8, coords.col as u8);
-        if self.board_geo.special_tiles.throne == t
+        if self.board_geo.special_tiles.throne.contains(t)
             && !self.rules.occupiable_tiles.throne.contains(piece)
         {
             return false;
@@ -524,7 +560,7 @@ impl<P: PieceMap> GameLogic<P> {
                         if (inside_safe && is_inside) || (outside_safe && !is_inside) {
                             // Tile is on a side of the boundary that is known to be safe (ie, no
                             // enemies). Therefore, it is safe unless it is a hostile tile.
-                            if !self.special_tile_hostile(n_tile, piece) {
+                            if !self.special_tile_hostile(n_tile, piece).unwrap_or(false) {
                                 continue 'axisloop;
                             }
                         }
@@ -1100,7 +1136,7 @@ impl<P: PieceMap> GameLogic<P> {
         state: &GameState<P>,
     ) -> Option<PlacedPiece> {
         if let Ok(far_tile) = self.board_geo.coords_to_tile(far_coords) {
-            if far_tile == self.board_geo.special_tiles.throne
+            if self.board_geo.special_tiles.throne.contains(far_tile)
                 && state.board.is_king(far_tile)
                 && self
                     .board_geo
@@ -1135,7 +1171,7 @@ mod tests {
     use crate::pieces::{Piece, PieceSet, PlacedPiece, KING};
     use crate::play::{Play, ValidPlay};
     use crate::preset::{boards, rules};
-    use crate::rules::{HostilityRules, KingStrength, PassRules, Ruleset, ShieldwallRules, BERSERK_JUMP_RULES};
+    use crate::rules::{HostilityRules, KingStrength, Ruleset, ShieldwallRules, SpecialTilePieceSets, BERSERK_JUMP_RULES};
     use crate::tiles::Tile;
     use crate::{basic_piecemap, tileset};
     use std::collections::HashSet;
@@ -1144,13 +1180,14 @@ mod tests {
     use crate::collections::piecemap::PieceMap;
     use crate::utils::check_tile_vec;
     use std::str::FromStr;
+    use crate::board::geometry::SpecialTilePlacementRules;
     use crate::collections::piecedict::PieceDict;
     use crate::game::DrawReason::NoCaptures;
     use crate::preset::rules::COPENHAGEN;
 
     const TEST_RULES: Ruleset = Ruleset {
         speed: PieceDict::new(None).with(KING, Some(1)),
-        passable_tiles: PassRules {
+        passable_tiles: SpecialTilePieceSets {
             throne: PieceSet::none(),
             ..rules::BRANDUBH.passable_tiles
         },
@@ -1180,7 +1217,11 @@ mod tests {
     }
 
     fn generic_test_play_validity<P: PieceMap>() {
-        let logic = GameLogic::new(rules::BRANDUBH, 7).unwrap();
+        let logic = GameLogic::new(
+            rules::BRANDUBH,
+            7,
+            SpecialTilePlacementRules::throne_and_corners()
+        ).unwrap();
         let mut state: GameState<P> = GameState::new(boards::BRANDUBH, logic.rules.starting_side)
             .expect("Could not initiate game state.");
 
@@ -1241,7 +1282,11 @@ mod tests {
             &state,
         );
 
-        let logic = GameLogic::new(TEST_RULES, 7).unwrap();
+        let logic = GameLogic::new(
+            TEST_RULES,
+            7,
+            SpecialTilePlacementRules::throne_and_corners()
+        ).unwrap();
         let mut state: GameState<P> = GameState::new("7/5Tt/2T4/2t2t1/Tt4T/2t4/2T2K1", Defender)
             .expect("Could not initiate game state.");
 
@@ -1281,7 +1326,11 @@ mod tests {
         // outcome is detected.
 
         let proto: (GameLogic<P>, GameState<P>) = (
-            GameLogic::new(TEST_RULES, 7).unwrap(),
+            GameLogic::new(
+                TEST_RULES,
+                7,
+                SpecialTilePlacementRules::throne_and_corners()
+            ).unwrap(),
             GameState::new("4t2/5Tt/2T4/2t2t1/Tt4T/2t4/2T2K1", TEST_RULES.starting_side).unwrap(),
         );
         let (logic, mut state) = proto;
@@ -1424,7 +1473,11 @@ mod tests {
             is_berserk: false
         };
 
-        let corner_logic: GameLogic<MediumBasicPieceMap> = GameLogic::new(rules::COPENHAGEN, 9).unwrap();
+        let corner_logic: GameLogic<MediumBasicPieceMap> = GameLogic::new(
+            rules::COPENHAGEN,
+            9,
+            SpecialTilePlacementRules::throne_and_corners()
+        ).unwrap();
         let corner_state: GameState<MediumBasicPieceMap> =
             GameState::new(corner_sw, Attacker).unwrap();
         assert_eq!(corner_logic.detect_shieldwall(n, &corner_state), None);
@@ -1436,10 +1489,18 @@ mod tests {
             tileset!(Tile::new(5, 8), Tile::new(6, 8), Tile::new(7, 8))
         );
 
-        let no_corner_logic: GameLogic<MediumBasicPieceMap> = GameLogic::new(no_corner_rules, 9).unwrap();
+        let no_corner_logic: GameLogic<MediumBasicPieceMap> = GameLogic::new(
+            no_corner_rules,
+            9,
+            SpecialTilePlacementRules::throne_and_corners()
+        ).unwrap();
         assert_eq!(no_corner_logic.detect_shieldwall(m, &corner_state), None);
 
-        let regular_logic: GameLogic<MediumBasicPieceMap> = GameLogic::new(no_corner_rules, 9).unwrap();
+        let regular_logic: GameLogic<MediumBasicPieceMap> = GameLogic::new(
+            no_corner_rules,
+            9,
+            SpecialTilePlacementRules::throne_and_corners()
+        ).unwrap();
         let regular_state: GameState<MediumBasicPieceMap> =
             GameState::new(regular_sw, Attacker).unwrap();
         assert_eq!(
@@ -1461,7 +1522,11 @@ mod tests {
         );
 
         let king_cap_logic: GameLogic<MediumBasicPieceMap> =
-            GameLogic::new(king_capture_rules, 9).unwrap();
+            GameLogic::new(
+                king_capture_rules,
+                9,
+                SpecialTilePlacementRules::throne_and_corners()
+            ).unwrap();
         assert_eq!(
             king_cap_logic
                 .detect_shieldwall(m, &king_state)
@@ -1492,9 +1557,13 @@ mod tests {
 
         let safe_corners = Ruleset {
             hostile_tiles: HostilityRules {
-                corners: PieceSet::none(),
+                special_tiles: SpecialTilePieceSets {
+                    throne: PieceSet::none(),
+                    corners: PieceSet::none(),
+                    attacker_fortresses: PieceSet::none(),
+                    defender_fortresses: PieceSet::none(),
+                },
                 edge: PieceSet::none(),
-                throne: PieceSet::none(),
             },
             ..rules::COPENHAGEN
         };
@@ -1511,7 +1580,11 @@ mod tests {
             (&setup_4, true, false, true, rules::COPENHAGEN),
         ];
         for (string, inside_safe, outside_safe, is_secure, rules) in candidates {
-            let logic: GameLogic<SmallBasicPieceMap> = GameLogic::new(rules, 7).unwrap();
+            let logic: GameLogic<SmallBasicPieceMap> = GameLogic::new(
+                rules,
+                7,
+                SpecialTilePlacementRules::throne_and_corners()
+            ).unwrap();
             let state: GameState<SmallBasicPieceMap> =
                 GameState::new(string, rules.starting_side).unwrap();
             let encl_opt = logic.find_enclosure(
@@ -1540,13 +1613,21 @@ mod tests {
         let no_fort_gap = "9/9/9/8T/9/4t2T1/7TK/8T/9";
         let no_fort_vuln = "9/9/9/9/9/6TTT/5T2K/6TTT/9";
         for s in [exit_fort_flat, exit_fort_bulge] {
-            let logic: GameLogic<MediumBasicPieceMap> = GameLogic::new(rules::COPENHAGEN, 9).unwrap();
+            let logic: GameLogic<MediumBasicPieceMap> = GameLogic::new(
+                rules::COPENHAGEN,
+                9,
+                SpecialTilePlacementRules::throne_and_corners()
+            ).unwrap();
             let state: GameState<MediumBasicPieceMap> =
                 GameState::new(s, logic.rules.starting_side).unwrap();
             assert!(logic.detect_exit_fort(&state.board));
         }
         for s in [no_fort_enemy, no_fort_unfree, no_fort_gap, no_fort_vuln] {
-            let logic: GameLogic<MediumBasicPieceMap> = GameLogic::new(rules::COPENHAGEN, 9).unwrap();
+            let logic: GameLogic<MediumBasicPieceMap> = GameLogic::new(
+                rules::COPENHAGEN,
+                9,
+                SpecialTilePlacementRules::throne_and_corners()
+            ).unwrap();
             let state: GameState<MediumBasicPieceMap> =
                 GameState::new(s, logic.rules.starting_side).unwrap();
             assert!(!logic.detect_exit_fort(&state.board));
@@ -1562,7 +1643,11 @@ mod tests {
         let encl_edge_2 = "1t2t2/1t1K1t1/2tttt1/7/7/7/7";
         let state = SmallBasicBoardState::from_str(full_enclosure).unwrap();
         let game_logic: GameLogic<SmallBasicPieceMap> =
-            GameLogic::new(rules::BRANDUBH, state.side_len()).unwrap();
+            GameLogic::new(
+                rules::BRANDUBH,
+                state.side_len(),
+                SpecialTilePlacementRules::throne_and_corners()
+            ).unwrap();
         let encl_res = game_logic.find_enclosure(
             Tile::new(1, 3),
             PieceSet::from(King),
@@ -1594,7 +1679,11 @@ mod tests {
 
         let state = SmallBasicBoardState::from_str(encl_with_edge).unwrap();
         let game_logic: GameLogic<SmallBasicPieceMap> =
-            GameLogic::new(rules::BRANDUBH, state.side_len()).unwrap();
+            GameLogic::new(
+                rules::BRANDUBH,
+                state.side_len(),
+                SpecialTilePlacementRules::throne_and_corners()
+            ).unwrap();
         let encl_res = game_logic.find_enclosure(
             Tile::new(1, 3),
             PieceSet::from(King),
@@ -1634,7 +1723,11 @@ mod tests {
 
         let state = SmallBasicBoardState::from_str(encl_with_corner).unwrap();
         let game_logic: GameLogic<SmallBasicPieceMap> =
-            GameLogic::new(rules::BRANDUBH, state.side_len()).unwrap();
+            GameLogic::new(
+                rules::BRANDUBH,
+                state.side_len(),
+                SpecialTilePlacementRules::throne_and_corners()
+            ).unwrap();
         let encl_res = game_logic.find_enclosure(
             Tile::new(1, 3),
             PieceSet::from(King),
@@ -1671,7 +1764,11 @@ mod tests {
 
         let state = SmallBasicBoardState::from_str(encl_with_soldier).unwrap();
         let game_logic: GameLogic<SmallBasicPieceMap> =
-            GameLogic::new(rules::BRANDUBH, state.side_len()).unwrap();
+            GameLogic::new(
+                rules::BRANDUBH,
+                state.side_len(),
+                SpecialTilePlacementRules::throne_and_corners()
+            ).unwrap();
         let encl_res = game_logic.find_enclosure(
             Tile::new(1, 3),
             PieceSet::from(King),
@@ -1715,7 +1812,11 @@ mod tests {
 
         let state = SmallBasicBoardState::from_str(encl_edge_2).unwrap();
         let game_logic: GameLogic<SmallBasicPieceMap> =
-            GameLogic::new(rules::BRANDUBH, state.side_len()).unwrap();
+            GameLogic::new(
+                rules::BRANDUBH,
+                state.side_len(),
+                SpecialTilePlacementRules::throne_and_corners()
+            ).unwrap();
         let encl_res = game_logic.find_enclosure(
             Tile::new(1, 3),
             PieceSet::from(King),
@@ -1729,7 +1830,11 @@ mod tests {
 
     #[test]
     fn test_can_play() {
-        let logic = GameLogic::new(rules::BRANDUBH, 7).unwrap();
+        let logic = GameLogic::new(
+            rules::BRANDUBH,
+            7,
+            SpecialTilePlacementRules::throne_and_corners()
+        ).unwrap();
         let state: GameState<SmallBasicPieceMap> =
             GameState::new("2tt3/1tTKt2/2tt3/7/7/7/7", logic.rules.starting_side).unwrap();
         assert!(logic.side_can_play(Attacker, &state));
@@ -1744,7 +1849,11 @@ mod tests {
     #[test]
     fn test_repetitions() {
         let mut game: Game<SmallBasicPieceMap> =
-            Game::new(rules::BRANDUBH, boards::BRANDUBH).unwrap();
+            Game::new(
+                rules::BRANDUBH,
+                boards::BRANDUBH,
+                SpecialTilePlacementRules::throne_and_corners()
+            ).unwrap();
         for _ in 0..2 {
             game.do_play(Play::from_str("d6-f6").unwrap()).unwrap();
             game.do_play(Play::from_str("d5-f5").unwrap()).unwrap();
@@ -1759,7 +1868,11 @@ mod tests {
 
     #[test]
     fn test_strong_king_capture() {
-        let logic = GameLogic::new(rules::COPENHAGEN, 7).unwrap();
+        let logic = GameLogic::new(
+            rules::COPENHAGEN,
+            7,
+            SpecialTilePlacementRules::throne_and_corners()
+        ).unwrap();
         let king = PlacedPiece {
             tile: Tile::new(3, 4),
             piece: KING,
@@ -1827,7 +1940,8 @@ mod tests {
 
         let mut game: Game<SmallBasicPieceMap> = Game::new(
             COPENHAGEN,
-            "3Kt2/2tt3/7/T5t/7/7"
+            "3Kt2/2tt3/7/T5t/7/7",
+            SpecialTilePlacementRules::throne_and_corners()
         ).unwrap();
         game.do_play(Play::from_str("c2-c1").unwrap()).unwrap();
         assert_eq!(game.state.status, Ongoing);
@@ -1838,7 +1952,8 @@ mod tests {
         };
         let mut game: Game<SmallBasicPieceMap> = Game::new(
             rules,
-            "3Kt2/2tt3/7/T5t/7/7"
+            "3Kt2/2tt3/7/T5t/7/7",
+            SpecialTilePlacementRules::throne_and_corners()
         ).unwrap();
         game.do_play(Play::from_str("c2-c1").unwrap()).unwrap();
         assert_eq!(game.state.status, Over(Win(KingCaptured, Attacker)));
@@ -1846,7 +1961,11 @@ mod tests {
 
     #[test]
     fn test_linnaean_capture() {
-        let logic = GameLogic::new(rules::TABLUT, 9).unwrap();
+        let logic = GameLogic::new(
+            rules::TABLUT,
+            9,
+            SpecialTilePlacementRules::throne_and_corners()
+        ).unwrap();
         let state = MediumBasicGameState::new("tT7/9/9/4t4/t2TKt3/4t4/9/9/9", Attacker).unwrap();
         let (_, r) = logic
             .do_play(
@@ -1865,7 +1984,11 @@ mod tests {
             draw_after_captureless_plays: Some(5),
             ..rules::COPENHAGEN
         };
-        let mut game: Game<MediumBasicPieceMap> = Game::new(rules, boards::COPENHAGEN).unwrap();
+        let mut game: Game<MediumBasicPieceMap> = Game::new(
+            rules,
+            boards::COPENHAGEN,
+            SpecialTilePlacementRules::throne_and_corners()
+        ).unwrap();
         game.do_play(Play::from_str("k8-i8").unwrap()).unwrap();
         game.do_play(Play::from_str("g5-i5").unwrap()).unwrap();
         game.do_play(Play::from_str("h1-h3").unwrap()).unwrap();
@@ -1883,7 +2006,11 @@ mod tests {
 
     #[test]
     fn test_jump() {
-        let logic = GameLogic::new(TEST_JUMP_RULES, 9).unwrap();
+        let logic = GameLogic::new(
+            TEST_JUMP_RULES,
+            9,
+            SpecialTilePlacementRules::throne_and_corners()
+        ).unwrap();
         let state = MediumBerserkGameState::new("1tKt5/1tNc5/1tNc5/tN7/t2TKt3/4t4/9/9/9", Attacker).unwrap();
 
         // King can jump over soldier to get to corner
@@ -1919,7 +2046,11 @@ mod tests {
 
     #[test]
     fn test_commander_capture() {
-        let logic: GameLogic<MediumBerserkPieceMap> = GameLogic::new(rules::COPENHAGEN, 7).unwrap();
+        let logic: GameLogic<MediumBerserkPieceMap> = GameLogic::new(
+            rules::COPENHAGEN,
+            7,
+            SpecialTilePlacementRules::throne_and_corners()
+        ).unwrap();
 
         // King is captured on two sides by commanders away from the throne.
         let game_state = MediumBerserkGameState::new("c1Kc3/7/7/7/7/7/7", Attacker).unwrap();
@@ -1949,7 +2080,11 @@ mod tests {
         let board =
             "5tT4/4K6/11/t9t/t9t/9ct/t4TT3t/t9t/11/5c5/5tT4";
 
-        let mut game: Game<MediumBerserkPieceMap> = Game::new(rules::BERSERK, board).unwrap();
+        let mut game: Game<MediumBerserkPieceMap> = Game::new(
+            rules::BERSERK,
+            board,
+            SpecialTilePlacementRules::throne_and_corners()
+        ).unwrap();
         game.state.side_to_play = Defender;
 
         game.do_play(
@@ -1984,7 +2119,11 @@ mod tests {
         let board =
             "5tT4/4T6/11/t9t/t9t/9ct/t4TK3t/t9t/11/5c5/5tT4";
 
-        let mut game: Game<MediumBerserkPieceMap> = Game::new(rules::BERSERK, board).unwrap();
+        let mut game: Game<MediumBerserkPieceMap> = Game::new(
+            rules::BERSERK,
+            board,
+            SpecialTilePlacementRules::throne_and_corners()
+        ).unwrap();
         game.state.side_to_play = Defender;
 
         game.do_play(

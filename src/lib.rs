@@ -110,3 +110,7 @@ pub mod collections;
 /// Type aliases for concrete implementations of generic structs.
 pub mod aliases;
 mod big_bitfields;
+pub mod variant;
+
+/// Code for converting structs to and from OpenTafl Notation.
+pub mod otn;

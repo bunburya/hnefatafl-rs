@@ -6,7 +6,7 @@ pub mod rules {
     use crate::rules::EnclosureWinRules::WithoutEdgeAccess;
     use crate::rules::KingAttack::Armed;
     use crate::rules::KingStrength::{Strong, StrongByThrone};
-    use crate::rules::{BerserkRule, HostilityRules, JumpRules, OccupyRules, PassRules, RepetitionRule, Ruleset, ShieldwallRules, BERSERK_JUMP_RULES};
+    use crate::rules::{BerserkRule, HostilityRules, JumpRules, RepetitionRule, Ruleset, ShieldwallRules, SpecialTilePieceSets, BERSERK_JUMP_RULES};
 
     /// Rules for Copenhagen Hnefatafl.
     pub const COPENHAGEN: Ruleset = Ruleset {
@@ -20,16 +20,26 @@ pub mod rules {
         }),
         exit_fort: true,
         hostile_tiles: HostilityRules {
-            throne: PieceSet::all(),
-            corners: PieceSet::from_piece_type(Soldier),
+            special_tiles: SpecialTilePieceSets {
+                throne: PieceSet::all(),
+                corners: PieceSet::from_piece_type(Soldier),
+                attacker_fortresses: PieceSet::none(),
+                defender_fortresses: PieceSet::none(),
+            },
             edge: PieceSet::none(),
         },
-        occupiable_tiles: OccupyRules {
+        occupiable_tiles: SpecialTilePieceSets {
             throne: PieceSet::from_piece(KING),
             corners: PieceSet::from_piece(KING),
+            attacker_fortresses: PieceSet::all(),
+            defender_fortresses: PieceSet::all(),
         },
-        passable_tiles: PassRules {
+        passable_tiles: SpecialTilePieceSets {
             throne: PieceSet::all(),
+            corners: PieceSet::none(),
+            attacker_fortresses: PieceSet::all(),
+            defender_fortresses: PieceSet::all(),
+
         },
         speed: PieceDict::new(None),
         starting_side: Attacker,
@@ -54,16 +64,25 @@ pub mod rules {
         shieldwall: None,
         exit_fort: false,
         hostile_tiles: HostilityRules {
-            throne: PieceSet::from_piece_type(Soldier),
-            corners: PieceSet::all(),
+            special_tiles: SpecialTilePieceSets {
+                throne: PieceSet::from_piece_type(Soldier),
+                corners: PieceSet::all(),
+                attacker_fortresses: PieceSet::none(),
+                defender_fortresses: PieceSet::none(),
+            },
             edge: PieceSet::none(),
         },
-        occupiable_tiles: OccupyRules {
+        occupiable_tiles: SpecialTilePieceSets {
             throne: PieceSet::from_piece(KING),
             corners: PieceSet::from_piece(KING),
+            attacker_fortresses: PieceSet::all(),
+            defender_fortresses: PieceSet::all()
         },
-        passable_tiles: PassRules {
+        passable_tiles: SpecialTilePieceSets {
             throne: PieceSet::all(),
+            corners: PieceSet::none(),
+            attacker_fortresses: PieceSet::all(),
+            defender_fortresses: PieceSet::all()
         },
         speed: PieceDict::new(None),
         starting_side: Attacker,
@@ -88,16 +107,25 @@ pub mod rules {
         shieldwall: None,
         exit_fort: false,
         hostile_tiles: HostilityRules {
-            throne: PieceSet::all(),
-            corners: PieceSet::all(),
+            special_tiles: SpecialTilePieceSets {
+                throne: PieceSet::all(),
+                corners: PieceSet::all(),
+                attacker_fortresses: PieceSet::none(),
+                defender_fortresses: PieceSet::none(),
+            },
             edge: PieceSet::none(),
         },
-        occupiable_tiles: OccupyRules {
+        occupiable_tiles: SpecialTilePieceSets {
             throne: PieceSet::from_piece(KING),
             corners: PieceSet::from_piece(KING),
+            attacker_fortresses: PieceSet::all(),
+            defender_fortresses: PieceSet::all(),
         },
-        passable_tiles: PassRules {
+        passable_tiles: SpecialTilePieceSets {
             throne: PieceSet::from_piece(KING),
+            corners: PieceSet::none(),
+            attacker_fortresses: PieceSet::all(),
+            defender_fortresses: PieceSet::all(),
         },
         speed: PieceDict::new(None).with(KING, Some(1)),
         starting_side: Attacker,
@@ -119,18 +147,28 @@ pub mod rules {
         shieldwall: None,
         exit_fort: false,
         hostile_tiles: HostilityRules {
-            throne: PieceSet::all(),
-            corners: PieceSet::none(),
+            special_tiles: SpecialTilePieceSets {
+                throne: PieceSet::all(),
+                corners: PieceSet::none(),
+                attacker_fortresses: PieceSet::none(),
+                defender_fortresses: PieceSet::none(),
+            },
             edge: PieceSet::none(),
         },
-        occupiable_tiles: OccupyRules {
+        occupiable_tiles: SpecialTilePieceSets {
             throne: PieceSet::none(),
             corners: PieceSet::all(),
+            attacker_fortresses: PieceSet::all(),
+            defender_fortresses: PieceSet::all(),
         },
-        passable_tiles: PassRules {
+        passable_tiles: SpecialTilePieceSets {
             throne: PieceSet::all(),
+            corners: PieceSet::all(),
+            attacker_fortresses: PieceSet::all(),
+            defender_fortresses: PieceSet::all(),
         },
-        speed: PieceDict::new(None),        starting_side: Attacker,
+        speed: PieceDict::new(None),
+        starting_side: Attacker,
         enclosure_win: None,
         repetition_rule: Some(RepetitionRule {
             n_repetitions: 3,

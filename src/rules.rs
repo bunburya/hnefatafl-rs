@@ -1,22 +1,23 @@
-use crate::pieces::{PieceSet, Side};
+use crate::pieces::{Piece, PieceSet, Side};
 use std::cmp::PartialEq;
-
+use std::fmt;
+use std::fmt::Formatter;
+use std::io::Write;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
+use crate::board::geometry::SpecialTiles;
 use crate::collections::PieceDict;
 use crate::collections::PieceTypeDict;
 use crate::error::ParseError;
 use crate::pieces::PieceType::{Commander, King, Knight, Soldier};
 
-pub trait FromOtn where Self: Sized {
-    /// Create an instance of [`Self`] from an appropriate OpenTafl Notation string.
-    fn from_otn(otn: &str) -> Result<Self, ParseError>;
-}
-
-pub trait ToOtn {
-    /// Generate an OpenTafl Notation string describing this struct.
-    fn to_otn(&self) -> String;
-}
+// NOTE: OTN allows setting custom tiles as corners, attacker fortresses, throne, etc. We would
+// probably represent these internally as `TileSet`s, which would mean we would need to be generic
+// over `BitField`. That would be clunky to do for all rules, so maybe make those rules a part of
+// `BoardGeometry` instead. So `from_otn` and `to_otn` would only work on Ruleset/BoardGeometry
+// pair. (In fact because OTN also encodes starting position, they may need to work only on
+// Ruleset/BoardGeometry/BoardState triples. Maybe we can create a separate struct wrapping them
+// all.)
 
 
 /// Rules relating to whether and when the king is strong (must be surrounded by hostile tiles on
@@ -51,6 +52,28 @@ pub enum KingAttack {
     Unarmed
 }
 
+/// Associates each type of special tile with a set of pieces. Used to define rules around how
+/// special tiles interact with different pieces.
+#[derive(PartialEq, Eq, Copy, Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct SpecialTilePieceSets {
+    pub throne: PieceSet,
+    pub corners: PieceSet,
+    pub attacker_fortresses: PieceSet,
+    pub defender_fortresses: PieceSet,
+}
+
+impl SpecialTilePieceSets {
+    const fn none() -> Self {
+        Self {
+            throne: PieceSet::none(),
+            corners: PieceSet::none(),
+            attacker_fortresses: PieceSet::none(),
+            defender_fortresses: PieceSet::none(),
+        }
+    }
+}
+
 /// What pieces certain special tiles are considered hostile to.
 ///
 /// **NOTE:** Generally speaking, hostility rules are applied to empty tiles only. A tile will
@@ -58,24 +81,8 @@ pub enum KingAttack {
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct HostilityRules {
-    pub throne: PieceSet,
-    pub corners: PieceSet,
+    pub special_tiles: SpecialTilePieceSets,
     pub edge: PieceSet,
-}
-
-/// What pieces may occupy special tiles.
-#[derive(PartialEq, Eq, Copy, Clone, Debug)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct OccupyRules {
-    pub throne: PieceSet,
-    pub corners: PieceSet,
-}
-
-/// What pieces may pass through special tiles.
-#[derive(PartialEq, Eq, Copy, Clone, Debug)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct PassRules {
-    pub throne: PieceSet,
 }
 
 /// Rules relating to shieldwall captures.
@@ -183,9 +190,9 @@ pub struct Ruleset {
     /// What special tiles are hostile to which pieces.
     pub hostile_tiles: HostilityRules,
     /// What pieces may occupy special tiles.
-    pub occupiable_tiles: OccupyRules,
+    pub occupiable_tiles: SpecialTilePieceSets,
     /// What pieces may pass through special tiles.
-    pub passable_tiles: PassRules,
+    pub passable_tiles: SpecialTilePieceSets,
     /// How many tiles each piece can move in a single play.
     pub speed: PieceDict<Option<u8>>,
     /// Which side goes first.

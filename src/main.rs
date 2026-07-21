@@ -8,6 +8,7 @@ use hnefatafl::play::Play;
 use hnefatafl::preset;
 use std::io::stdin;
 use std::str::FromStr;
+use hnefatafl::board::geometry::SpecialTilePlacementRules;
 
 fn input(prompt: &str) -> std::io::Result<String> {
     println!("{prompt}");
@@ -31,7 +32,11 @@ fn get_play() -> Play {
 
 fn main() {
     println!("hnefatafl-rs demo");
-    let mut game: SmallBasicGame = Game::new(preset::rules::BRANDUBH, preset::boards::BRANDUBH)
+    let mut game: SmallBasicGame = Game::new(
+        preset::rules::BRANDUBH,
+        preset::boards::BRANDUBH,
+        SpecialTilePlacementRules::throne_and_corners()
+    )
         .expect("Could not create game.");
     loop {
         println!("Board:");

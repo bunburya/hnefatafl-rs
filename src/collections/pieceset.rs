@@ -154,4 +154,5 @@ impl PieceSet {
         c.unset_piece_type(King);
         (!self.is_empty()) && c.is_empty()
     }
+
 }

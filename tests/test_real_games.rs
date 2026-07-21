@@ -14,6 +14,7 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
 use std::str::FromStr;
+use hnefatafl::board::geometry::SpecialTilePlacementRules;
 
 fn play_captures_from_str(s: &str) -> Result<(Play, HashSet<Tile>), ParseError> {
     if s.is_empty() {
@@ -45,7 +46,14 @@ fn test_real_games(rules: Ruleset, starting_posn: &str, fname: &str) {
         if line.starts_with('#') {
             continue;
         }
-        let mut g: Game<MediumBasicPieceMap> = Game::new(rules, starting_posn).unwrap();
+        // For now, just giving every board a basic throne and corners should work. If we ever want
+        // to test games that use more complex special tile placement rules, we'll need to change
+        // this by taking the placement rules as an arg.
+        let mut g: Game<MediumBasicPieceMap> = Game::new(
+            rules,
+            starting_posn,
+            SpecialTilePlacementRules::throne_and_corners()
+        ).unwrap();
         let cols = line.split(',').collect::<Vec<&str>>();
         let outcome = cols.last().unwrap();
         if outcome.is_empty() {

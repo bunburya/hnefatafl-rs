@@ -13,6 +13,7 @@ use crate::tiles::Tile;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 use std::cmp::PartialEq;
+use crate::board::geometry::SpecialTilePlacementRules;
 
 /// The reason why a game has been won.
 #[derive(Eq, PartialEq, Debug, Copy, Clone, Hash)]
@@ -82,9 +83,13 @@ pub struct Game<P: PieceMap> {
 
 impl<P: PieceMap> Game<P> {
     /// Create a new [`Game`] from the given rules and starting positions.
-    pub fn new(rules: Ruleset, starting_board: &str) -> Result<Self, ParseError> {
+    pub fn new(
+        rules: Ruleset,
+        starting_board: &str,
+        special_tiles: SpecialTilePlacementRules<P::BitField>
+    ) -> Result<Self, ParseError> {
         let state: GameState<P> = GameState::new(starting_board, rules.starting_side)?;
-        let logic = GameLogic::new(rules, state.board.side_len())?;
+        let logic = GameLogic::new(rules, state.board.side_len(), special_tiles)?;
 
         Ok(Self {
             state,
@@ -139,11 +144,16 @@ mod tests {
     use crate::tiles::Tile;
     use std::collections::HashSet;
     use std::str::FromStr;
+    use crate::board::geometry::SpecialTilePlacementRules;
 
     #[test]
     fn test_iter_plays() {
         let game: SmallBasicGame =
-            Game::new(rules::BRANDUBH, boards::BRANDUBH).unwrap();
+            Game::new(
+                rules::BRANDUBH,
+                boards::BRANDUBH,
+                SpecialTilePlacementRules::throne_and_corners()
+            ).unwrap();
         assert!(game.iter_plays(Tile::new(0, 0)).is_err());
         assert!(game.iter_plays(Tile::new(1, 0)).is_err());
         let outer_att_tile = Tile::new(0, 3);
@@ -206,7 +216,11 @@ mod tests {
             HashSet::new()
         );
         let game: Game<SmallBasicPieceMap> =
-            Game::new(rules::BRANDUBH, "1T5/7/7/1t3K1/7/7/7").unwrap();
+            Game::new(
+                rules::BRANDUBH,
+                "1T5/7/7/1t3K1/7/7/7",
+                SpecialTilePlacementRules::throne_and_corners()
+            ).unwrap();
 
         // Test moving through (but not onto) throne and blocking by piece
         let test_tile = Tile::new(3, 1);
@@ -233,7 +247,11 @@ mod tests {
     #[test]
     fn test_undo() {
         let mut g: Game<SmallBasicPieceMap> =
-            Game::new(rules::BRANDUBH, boards::BRANDUBH).unwrap();
+            Game::new(
+                rules::BRANDUBH,
+                boards::BRANDUBH,
+                SpecialTilePlacementRules::throne_and_corners()
+            ).unwrap();
         let state_0 = g.state;
         g.do_play(Play::from_tiles(Tile::new(0, 3), Tile::new(0, 2)).unwrap())
             .unwrap();
@@ -261,7 +279,11 @@ mod tests {
     fn test_big_board() {
         pub const COPPERGATE: &str =
             "5ttttt5/6ttt6/7t7/7t7/7T7/t5TTT5t/tt3T1T1T3tt/ttttTTTKTTTtttt/tt3T1T1T3tt/t5TTT5t/7T7/7t7/7t7/6ttt6/5ttttt5";
-        let mut game: LargeBasicGame = Game::new(rules::COPENHAGEN, COPPERGATE).unwrap();
+        let mut game: LargeBasicGame = Game::new(
+            rules::COPENHAGEN,
+            COPPERGATE,
+            SpecialTilePlacementRules::throne_and_corners()
+        ).unwrap();
         game.do_play(Play::from_str("g2-g5").unwrap()).unwrap();
         game.do_play(Play::from_str("f7-f5").unwrap()).unwrap();
         assert_eq!(
@@ -280,11 +302,16 @@ mod serde_tests {
     use bincode;
     use bincode::serde::{decode_from_slice, encode_to_vec};
     use std::str::FromStr;
+    use crate::board::geometry::SpecialTilePlacementRules;
 
     #[test]
     fn test_round_trip() {
         let mut g: MediumBasicGame =
-            Game::new(rules::COPENHAGEN, boards::COPENHAGEN).expect("failed to create game");
+            Game::new(
+                rules::COPENHAGEN,
+                boards::COPENHAGEN,
+                SpecialTilePlacementRules::throne_and_corners()
+            ).expect("failed to create game");
         let cfg = bincode::config::standard();
         let bytes = encode_to_vec(&g, cfg).unwrap();
         let (back, _len) = decode_from_slice(&bytes, cfg).unwrap();
