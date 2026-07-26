@@ -17,7 +17,7 @@ const NEIGHBOR_OFFSETS: [[i8; 2]; 4] = [[-1, 0], [1, 0], [0, -1], [0, 1]];
 pub enum SpecialTilePosition<B: BitField> {
     /// The tiles in the given [`TileSet`] are the special tiles.
     Custom(TileSet<B>),
-    /// The tiles are in the phyical corners of the board.
+    /// The tiles are in the physical corners of the board.
     Corners,
     /// There is one tile, in the centre of the board. If the board has an even side length, this
     /// will result in a throne slightly off-centre, in the upper left quarter of the board.
@@ -120,6 +120,12 @@ impl<B: BitField> SpecialTilePlacementRules<B> {
             attacker_fortresses: self.attacker_fortresses.as_tileset(board_len),
             defender_fortresses: self.defender_fortresses.as_tileset(board_len),
         }
+    }
+}
+
+impl<B: BitField> Default for SpecialTilePlacementRules<B> {
+    fn default() -> Self {
+        Self::throne_and_corners()
     }
 }
 

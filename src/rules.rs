@@ -1,24 +1,11 @@
-use crate::pieces::{Piece, PieceSet, Side};
+use crate::pieces::{Piece, PieceSet, PieceType, Side, KING};
 use std::cmp::PartialEq;
-use std::fmt;
-use std::fmt::Formatter;
-use std::io::Write;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
-use crate::board::geometry::SpecialTiles;
-use crate::collections::PieceDict;
+use crate::board::geometry::{SpecialTilePlacementRules, SpecialTiles};
+use crate::collections::{PieceDict, PieceMap};
 use crate::collections::PieceTypeDict;
-use crate::error::ParseError;
 use crate::pieces::PieceType::{Commander, King, Knight, Soldier};
-
-// NOTE: OTN allows setting custom tiles as corners, attacker fortresses, throne, etc. We would
-// probably represent these internally as `TileSet`s, which would mean we would need to be generic
-// over `BitField`. That would be clunky to do for all rules, so maybe make those rules a part of
-// `BoardGeometry` instead. So `from_otn` and `to_otn` would only work on Ruleset/BoardGeometry
-// pair. (In fact because OTN also encodes starting position, they may need to work only on
-// Ruleset/BoardGeometry/BoardState triples. Maybe we can create a separate struct wrapping them
-// all.)
-
 
 /// Rules relating to whether and when the king is strong (must be surrounded by hostile tiles on
 /// all four sides to be captured).
@@ -114,6 +101,7 @@ pub struct RepetitionRule {
     /// Whether repetitions result in a loss for the repeating player. If this is `false`, then
     /// repetitions will result in a draw.
     pub is_loss: bool,
+    // TODO: Need to allow for wins for repeating player as well.
 }
 
 /// Describe a single piece type's ability to jump over other pieces.
@@ -169,12 +157,19 @@ pub const BERSERK_JUMP_RULES: JumpRules = JumpRules {
     can_be_jumped: PieceSet::from_piece_type(Soldier)
 };
 
+impl Default for PieceTypeDict<Option<JumpAbility>> {
+    fn default() -> Self {
+        let mut d = PieceTypeDict::new(None);
+        d.set(PieceType::Knight, Some(JumpAbility { special_only: false, can_capture: true }));
+        d.set(PieceType::Commander, Some(JumpAbility { special_only: false, can_capture: false }));
+        d
+    }
+}
+
 /// A set of rules for a tafl game.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Ruleset {
-    /// The pieces that may be used in the game.
-    pub pieces: PieceSet,
     /// Whether defender wins by getting king to edge of board (otherwise, corner escape is
     /// assumed).
     pub edge_escape: bool,
@@ -204,7 +199,7 @@ pub struct Ruleset {
     /// Whether the game is drawn when one player has no legal plays available to it. If `false`,
     /// the player with no available plays loses.
     pub draw_on_no_plays: bool,
-    /// Whether the game should end in a draw after a certain number of consecutive playes without
+    /// Whether the game should end in a draw after a certain number of consecutive plays without
     /// any captures.
     pub draw_after_captureless_plays: Option<usize>,
     /// Whether the game supports "Linnaean capture" (if the king is on the throne, surrounded by
@@ -217,4 +212,57 @@ pub struct Ruleset {
     /// Rule governing berserk mode (circumstances in which capturing pieces may make further
     /// moves).
     pub berserk_rule: Option<BerserkRule>
+}
+
+impl Default for Ruleset {
+    fn default() -> Self {
+        // Based on the default values in the OpenTafl Notation spec.
+        Self {
+            edge_escape: false,
+            enclosure_win: Some(EnclosureWinRules::WithoutEdgeAccess),
+            starting_side: Side::Attacker,
+            repetition_rule: Some(RepetitionRule { n_repetitions: 3, is_loss: false }),
+            king_attack: KingAttack::Armed,
+            king_strength: KingStrength::Strong,
+            jump_rules: JumpRules {
+                can_jump: PieceTypeDict::default(),
+                can_be_jumped: PieceSet::all()
+            },
+            speed: PieceDict::new(None),
+            hostile_tiles: HostilityRules {
+                special_tiles: SpecialTilePieceSets {
+                    corners: PieceSet::all(),
+                    throne: PieceSet::from(Side::Attacker),
+                    attacker_fortresses: PieceSet::from(Side::Defender),
+                    defender_fortresses: PieceSet::from(Side::Attacker)
+                },
+                edge: PieceSet::none()
+            },
+            passable_tiles: SpecialTilePieceSets {
+                corners: PieceSet::from_piece(KING),
+                throne: PieceSet::all(),
+                attacker_fortresses: PieceSet::all(),
+                defender_fortresses: PieceSet::from(Side::Defender)
+            },
+            occupiable_tiles: SpecialTilePieceSets {
+                corners: PieceSet::from_piece(KING),
+                throne: PieceSet::all(),
+                attacker_fortresses: PieceSet::all(),
+                defender_fortresses: PieceSet::all()
+            },
+            shieldwall: None,
+            exit_fort: false,
+            linnaean_capture: false,
+            berserk_rule: None,
+            draw_on_no_plays: false,
+            draw_after_captureless_plays: None
+        }
+    }
+}
+
+/// All the information needed to initialise a game.
+pub struct GameSetup<P: PieceMap> {
+    pub ruleset: Ruleset,
+    pub special_tile_rules: SpecialTilePlacementRules<P::BitField>,
+    pub starting_position: P
 }

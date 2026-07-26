@@ -4,7 +4,7 @@ use crate::pieces::{Piece, PieceType, Side};
 
 
 /// A generic struct that allows each [`Piece`] to be associated with a value.
-#[derive(PartialEq, Eq, Copy, Clone, Debug, Default)]
+#[derive(PartialEq, Eq, Copy, Clone, Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct PieceDict<T> {
     pub(crate) attacker: PieceTypeDict<T>,

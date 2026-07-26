@@ -7,7 +7,7 @@ use serde::{Serialize, Deserialize};
 /// A generic struct that allows each [`PieceType`] to be associated with a value.
 ///
 /// Unlike a normal "dict", all `PieceType`s *must* have an associated value of type `T`.
-#[derive(PartialEq, Eq, Copy, Clone, Debug, Default)]
+#[derive(PartialEq, Eq, Copy, Clone, Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct PieceTypeDict<T> {
     pub(crate) values: [T; 6]
